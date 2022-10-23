@@ -75,7 +75,8 @@ public:
 			throw std::invalid_argument("Invalid DecodeHints::downscaleFactor");
 
 		layers.push_back(iv);
-		while (threshold > 0 && std::min(layers.back().width(), layers.back().height()) > threshold)
+		// TODO: if only matrix codes were considered, then using std::min would be sufficient (see #425)
+		while (threshold > 0 && std::max(layers.back().width(), layers.back().height()) > threshold)
 			addLayer();
 #if 0
 		// Reversing the layers means we'd start with the smallest. that can make sense if we are only looking for a
@@ -118,16 +119,7 @@ std::unique_ptr<BinaryBitmap> CreateBitmap(ZXing::Binarizer binarizer, const Ima
 
 Result ReadBarcode(const ImageView& _iv, const DecodeHints& hints)
 {
-	if (hints.maxNumberOfSymbols() == 1) {
-		// HACK: use the maxNumberOfSymbols value as a switch to ReadBarcodes to enable the downscaling
-		// see python and android wrapper
-		return FirstOrDefault(ReadBarcodes(_iv, DecodeHints(hints).setMaxNumberOfSymbols(1)));
-	} else {
-		LumImage lum;
-		ImageView iv = SetupLumImageView(_iv, lum, hints);
-
-		return MultiFormatReader(hints).read(*CreateBitmap(hints.binarizer(), iv)).setCharacterSet(hints.characterSet());
-	}
+	return FirstOrDefault(ReadBarcodes(_iv, DecodeHints(hints).setMaxNumberOfSymbols(1)));
 }
 
 Results ReadBarcodes(const ImageView& _iv, const DecodeHints& hints)
@@ -145,21 +137,24 @@ Results ReadBarcodes(const ImageView& _iv, const DecodeHints& hints)
 	int maxSymbols = hints.maxNumberOfSymbols();
 	for (auto&& iv : pyramid.layers) {
 		auto bitmap = CreateBitmap(hints.binarizer(), iv);
-		auto rs = reader.readMultiple(*bitmap, maxSymbols);
-		for (auto& r : rs) {
-			if (iv.width() != _iv.width())
-				r.setPosition(Scale(r.position(), _iv.width() / iv.width()));
-			if (!Contains(results, r)) {
-				results.push_back(std::move(r));
-				--maxSymbols;
+		for (int invert = 0; invert <= static_cast<int>(hints.tryInvert()); ++invert) {
+			if (invert)
+				bitmap->invert();
+			auto rs = reader.readMultiple(*bitmap, maxSymbols);
+			for (auto& r : rs) {
+				if (iv.width() != _iv.width())
+					r.setPosition(Scale(r.position(), _iv.width() / iv.width()));
+				if (!Contains(results, r)) {
+					r.setDecodeHints(hints);
+					r.setIsInverted(bitmap->inverted());
+					results.push_back(std::move(r)); // TODO: keep the one with no error instead of the first found
+					--maxSymbols;
+				}
 			}
+			if (maxSymbols <= 0)
+				return results;
 		}
-		if (maxSymbols <= 0)
-			break;
 	}
-
-	for (auto& res : results)
-		res.setCharacterSet(hints.characterSet());
 
 	return results;
 }

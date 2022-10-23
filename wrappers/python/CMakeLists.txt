@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(ZXingPython)
 
 set (pybind11_git_repo https://github.com/pybind/pybind11.git)
-set (pybind11_git_rev v2.9.1)
+set (pybind11_git_rev v2.10.0)
 
 # check if we are called from the top-level ZXing project
 get_directory_property(hasParent PARENT_DIRECTORY)
@@ -36,17 +36,17 @@ if (NOT hasParent)
         # related tag.
         find_package (Git REQUIRED)
         execute_process(
-            COMMAND ${GIT_EXECUTABLE} ls-remote https://github.com/nu-book/zxing-cpp.git tags/*
+            COMMAND ${GIT_EXECUTABLE} ls-remote https://github.com/zxing-cpp/zxing-cpp.git tags/*
             RESULT_VARIABLE RESULT
             OUTPUT_VARIABLE OUTPUT)
         string (FIND "${OUTPUT}" "refs/tags/v${VERSION_INFO}\n" FOUND_IDX)
         if (FOUND_IDX LESS 0)
             # Version not found in tags (suppose we are preparing future version), use master branch
             FetchContent_Declare(zxing-cpp
-                GIT_REPOSITORY https://github.com/nu-book/zxing-cpp.git)
+                GIT_REPOSITORY https://github.com/zxing-cpp/zxing-cpp.git)
         else()
             FetchContent_Declare(zxing-cpp
-                GIT_REPOSITORY https://github.com/nu-book/zxing-cpp.git
+                GIT_REPOSITORY https://github.com/zxing-cpp/zxing-cpp.git
                 GIT_TAG v${VERSION_INFO})
         endif()
         if(NOT zxing-cpp_POPULATED)

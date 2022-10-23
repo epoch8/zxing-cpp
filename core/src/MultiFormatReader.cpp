@@ -7,6 +7,7 @@
 #include "MultiFormatReader.h"
 
 #include "BarcodeFormat.h"
+#include "BinaryBitmap.h"
 #include "DecodeHints.h"
 #include "aztec/AZReader.h"
 #include "datamatrix/DMReader.h"
@@ -23,16 +24,16 @@ MultiFormatReader::MultiFormatReader(const DecodeHints& hints) : _hints(hints)
 {
 	auto formats = hints.formats().empty() ? BarcodeFormat::Any : hints.formats();
 
-	// Put 1D readers upfront in "normal" mode
+	// Put linear readers upfront in "normal" mode
 	if (formats.testFlags(BarcodeFormat::LinearCodes) && !hints.tryHarder())
 		_readers.emplace_back(new OneD::Reader(hints));
 
 	if (formats.testFlags(BarcodeFormat::QRCode | BarcodeFormat::MicroQRCode))
-		_readers.emplace_back(new QRCode::Reader(hints));
+		_readers.emplace_back(new QRCode::Reader(hints, true));
 	if (formats.testFlag(BarcodeFormat::DataMatrix))
-		_readers.emplace_back(new DataMatrix::Reader(hints));
+		_readers.emplace_back(new DataMatrix::Reader(hints, true));
 	if (formats.testFlag(BarcodeFormat::Aztec))
-		_readers.emplace_back(new Aztec::Reader(hints));
+		_readers.emplace_back(new Aztec::Reader(hints, true));
 	if (formats.testFlag(BarcodeFormat::PDF417))
 		_readers.emplace_back(new Pdf417::Reader(hints));
 	if (formats.testFlag(BarcodeFormat::MaxiCode))
@@ -62,13 +63,15 @@ Results MultiFormatReader::readMultiple(const BinaryBitmap& image, int maxSymbol
 	std::vector<Result> res;
 
 	for (const auto& reader : _readers) {
+		if (image.inverted() && !reader->supportsInversion)
+			continue;
 		auto r = reader->decode(image, maxSymbols);
 		if (!_hints.returnErrors()) {
 			//TODO: C++20 res.erase_if()
 			auto it = std::remove_if(res.begin(), res.end(), [](auto&& r) { return !r.isValid(); });
 			res.erase(it, res.end());
 		}
-		maxSymbols -= r.size();
+		maxSymbols -= Size(r);
 		res.insert(res.end(), std::move_iterator(r.begin()), std::move_iterator(r.end()));
 		if (maxSymbols <= 0)
 			break;

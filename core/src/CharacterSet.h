@@ -6,10 +6,11 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 namespace ZXing {
 
-enum class CharacterSet
+enum class CharacterSet : unsigned char
 {
 	Unknown,
 	ASCII,
@@ -40,14 +41,19 @@ enum class CharacterSet
 	GB18030,
 	EUC_JP,
 	EUC_KR,
-	UnicodeBig,
+	UTF16BE,
+	UnicodeBig [[deprecated]] = UTF16BE,
 	UTF8,
+	UTF16LE,
+	UTF32BE,
+	UTF32LE,
 
 	BINARY,
 
 	CharsetCount
 };
 
-CharacterSet CharacterSetFromString(const std::string& name);
+CharacterSet CharacterSetFromString(std::string_view name);
+std::string ToString(CharacterSet cs);
 
 } // ZXing

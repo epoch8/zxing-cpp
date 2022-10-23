@@ -8,7 +8,6 @@
 #include "BitMatrixIO.h"
 #include "CharacterSet.h"
 #include "MultiFormatWriter.h"
-#include "TextUtfEncoding.h"
 
 #include <algorithm>
 #include <cctype>
@@ -29,6 +28,7 @@ static void PrintUsage(const char* exePath)
 	          << "    -margin    Margin around barcode\n"
 	          << "    -encoding  Encoding used to encode input text\n"
 	          << "    -ecc       Error correction level, [0-8]\n"
+	          << "    -help      Print usage information and exit\n"
 	          << "\n"
 			  << "Supported formats are:\n";
 	for (auto f : BarcodeFormatsFromString("Aztec Codabar Code39 Code93 Code128 DataMatrix EAN8 EAN13 ITF PDF417 QRCode UPCA UPCE"))
@@ -74,6 +74,9 @@ static bool ParseOptions(int argc, char* argv[], int* width, int* height, int* m
 			if (++i == argc)
 				return false;
 			*encoding = CharacterSetFromString(argv[i]);
+		} else if (strcmp(argv[i], "-help") == 0 || strcmp(argv[i], "--help") == 0) {
+			PrintUsage(argv[0]);
+			exit(0);
 		} else if (nonOptArgCount == 0) {
 			*format = BarcodeFormatFromString(argv[i]);
 			if (*format == BarcodeFormat::None) {
@@ -121,7 +124,7 @@ int main(int argc, char* argv[])
 
 	try {
 		auto writer = MultiFormatWriter(format).setMargin(margin).setEncoding(encoding).setEccLevel(eccLevel);
-		auto matrix = writer.encode(TextUtfEncoding::FromUtf8(text), width, height);
+		auto matrix = writer.encode(text, width, height);
 		auto bitmap = ToMatrix<uint8_t>(matrix);
 
 		auto ext = GetExtension(filePath);

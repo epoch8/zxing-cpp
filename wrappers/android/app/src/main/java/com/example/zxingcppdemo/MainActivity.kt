@@ -150,6 +150,7 @@ class MainActivity : AppCompatActivity() {
 						formats = if (binding.qrcode.isChecked) setOf(Format.QR_CODE) else setOf(),
 						tryHarder = binding.tryHarder.isChecked,
 						tryRotate = binding.tryRotate.isChecked,
+						tryInvert = binding.tryInvert.isChecked,
 						tryDownscale = binding.tryDownscale.isChecked
 					)
 
@@ -166,7 +167,7 @@ class MainActivity : AppCompatActivity() {
 								p.toPointF()
 							}
 						}
-						(result?.let { "${it.format} (${it.contentType}):" +
+						(result?.let { "${it.format} (${it.contentType}): " +
 								"${if (it.contentType != BarcodeReader.ContentType.BINARY) it.text else it.bytes!!.joinToString(separator = "") { v -> "%02x".format(v) }}" }
 							?: "")
 					} catch (e: Throwable) {

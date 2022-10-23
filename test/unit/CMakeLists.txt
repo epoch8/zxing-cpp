@@ -17,10 +17,14 @@ add_executable (UnitTest
     ErrorTest.cpp
     GTINTest.cpp
     GS1Test.cpp
+    PatternTest.cpp
     ReedSolomonTest.cpp
+    SanitizerSupport.cpp
     TextDecoderTest.cpp
+    TextEncoderTest.cpp
     TextUtfEncodingTest.cpp
     ThresholdBinarizerTest.cpp
+    ZXAlgorithmsTest.cpp
     aztec/AZDetectorTest.cpp
     aztec/AZDecoderTest.cpp
     aztec/AZEncoderTest.cpp
@@ -41,12 +45,13 @@ add_executable (UnitTest
     oned/ODCode93WriterTest.cpp
     oned/ODCode128ReaderTest.cpp
     oned/ODCode128WriterTest.cpp
+    oned/ODDataBarReaderTest.cpp
+    oned/ODDataBarExpandedBitDecoderTest.cpp
     oned/ODEAN8WriterTest.cpp
     oned/ODEAN13WriterTest.cpp
     oned/ODITFWriterTest.cpp
     oned/ODUPCAWriterTest.cpp
     oned/ODUPCEWriterTest.cpp
-    oned/ODDataBarExpandedBitDecoderTest.cpp
     qrcode/MQRDecoderTest.cpp
     qrcode/QRBitMatrixParserTest.cpp
     qrcode/QRDataMaskTest.cpp
@@ -60,12 +65,12 @@ add_executable (UnitTest
     pdf417/PDF417DecoderTest.cpp
     pdf417/PDF417ErrorCorrectionTest.cpp
     pdf417/PDF417HighLevelEncoderTest.cpp
+    pdf417/PDF417ScanningDecoderTest.cpp
     pdf417/PDF417WriterTest.cpp
 )
 
 target_include_directories (UnitTest PRIVATE .)
 
 target_link_libraries (UnitTest ZXing::ZXing GTest::gtest_main GTest::gmock)
-target_compile_definitions(UnitTest PRIVATE ZX_USE_UTF8)
 
 add_test(NAME UnitTest COMMAND UnitTest)

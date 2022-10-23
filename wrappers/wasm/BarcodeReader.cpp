@@ -3,8 +3,6 @@
 */
 // SPDX-License-Identifier: Apache-2.0
 
-#define ZX_USE_UTF8 1 // see Result.h
-
 #include "ReadBarcode.h"
 
 #include <string>
@@ -30,6 +28,7 @@ ReadResult readBarcodeFromImageView(ZXing::ImageView iv, bool tryHarder, const s
 		DecodeHints hints;
 		hints.setTryHarder(tryHarder);
 		hints.setTryRotate(tryHarder);
+		hints.setTryInvert(tryHarder);
 		hints.setTryDownscale(tryHarder);
 		hints.setFormats(BarcodeFormatsFromString(format));
 		hints.setMaxNumberOfSymbols(1);
@@ -95,8 +94,4 @@ EMSCRIPTEN_BINDINGS(BarcodeReader)
 
 	function("readBarcodeFromImage", &readBarcodeFromImage);
 	function("readBarcodeFromPixmap", &readBarcodeFromPixmap);
-
-	// obsoletes [[deprecated]]
-	function("readBarcode", &readBarcodeFromImage);
-	function("readBarcodeFromPng", &readBarcodeFromImage);
 }

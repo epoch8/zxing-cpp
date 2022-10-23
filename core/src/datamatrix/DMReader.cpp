@@ -21,8 +21,7 @@ namespace ZXing::DataMatrix {
 Result Reader::decode(const BinaryBitmap& image) const
 {
 #ifdef __cpp_impl_coroutine
-	auto results = decode(image, 1);
-	return results.empty() ? Result(DecodeStatus::NotFound) : results.front();
+	return FirstOrDefault(decode(image, 1));
 #else
 	auto binImg = image.getBitMatrix();
 	if (binImg == nullptr)
@@ -44,10 +43,13 @@ Results Reader::decode(const BinaryBitmap& image, int maxSymbols) const
 		return {};
 
 	Results results;
-	for (auto&& res : Detect(*binImg, maxSymbols > 1, _hints.tryRotate(), _hints.isPure())) {
-		results.push_back(Result(Decode(res.bits()), std::move(res).position(), BarcodeFormat::DataMatrix));
-		if (maxSymbols > 0 && Size(results) >= maxSymbols)
-			break;
+	for (auto&& detRes : Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure())) {
+		auto decRes = Decode(detRes.bits());
+		if (decRes.isValid(_hints.returnErrors())) {
+			results.emplace_back(std::move(decRes), std::move(detRes).position(), BarcodeFormat::DataMatrix);
+			if (maxSymbols > 0 && Size(results) >= maxSymbols)
+				break;
+		}
 	}
 
 	return results;

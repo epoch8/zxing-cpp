@@ -428,37 +428,41 @@ public:
 		// re-evaluate and filter out all points too far away. required for the gapSizes calculation.
 		evaluate(1.0, true);
 
-		std::vector<double> gapSizes;
+		std::vector<double> gapSizes, modSizes;
 		gapSizes.reserve(_points.size());
 
 		// calculate the distance between the points projected onto the regression line
 		for (size_t i = 1; i < _points.size(); ++i)
 			gapSizes.push_back(distance(project(_points[i]), project(_points[i - 1])));
 
-		// calculate the (average) distance of two adjacent pixels
-		auto unitPixelDist = average(gapSizes, [](double dist){ return 0.75 < dist && dist < 1.5; });
+		// calculate the (expected average) distance of two adjacent pixels
+		auto unitPixelDist = ZXing::length(bresenhamDirection(_points.back() - _points.front()));
 
 		// calculate the width of 2 modules (first black pixel to first black pixel)
-		double sum = distance(beg, project(_points.front())) - unitPixelDist;
-		auto i = gapSizes.begin();
+		double sumFront = distance(beg, project(_points.front())) - unitPixelDist;
+		double sumBack = 0; // (last black pixel to last black pixel)
 		for (auto dist : gapSizes) {
-			sum += dist;
 			if (dist > 1.9 * unitPixelDist)
-				*i++ = std::exchange(sum, 0.0);
+				modSizes.push_back(std::exchange(sumBack, 0.0));
+			sumFront += dist;
+			sumBack += dist;
+			if (dist > 1.9 * unitPixelDist)
+				modSizes.push_back(std::exchange(sumFront, 0.0));
 		}
-		*i++ = sum + distance(end, project(_points.back()));
-		gapSizes.erase(i, gapSizes.end());
+		modSizes.push_back(sumFront + distance(end, project(_points.back())));
+		modSizes.front() = 0; // the first element is an invalid sumBack value, would be pop_front() if vector supported this
 		auto lineLength = distance(beg, end) - unitPixelDist;
-		auto meanGapSize = lineLength / gapSizes.size();
+		auto meanModSize = average(modSizes, [](double){ return true; });
 #ifdef PRINT_DEBUG
 		printf("unit pixel dist: %.1f\n", unitPixelDist);
-		printf("lineLength: %.1f, meanGapSize: %.1f, gaps: %lu\n", lineLength, meanGapSize, gapSizes.size());
+		printf("lineLength: %.1f, meanModSize: %.1f, gaps: %lu\n", lineLength, meanModSize, modSizes.size());
 #endif
-		meanGapSize = average(gapSizes, [&](double dist){ return std::abs(dist - meanGapSize) < meanGapSize/2; });
+		for (int i = 0; i < 2; ++i)
+			meanModSize = average(modSizes, [=](double dist) { return std::abs(dist - meanModSize) < meanModSize / (2 + i); });
 #ifdef PRINT_DEBUG
-		printf("lineLength: %.1f, meanGapSize: %.1f, gaps: %lu\n", lineLength, meanGapSize, gapSizes.size());
+		printf("post filter meanModSize: %.1f\n", meanModSize);
 #endif
-		return lineLength / meanGapSize;
+		return lineLength / meanModSize;
 	}
 };
 
@@ -469,7 +473,7 @@ class EdgeTracer : public BitMatrixCursorF
 	StepResult traceStep(PointF dEdge, int maxStepSize, bool goodDirection)
 	{
 		dEdge = mainDirection(dEdge);
-		for (int breadth = 1; breadth <= (goodDirection ? 1 : (maxStepSize == 1 ? 2 : 3)); ++breadth)
+		for (int breadth = 1; breadth <= (maxStepSize == 1 ? 2 : (goodDirection ? 1 : 3)); ++breadth)
 			for (int step = 1; step <= maxStepSize; ++step)
 				for (int i = 0; i <= 2*(step/4+1) * breadth; ++i) {
 					auto pEdge = p + step * d + (i&1 ? (i+1)/2 : -i/2) * dEdge;
@@ -630,7 +634,7 @@ public:
 	}
 };
 
-static DetectorResult Scan(EdgeTracer startTracer, std::array<DMRegressionLine, 4>& lines)
+static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines)
 {
 	while (startTracer.step()) {
 		log(startTracer.p);
@@ -803,22 +807,23 @@ static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tr
 		auto center = PointF(image.width() / 2, image.height() / 2);
 		auto startPos = centered(center - center * dir + minSymbolSize / 2 * dir);
 
-		EdgeTracer tracer(image, startPos, dir);
-		if (tryHarder) {
-			tracer.history = &history;
-			history.clear();
-		}
+		history.clear();
 
 		for (int i = 1;; ++i) {
-			tracer.p = startPos + i / 2 * minSymbolSize * (i & 1 ? -1 : 1) * tracer.right();
+			EdgeTracer tracer(image, startPos, dir);
+			tracer.p += i / 2 * minSymbolSize * (i & 1 ? -1 : 1) * tracer.right();
+			if (tryHarder)
+				tracer.history = &history;
 
 			if (!tracer.isIn())
 				break;
 
-			if (auto res = Scan(tracer, lines); res.isValid())
 #ifdef __cpp_impl_coroutine
+			DetectorResult res;
+			while (res = Scan(tracer, lines), res.isValid())
 				co_yield std::move(res);
 #else
+			if (auto res = Scan(tracer, lines); res.isValid())
 				return res;
 #endif
 
@@ -886,9 +891,10 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 			found = true;
 			co_yield std::move(r);
 		}
-		if (!found) {
-			auto r = DetectOld(image);
-			if (r.isValid())
+		if (!found && tryHarder) {
+			if (auto r = DetectPure(image); r.isValid())
+				co_yield std::move(r);
+			else if(auto r = DetectOld(image); r.isValid())
 				co_yield std::move(r);
 		}
 	}
@@ -897,6 +903,8 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 		return DetectPure(image);
 
 	auto result = DetectNew(image, tryHarder, tryRotate);
+	if (!result.isValid() && tryHarder)
+		result = DetectPure(image);
 	if (!result.isValid() && tryHarder)
 		result = DetectOld(image);
 	return result;

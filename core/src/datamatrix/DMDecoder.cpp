@@ -12,12 +12,10 @@
 #include "DMBitLayout.h"
 #include "DMDataBlock.h"
 #include "DMVersion.h"
-#include "DecodeStatus.h"
 #include "DecoderResult.h"
 #include "GenericGF.h"
 #include "ReedSolomonDecoder.h"
-#include "TextDecoder.h"
-#include "ZXContainerAlgorithms.h"
+#include "ZXAlgorithms.h"
 #include "ZXTestSupport.h"
 
 #include <algorithm>
@@ -278,7 +276,7 @@ static void DecodeBase256Segment(BitSource& bits, Content& result)
 	for (int i = 0; i < count; i++) {
 		// readBits(8) may fail, have seen this particular error in the wild, such as at
 		// http://www.bcgen.com/demo/IDAutomationStreamingDataMatrix.aspx?MODE=3&D=Fred&PFMT=3&PT=F&X=0.3&O=0&LM=0.2
-		result += static_cast<uint8_t>(Unrandomize255State(bits.readBits(8), codewordPosition++));
+		result += narrow_cast<uint8_t>(Unrandomize255State(bits.readBits(8), codewordPosition++));
 	}
 }
 
@@ -352,10 +350,7 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 				if (oneByte <= 128) { // ASCII data (ASCII value + 1)
 					result.push_back(upperShift(oneByte) - 1);
 				} else if (oneByte <= 229) { // 2-digit data 00-99 (Numeric Value + 130)
-					int value = oneByte - 130;
-					if (value < 10) // pad with '0' for single digit values
-						result.push_back('0');
-					result.append(std::to_string(value));
+					result.append(ToString(oneByte - 130, 2));
 				} else if (oneByte >= 242) { // Not to be used in ASCII encodation
 					// work around encoders that use unlatch to ASCII as last code word (ask upstream)
 					if (oneByte == 254 && bits.available() == 0)
@@ -370,10 +365,10 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 	}
 
 	result.append(resultTrailer);
-	result.applicationIndicator = result.symbology.modifier == '2' ? "GS1" : "";
+	result.symbology.aiFlag = result.symbology.modifier == '2' ? AIFlag::GS1 : AIFlag::None;
 	result.symbology.modifier += isDMRE * 6;
 
-	return DecoderResult(std::move(bytes), std::move(result))
+	return DecoderResult(std::move(result))
 		.setError(std::move(error))
 		.setStructuredAppend(sai)
 		.setReaderInit(readerInit);
@@ -442,7 +437,8 @@ static DecoderResult DoDecode(const BitMatrix& bits)
 	}
 
 	// Decode the contents of that stream of bytes
-	return DecodedBitStreamParser::Decode(std::move(resultBytes), version->isDMRE());
+	return DecodedBitStreamParser::Decode(std::move(resultBytes), version->isDMRE())
+		.setVersionNumber(version->versionNumber);
 }
 
 static BitMatrix FlippedL(const BitMatrix& bits)

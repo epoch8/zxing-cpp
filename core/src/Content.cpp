@@ -7,9 +7,10 @@
 
 #include "CharacterSet.h"
 #include "ECI.h"
+#include "HRI.h"
 #include "TextDecoder.h"
-#include "TextUtfEncoding.h"
-#include "ZXContainerAlgorithms.h"
+#include "Utf.h"
+#include "ZXAlgorithms.h"
 
 namespace ZXing {
 
@@ -50,9 +51,7 @@ void Content::switchEncoding(ECI eci, bool isECI)
 
 Content::Content() {}
 
-Content::Content(ByteArray&& bytes, SymbologyIdentifier si, std::string ai)
-	: bytes(std::move(bytes)), applicationIndicator(std::move(ai)), symbology(si)
-{}
+Content::Content(ByteArray&& bytes, SymbologyIdentifier si) : bytes(std::move(bytes)), symbology(si) {}
 
 void Content::switchEncoding(CharacterSet cs)
 {
@@ -92,16 +91,16 @@ bool Content::canProcess() const
 	return std::all_of(encodings.begin(), encodings.end(), [](Encoding e) { return CanProcess(e.eci); });
 }
 
-std::wstring Content::render(bool withECI) const
+std::string Content::render(bool withECI) const
 {
 	if (empty() || !canProcess())
 		return {};
 
-	std::wstring res;
+	std::string res;
 	if (withECI)
-		res = TextDecoder::FromLatin1(symbology.toString(true));
+		res = symbology.toString(true);
 	ECI lastECI = ECI::Unknown;
-	auto fallbackCS = CharacterSetFromString(defaultCharset);
+	auto fallbackCS = defaultCharset;
 	if (!hasECI && fallbackCS == CharacterSet::Unknown)
 		fallbackCS = guessEncoding();
 
@@ -119,14 +118,14 @@ std::wstring Content::render(bool withECI) const
 				eci = ECI::Binary;
 
 			if (lastECI != eci)
-				TextDecoder::AppendLatin1(res, ToString(eci));
+				res += ToString(eci);
 			lastECI = eci;
 
-			std::wstring tmp;
+			std::string tmp;
 			TextDecoder::Append(tmp, bytes.data() + begin, end - begin, cs);
 			for (auto c : tmp) {
 				res += c;
-				if (c == L'\\') // in the ECI protocol a '\' has to be doubled
+				if (c == '\\') // in the ECI protocol a '\' has to be doubled
 					res += c;
 			}
 		} else {
@@ -137,19 +136,32 @@ std::wstring Content::render(bool withECI) const
 	return res;
 }
 
-std::wstring Content::utf16() const
+std::string Content::text(TextMode mode) const
 {
-	return render(false);
+	switch (mode) {
+	case TextMode::Plain: return render(false);
+	case TextMode::ECI: return render(true);
+	case TextMode::HRI:
+		switch (type()) {
+		case ContentType::GS1: {
+			auto plain = render(false);
+			auto hri = HRIFromGS1(plain);
+			return hri.empty() ? plain : hri;
+		}
+		case ContentType::ISO15434: return HRIFromISO15434(render(false));
+		case ContentType::Text: return render(false);
+		default: return text(TextMode::Escaped);
+		}
+	case TextMode::Hex: return ToHex(bytes);
+	case TextMode::Escaped: return EscapeNonGraphical(render(false));
+	}
+
+	return {}; // silence compiler warning
 }
 
-std::string Content::utf8() const
+std::wstring Content::utfW() const
 {
-	return TextUtfEncoding::ToUtf8(render(false));
-}
-
-std::string Content::utf8ECI() const
-{
-	return TextUtfEncoding::ToUtf8(render(true));
+	return FromUtf8(render(false));
 }
 
 ByteArray Content::bytesECI() const
@@ -197,7 +209,7 @@ ContentType Content::type() const
 	if (!canProcess())
 		return ContentType::UnknownECI;
 
-	if (applicationIndicator == "GS1")
+	if (symbology.aiFlag == AIFlag::GS1)
 		return ContentType::GS1;
 
 	// check for the absolut minimum of a ISO 15434 conforming message ("[)>" + RS + digit + digit)

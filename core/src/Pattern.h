@@ -5,7 +5,8 @@
 
 #pragma once
 
-#include "ZXContainerAlgorithms.h"
+#include "Range.h"
+#include "ZXAlgorithms.h"
 
 #include <algorithm>
 #include <array>
@@ -59,7 +60,7 @@ public:
 	int size() const { return _size; }
 
 	// index is the number of bars and spaces from the first bar to the current position
-	int index() const { return static_cast<int>(_data - (_base + 1)); }
+	int index() const { return narrow_cast<int>(_data - _base) - 1; }
 	int pixelsInFront() const { return std::accumulate(_base, _data, 0); }
 	int pixelsTillEnd() const { return std::accumulate(_base, _data + _size, 0) - 1; }
 	bool isAtFirstBar() const { return _data == _base + 1; }
@@ -93,8 +94,7 @@ public:
 
 	bool shift(int n)
 	{
-		_data += n;
-		return _data + _size <= _end;
+		return _data && ((_data += n) + _size <= _end);
 	}
 
 	bool skipPair()
@@ -114,7 +114,7 @@ public:
 
 	void extend()
 	{
-		_size = std::max(0, static_cast<int>(_end - _data));
+		_size = std::max(0, narrow_cast<int>(_end - _data));
 	}
 };
 
@@ -270,6 +270,52 @@ std::array<int, LEN> NormalizedPattern(const PatternView& view)
 	}
 
 	return is;
+}
+
+template<typename I>
+void GetPatternRow(Range<I> b_row, PatternRow& p_row)
+{
+	// TODO: if reactivating the bit-packed array (!ZX_FAST_BIT_STORAGE) should be of interest then the following code could be
+	// considerably speed up by using a specialized variant along the lines of the old BitArray::getNextSetTo() function that
+	// was removed between 1.4 and 2.0.
+
+#if 0
+	p_row.reserve(64);
+	p_row.clear();
+
+	auto lastPos = b_row.begin();
+	if (*lastPos)
+		p_row.push_back(0); // first value is number of white pixels, here 0
+
+	for (auto p = b_row.begin() + 1; p < b_row.end(); ++p)
+		if (bool(*p) != bool(*lastPos))
+			p_row.push_back(p - std::exchange(lastPos, p));
+
+	p_row.push_back(b_row.end() - lastPos);
+
+	if (*lastPos)
+		p_row.push_back(0); // last value is number of white pixels, here 0
+#else
+	p_row.resize(b_row.size() + 2);
+	std::fill(p_row.begin(), p_row.end(), 0);
+
+	auto bitPos = b_row.begin();
+	auto intPos = p_row.data();
+
+	if (*bitPos)
+		intPos++; // first value is number of white pixels, here 0
+
+	while (++bitPos < b_row.end()) {
+		++(*intPos);
+		intPos += bitPos[0] != bitPos[-1];
+	}
+	++(*intPos);
+
+	if (bitPos[-1])
+		intPos++;
+
+	p_row.resize(intPos - p_row.data() + 1);
+#endif
 }
 
 } // ZXing

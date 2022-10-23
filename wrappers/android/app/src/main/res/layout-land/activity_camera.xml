@@ -90,8 +90,13 @@
             android:text="tryRotate" />
 
         <com.google.android.material.chip.Chip
+            android:id="@+id/tryInvert"
+            style="@style/Chip"
+            android:text="tryInvert" />
+
+        <com.google.android.material.chip.Chip
             android:id="@+id/tryDownscale"
-            style="@style/ChipR"
+            style="@style/Chip"
             android:text="tryDownscale" />
 
         <com.google.android.material.chip.Chip

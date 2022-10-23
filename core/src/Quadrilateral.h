@@ -6,7 +6,7 @@
 #pragma once
 
 #include "Point.h"
-#include "ZXContainerAlgorithms.h"
+#include "ZXAlgorithms.h"
 
 #include <array>
 #include <cmath>
@@ -51,6 +51,12 @@ Quadrilateral<PointT> Rectangle(int width, int height, typename PointT::value_t 
 {
 	return {
 		PointT{margin, margin}, {width - margin, margin}, {width - margin, height - margin}, {margin, height - margin}};
+}
+
+template <typename PointT = PointF>
+Quadrilateral<PointT> CenteredSquare(int size)
+{
+	return Scale(Quadrilateral(PointT{-1, -1}, {1, -1}, {1, 1}, {-1, 1}), size / 2);
 }
 
 template <typename PointT = PointI>
@@ -105,10 +111,12 @@ PointT Center(const Quadrilateral<PointT>& q)
 }
 
 template <typename PointT>
-Quadrilateral<PointT> RotatedCorners(const Quadrilateral<PointT>& q, int n = 1)
+Quadrilateral<PointT> RotatedCorners(const Quadrilateral<PointT>& q, int n = 1, bool mirror = false)
 {
 	Quadrilateral<PointT> res;
 	std::rotate_copy(q.begin(), q.begin() + ((n + 4) % 4), q.end(), res.begin());
+	if (mirror)
+		std::swap(res[1], res[3]);
 	return res;
 }
 

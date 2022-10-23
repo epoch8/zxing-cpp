@@ -8,8 +8,8 @@
 #pragma once
 
 #include "BitArray.h"
-#include "DecodeStatus.h"
 #include "Pattern.h"
+#include "Result.h"
 
 #include <algorithm>
 #include <cassert>
@@ -38,7 +38,7 @@ RSSExp.:  v?-74d/?-41c
 
 namespace ZXing {
 
-class Result;
+class DecodeHints;
 
 namespace OneD {
 
@@ -48,15 +48,17 @@ namespace OneD {
 */
 class RowReader
 {
+protected:
+	const DecodeHints& _hints;
+
 public:
+	explicit RowReader(const DecodeHints& hints) : _hints(hints) {}
+	explicit RowReader(DecodeHints&& hints) = delete;
 
 	struct DecodingState
 	{
 		virtual ~DecodingState() = default;
 	};
-
-	//TODO: this is only testing code -> move outside of this interface (and remove rowNumber parameter)
-	Result decodeSingleRow(int rowNumber, const BitArray& row) const;
 
 	virtual ~RowReader() {}
 
@@ -212,6 +214,17 @@ public:
 		return LookupBitPattern(NarrowWideBitPattern(view), table, alphabet);
 	}
 };
+
+template<typename Range>
+Result DecodeSingleRow(const RowReader& reader, const Range& range)
+{
+	PatternRow row;
+	GetPatternRow(range, row);
+	PatternView view(row);
+
+	std::unique_ptr<RowReader::DecodingState> state;
+	return reader.decodePattern(0, view, state);
+}
 
 } // OneD
 } // ZXing

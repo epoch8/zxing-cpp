@@ -9,8 +9,8 @@
 #include "CharacterSet.h"
 #include "ODWriterHelper.h"
 #include "TextEncoder.h"
-#include "TextUtfEncoding.h"
-#include "ZXContainerAlgorithms.h"
+#include "Utf.h"
+#include "ZXAlgorithms.h"
 
 #include <array>
 #include <stdexcept>
@@ -170,7 +170,7 @@ Code39Writer::encode(const std::wstring& contents, int width, int height) const
 
 BitMatrix Code39Writer::encode(const std::string& contents, int width, int height) const
 {
-	return encode(TextUtfEncoding::FromUtf8(contents), width, height);
+	return encode(FromUtf8(contents), width, height);
 }
 
 } // namespace ZXing::OneD

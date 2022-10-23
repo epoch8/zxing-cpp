@@ -51,7 +51,7 @@ std::vector<ConcentricPattern> FindFinderPatterns(const BitMatrix& image, bool t
 
 	for (int y = skip - 1; y < height; y += skip) {
 		PatternRow row;
-		image.getPatternRow(y, row);
+		GetPatternRow(image, y, row, false);
 		PatternView next = row;
 
 		while (next = FindLeftGuard(next, 0, PATTERN, 0.5), next.isValid()) {
@@ -94,6 +94,8 @@ FinderPatternSets GenerateFinderPatternSets(FinderPatterns& patterns)
 		// Test image: fix-finderpattern-order.jpg
 		return dot((*a - *b), (*a - *b)) * std::pow(double(b->size) / a->size, 2);
 	};
+	const double cosUpper = std::cos(45. / 180 * 3.1415); // TODO: use c++20 std::numbers::pi_v
+	const double cosLower = std::cos(135. / 180 * 3.1415);
 
 	int nbPatterns = Size(patterns);
 	for (int i = 0; i < nbPatterns - 2; i++) {
@@ -131,9 +133,8 @@ FinderPatternSets GenerateFinderPatternSets(FinderPatterns& patterns)
 					continue;
 
 				// Make sure the angle between AB and BC does not deviate from 90° by more than 45°
-				auto alpha = std::acos((distAB2 + distBC2 - distAC2) / (2 * distAB * distBC)) / 3.1415 * 180;
-//				printf("alpha: %.1f\n", alpha);
-				if (std::isnan(alpha) || std::abs(90 - alpha) > 45)
+				auto cosAB_BC = (distAB2 + distBC2 - distAC2) / (2 * distAB * distBC);
+				if (std::isnan(cosAB_BC) || cosAB_BC > cosUpper || cosAB_BC < cosLower)
 					continue;
 
 				// a^2 + b^2 = c^2 (Pythagorean theorem), and a = b (isosceles triangle).
@@ -141,7 +142,7 @@ FinderPatternSets GenerateFinderPatternSets(FinderPatterns& patterns)
 				// we need to check both two equal sides separately.
 				// The value of |c^2 - 2 * b^2| + |c^2 - 2 * a^2| increases as dissimilarity
 				// from isosceles right triangle.
-				double d = (std::abs(distAC2 - 2 * distAB2) + std::abs(distAC2 - 2 * distBC2)) / distAC2;
+				double d = (std::abs(distAC2 - 2 * distAB2) + std::abs(distAC2 - 2 * distBC2));
 
 				// Use cross product to figure out whether A and C are correct or flipped.
 				// This asks whether BC x BA has a positive z component, which is the arrangement
@@ -150,7 +151,8 @@ FinderPatternSets GenerateFinderPatternSets(FinderPatterns& patterns)
 					std::swap(a, c);
 
 				// arbitrarily limit the number of potential sets
-				const auto setSizeLimit = 16;
+				// (this has performance implications while limiting the maximal number of detected symbols)
+				const auto setSizeLimit = 256;
 				if (sets.size() < setSizeLimit || sets.crbegin()->first > d) {
 					sets.emplace(d, FinderPatternSet{*a, *b, *c});
 					if (sets.size() > setSizeLimit)
@@ -173,7 +175,7 @@ static double EstimateModuleSize(const BitMatrix& image, PointF a, PointF b)
 	BitMatrixCursorF cur(image, a, b - a);
 	assert(cur.isBlack());
 
-	if (!cur.stepToEdge(3, distance(a, b) / 3, true))
+	if (!cur.stepToEdge(3, static_cast<int>(distance(a, b) / 3), true))
 		return -1;
 
 	assert(cur.isBlack());
@@ -202,7 +204,7 @@ static DimensionEstimate EstimateDimension(const BitMatrix& image, PointF a, Poi
 
 	auto moduleSize = (ms_a + ms_b) / 2;
 
-	int dimension = std::lround(distance(a, b) / moduleSize) + 7;
+	int dimension = narrow_cast<int>(std::lround(distance(a, b) / moduleSize) + 7);
 	int error     = 1 - (dimension % 4);
 
 	return {dimension + error, moduleSize, std::abs(error)};
@@ -390,7 +392,7 @@ DetectorResult DetectPureMQR(const BitMatrix& image)
 
 	auto fpWidth = Reduce(diagonal);
 	float moduleSize = float(fpWidth) / 7;
-	auto dimension = width / moduleSize;
+	int dimension = narrow_cast<int>(std::lround(width / moduleSize));
 
 	if (dimension < MIN_MODULES || dimension > MAX_MODULES ||
 		!image.isIn(PointF{left + moduleSize / 2 + (dimension - 1) * moduleSize,
@@ -418,7 +420,12 @@ DetectorResult SampleMQR(const BitMatrix& image, const ConcentricPattern& fp)
 
 	auto srcQuad = Rectangle(7, 7, 0.5);
 
-	constexpr PointI FORMAT_INFO_COORDS[] = {{0, 8}, {1, 8}, {2, 8}, {3, 8}, {4, 8}, {5, 8}, {6, 8}, {7, 8}, {8, 8},
+#if defined(_MSVC_LANG) && _MSVC_LANG >= 202002L // TODO: see MSVC issue https://developercommunity.visualstudio.com/t/constexpr-object-is-unable-to-be-used-as/10035065
+	static
+#else
+	constexpr
+#endif
+		const PointI FORMAT_INFO_COORDS[] = {{0, 8}, {1, 8}, {2, 8}, {3, 8}, {4, 8}, {5, 8}, {6, 8}, {7, 8}, {8, 8},
 											 {8, 7}, {8, 6}, {8, 5}, {8, 4}, {8, 3}, {8, 2}, {8, 1}, {8, 0}};
 
 	FormatInformation bestFI;

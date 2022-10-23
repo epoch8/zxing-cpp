@@ -8,6 +8,7 @@
 #ifdef __cpp_impl_coroutine
 #include <coroutine>
 #include <optional>
+#include <iterator>
 
 // this code is based on https://en.cppreference.com/w/cpp/coroutine/coroutine_handle#Example
 // but modified trying to prevent accidental copying of generated objects
@@ -27,6 +28,7 @@ public:
 			return {};
 		}
 //		void return_value(T&& value) noexcept { current_value = std::move(value); }
+		static void return_void() {} // required to compile in VisualStudio, no idea why clang/gcc are happy without
 		// Disallow co_await in generator coroutines.
 		void await_transform() = delete;
 		[[noreturn]] static void unhandled_exception() { throw; }

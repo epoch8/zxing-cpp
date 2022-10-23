@@ -7,8 +7,8 @@
 #include "ODCodabarWriter.h"
 
 #include "ODWriterHelper.h"
-#include "TextUtfEncoding.h"
-#include "ZXContainerAlgorithms.h"
+#include "Utf.h"
+#include "ZXAlgorithms.h"
 
 #include <stdexcept>
 #include <vector>
@@ -129,7 +129,7 @@ CodabarWriter::encode(const std::wstring& contents_, int width, int height) cons
 
 BitMatrix CodabarWriter::encode(const std::string& contents, int width, int height) const
 {
-	return encode(TextUtfEncoding::FromUtf8(contents), width, height);
+	return encode(FromUtf8(contents), width, height);
 }
 
 } // namespace ZXing::OneD
