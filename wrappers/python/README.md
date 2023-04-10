@@ -1,6 +1,6 @@
 # Python bindings for zxing-cpp
 
-[![Build + Deploy](https://github.com/nu-book/zxing-cpp/actions/workflows/python-build.yml/badge.svg)](https://github.com/nu-book/zxing-cpp/actions/workflows/python-build.yml)
+[![Build + Deploy](https://github.com/zxing-cpp/zxing-cpp/actions/workflows/python-build.yml/badge.svg)](https://github.com/zxing-cpp/zxing-cpp/actions/workflows/python-build.yml)
 [![PyPI](https://img.shields.io/pypi/v/zxing-cpp.svg)](https://pypi.org/project/zxing-cpp/)
 
 ## Installation
@@ -13,6 +13,8 @@ or
 ```bash
 python setup.py install
 ```
+
+[Note: To install via `setup.py` (or via `pip install` in case there is no pre-build wheel available for your platfor or python version), you need a suitable [build environment](https://github.com/zxing-cpp/zxing-cpp#build-instructions) including a c++ compiler.]
 
 ## Usage
 

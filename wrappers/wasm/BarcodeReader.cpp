@@ -3,8 +3,6 @@
 */
 // SPDX-License-Identifier: Apache-2.0
 
-#define ZX_USE_UTF8 1 // see Result.h
-
 #include "ReadBarcode.h"
 
 #include <string>
@@ -17,10 +15,10 @@
 
 struct ReadResult
 {
-	std::string format;
-	std::string text;
-	std::string error;
-	ZXing::Position position;
+	std::string format{};
+	std::string text{};
+	std::string error{};
+	ZXing::Position position{};
 };
 
 ReadResult readBarcodeFromImageView(ZXing::ImageView iv, bool tryHarder, const std::string& format)
@@ -30,6 +28,7 @@ ReadResult readBarcodeFromImageView(ZXing::ImageView iv, bool tryHarder, const s
 		DecodeHints hints;
 		hints.setTryHarder(tryHarder);
 		hints.setTryRotate(tryHarder);
+		hints.setTryInvert(tryHarder);
 		hints.setTryDownscale(tryHarder);
 		hints.setFormats(BarcodeFormatsFromString(format));
 		hints.setMaxNumberOfSymbols(1);
@@ -37,14 +36,12 @@ ReadResult readBarcodeFromImageView(ZXing::ImageView iv, bool tryHarder, const s
 		auto results = ReadBarcodes(iv, hints);
 		if (!results.empty()) {
 			auto& result = results.front();
-			return { ToString(result.format()), result.text(), "", result.position() };
+			return {ToString(result.format()), result.text(), "", result.position()};
 		}
-	}
-	catch (const std::exception& e) {
-		return { "", "", e.what() };
-	}
-	catch (...) {
-		return { "", "", "Unknown error" };
+	} catch (const std::exception& e) {
+		return {"", "", e.what()};
+	} catch (...) {
+		return {"", "", "Unknown error"};
 	}
 	return {};
 }
@@ -55,13 +52,12 @@ ReadResult readBarcodeFromImage(int bufferPtr, int bufferLength, bool tryHarder,
 
 	int width, height, channels;
 	std::unique_ptr<stbi_uc, void (*)(void*)> buffer(
-		stbi_load_from_memory(reinterpret_cast<const unsigned char*>(bufferPtr), bufferLength, &width, &height, &channels, 4),
+		stbi_load_from_memory(reinterpret_cast<const unsigned char*>(bufferPtr), bufferLength, &width, &height, &channels, 1),
 		stbi_image_free);
-	if (buffer == nullptr) {
+	if (buffer == nullptr)
 		return {"", "", "Error loading image"};
-	}
 
-	return readBarcodeFromImageView({buffer.get(), width, height, ImageFormat::RGBX}, tryHarder, format);
+	return readBarcodeFromImageView({buffer.get(), width, height, ImageFormat::Lum}, tryHarder, format);
 }
 
 ReadResult readBarcodeFromPixmap(int bufferPtr, int imgWidth, int imgHeight, bool tryHarder, std::string format)
@@ -95,8 +91,4 @@ EMSCRIPTEN_BINDINGS(BarcodeReader)
 
 	function("readBarcodeFromImage", &readBarcodeFromImage);
 	function("readBarcodeFromPixmap", &readBarcodeFromPixmap);
-
-	// obsoletes [[deprecated]]
-	function("readBarcode", &readBarcodeFromImage);
-	function("readBarcodeFromPng", &readBarcodeFromImage);
-}
+};

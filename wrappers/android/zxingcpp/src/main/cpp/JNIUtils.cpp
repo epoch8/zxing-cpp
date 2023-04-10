@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "JNIUtils.h"
 
-#include "TextUtfEncoding.h"
+#include "Utf.h"
 
 #include <stdexcept>
 #include <vector>
@@ -55,16 +55,18 @@ jstring C2JString(JNIEnv* env, const std::wstring& str)
 
 jstring C2JString(JNIEnv* env, const std::string& str)
 {
-	return C2JString(env, ZXing::TextUtfEncoding::FromUtf8(str));
+	return C2JString(env, ZXing::FromUtf8(str));
 }
 
 std::string J2CString(JNIEnv* env, jstring str)
 {
-	const jsize len = env->GetStringLength(str);
-	std::string res(len, 0);
+	// Buffer size must be in bytes.
+	const jsize size = env->GetStringUTFLength(str);
+	std::string res(size, 0);
 
 	// Translates 'len' number of Unicode characters into modified
 	// UTF-8 encoding and place the result in the given buffer.
+	const jsize len = env->GetStringLength(str);
 	env->GetStringUTFRegion(str, 0, len, res.data());
 
 	return res;

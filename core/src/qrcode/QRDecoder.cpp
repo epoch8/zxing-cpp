@@ -9,7 +9,6 @@
 #include "BitMatrix.h"
 #include "BitSource.h"
 #include "CharacterSet.h"
-#include "DecodeStatus.h"
 #include "DecoderResult.h"
 #include "GenericGF.h"
 #include "QRBitMatrixParser.h"
@@ -19,8 +18,7 @@
 #include "QRVersion.h"
 #include "ReedSolomonDecoder.h"
 #include "StructuredAppend.h"
-#include "TextDecoder.h"
-#include "ZXContainerAlgorithms.h"
+#include "ZXAlgorithms.h"
 #include "ZXTestSupport.h"
 
 #include <algorithm>
@@ -75,8 +73,8 @@ static void DecodeHanziSegment(BitSource& bits, int count, Content& result)
 			// In the 0xB0A1 to 0xFAFE range
 			assembledTwoBytes += 0x0A6A1;
 		}
-		result += static_cast<uint8_t>((assembledTwoBytes >> 8) & 0xFF);
-		result += static_cast<uint8_t>(assembledTwoBytes & 0xFF);
+		result += narrow_cast<uint8_t>((assembledTwoBytes >> 8) & 0xFF);
+		result += narrow_cast<uint8_t>(assembledTwoBytes & 0xFF);
 		count--;
 	}
 }
@@ -99,8 +97,8 @@ static void DecodeKanjiSegment(BitSource& bits, int count, Content& result)
 			// In the 0xE040 to 0xEBBF range
 			assembledTwoBytes += 0x0C140;
 		}
-		result += static_cast<uint8_t>(assembledTwoBytes >> 8);
-		result += static_cast<uint8_t>(assembledTwoBytes);
+		result += narrow_cast<uint8_t>(assembledTwoBytes >> 8);
+		result += narrow_cast<uint8_t>(assembledTwoBytes);
 		count--;
 	}
 }
@@ -111,7 +109,7 @@ static void DecodeByteSegment(BitSource& bits, int count, Content& result)
 	result.reserve(count);
 
 	for (int i = 0; i < count; i++)
-		result += static_cast<uint8_t>(bits.readBits(8));
+		result += narrow_cast<uint8_t>(bits.readBits(8));
 }
 
 static char ToAlphaNumericChar(int value)
@@ -147,7 +145,7 @@ static void DecodeAlphanumericSegment(BitSource& bits, int count, Content& resul
 		buffer += ToAlphaNumericChar(bits.readBits(6));
 	}
 	// See section 6.4.8.1, 6.4.8.2
-	if (!result.applicationIndicator.empty()) {
+	if (result.symbology.aiFlag != AIFlag::None) {
 		// We need to massage the result a bit if in an FNC1 mode:
 		for (size_t i = 0; i < buffer.length(); i++) {
 			if (buffer[i] == '%') {
@@ -171,34 +169,11 @@ static void DecodeNumericSegment(BitSource& bits, int count, Content& result)
 	result.switchEncoding(CharacterSet::ISO8859_1);
 	result.reserve(count);
 
-	// Read three digits at a time
-	while (count >= 3) {
-		// Each 10 bits encodes three digits
-		int threeDigitsBits = bits.readBits(10);
-		if (threeDigitsBits >= 1000)
-			throw FormatError("Invalid value in numeric segment");
-
-		result += ToAlphaNumericChar(threeDigitsBits / 100);
-		result += ToAlphaNumericChar((threeDigitsBits / 10) % 10);
-		result += ToAlphaNumericChar(threeDigitsBits % 10);
-		count -= 3;
-	}
-
-	if (count == 2) {
-		// Two digits left over to read, encoded in 7 bits
-		int twoDigitsBits = bits.readBits(7);
-		if (twoDigitsBits >= 100)
-			throw FormatError("Invalid value in numeric segment");
-
-		result += ToAlphaNumericChar(twoDigitsBits / 10);
-		result += ToAlphaNumericChar(twoDigitsBits % 10);
-	} else if (count == 1) {
-		// One digit left over to read
-		int digitBits = bits.readBits(4);
-		if (digitBits >= 10)
-			throw FormatError("Invalid value in numeric segment");
-
-		result += ToAlphaNumericChar(digitBits);
+	while (count) {
+		int n = std::min(count, 3);
+		int nDigits = bits.readBits(1 + 3 * n); // read 4, 7 or 10 bits into 1, 2 or 3 digits
+		result.append(ZXing::ToString(nDigits, n));
+		count -= n;
 	}
 }
 
@@ -234,7 +209,7 @@ static ECI ParseECIValue(BitSource& bits)
  * a terminator code.  If true, then the decoding can finish. If false, then the decoding
  * can read off the next mode code.
  *
- * See ISO 18004:2006, 6.4.1 Table 2
+ * See ISO 18004:2015, 7.4.1 Table 2
  *
  * @param bits the stream of bits that might have a terminator code
  * @param version the QR or micro QR code version
@@ -276,22 +251,20 @@ DecoderResult DecodeBitStream(ByteArray&& bytes, const Version& version, ErrorCo
 //				if (!result.empty()) // uncomment to enforce specification
 //					throw FormatError("GS1 Indicator (FNC1 in first position) at illegal position");
 				result.symbology.modifier = '3';
-				result.applicationIndicator = "GS1"; // In Alphanumeric mode undouble doubled percents and treat single percent as <GS>
+				result.symbology.aiFlag = AIFlag::GS1; // In Alphanumeric mode undouble doubled '%' and treat single '%' as <GS>
 				break;
 			case CodecMode::FNC1_SECOND_POSITION:
 				if (!result.empty())
 					throw FormatError("AIM Application Indicator (FNC1 in second position) at illegal position");
 				result.symbology.modifier = '5'; // As above
 				// ISO/IEC 18004:2015 7.4.8.3 AIM Application Indicator (FNC1 in second position), "00-99" or "A-Za-z"
-				if (int appInd = bits.readBits(8); appInd < 10) // "00-09"
-					result += '0' + std::to_string(appInd);
-				else if (appInd < 100) // "10-99"
-					result += std::to_string(appInd);
+				if (int appInd = bits.readBits(8); appInd < 100) // "00-09"
+					result += ZXing::ToString(appInd, 2);
 				else if ((appInd >= 165 && appInd <= 190) || (appInd >= 197 && appInd <= 222)) // "A-Za-z"
-					result += static_cast<uint8_t>(appInd - 100);
+					result += narrow_cast<uint8_t>(appInd - 100);
 				else
 					throw FormatError("Invalid AIM Application Indicator");
-				result.applicationIndicator = result.bytes.asString(); // see also above
+				result.symbology.aiFlag = AIFlag::AIM; // see also above
 				break;
 			case CodecMode::STRUCTURED_APPEND:
 				// sequence number and parity is added later to the result metadata
@@ -328,13 +301,16 @@ DecoderResult DecodeBitStream(ByteArray&& bytes, const Version& version, ErrorCo
 			}
 			}
 		}
+	} catch (std::out_of_range& e) { // see BitSource::readBits
+		error = FormatError("Truncated bit stream");
 	} catch (Error e) {
 		error = std::move(e);
 	}
 
-	return DecoderResult(std::move(bytes), std::move(result))
+	return DecoderResult(std::move(result))
 		.setError(std::move(error))
 		.setEcLevel(ToString(ecLevel))
+		.setVersionNumber(version.versionNumber())
 		.setStructuredAppend(structuredAppend);
 }
 
@@ -347,7 +323,7 @@ DecoderResult Decode(const BitMatrix& bits)
 
 	auto formatInfo = ReadFormatInformation(bits, version.isMicroQRCode());
 	if (!formatInfo.isValid())
-		return FormatError("Invalid format informatino");
+		return FormatError("Invalid format information");
 
 	// Read codewords
 	ByteArray codewords = ReadCodewords(bits, version, formatInfo);

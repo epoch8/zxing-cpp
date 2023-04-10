@@ -7,10 +7,7 @@
 #include "HybridBinarizer.h"
 
 #include "BitMatrix.h"
-#include "BitMatrixIO.h"
-#include "ByteArray.h"
 #include "Matrix.h"
-#include "ZXContainerAlgorithms.h"
 
 #include <cstdint>
 #include <memory>
@@ -29,12 +26,30 @@ HybridBinarizer::HybridBinarizer(const ImageView& iv) : GlobalHistogramBinarizer
 
 HybridBinarizer::~HybridBinarizer() = default;
 
+bool HybridBinarizer::getPatternRow(int row, int rotation, PatternRow& res) const
+{
+#if 1
+	// This is the original "hybrid" behavior: use GlobalHistogram for the 1D case
+	return GlobalHistogramBinarizer::getPatternRow(row, rotation, res);
+#else
+	// This is an alternative that can be faster in general and perform better in unevenly lit sitations like
+	// https://github.com/zxing-cpp/zxing-cpp/blob/master/test/samples/ean13-2/21.png. That said, it fairs
+	// worse in borderline low resolution situations. With the current black box sample set we'd loose 94
+	// test cases while gaining 53 others.
+	auto bits = getBitMatrix();
+	if (bits)
+		GetPatternRow(*bits, row, res, rotation % 180 != 0);
+	return bits != nullptr;
+#endif
+}
+
 /**
 * Calculates a single black point for each block of pixels and saves it away.
 * See the following thread for a discussion of this algorithm:
 *  http://groups.google.com/group/zxing/browse_thread/thread/d06efa2c35a7ddc0
 */
-static Matrix<int> CalculateBlackPoints(const uint8_t* luminances, int subWidth, int subHeight, int width, int height, int rowStride)
+static Matrix<int> CalculateBlackPoints(const uint8_t* __restrict luminances, int subWidth, int subHeight, int width, int height,
+										int rowStride)
 {
 	Matrix<int>	blackPoints(subWidth, subHeight);
 
@@ -43,14 +58,16 @@ static Matrix<int> CalculateBlackPoints(const uint8_t* luminances, int subWidth,
 		for (int x = 0; x < subWidth; x++) {
 			int xoffset = std::min(x * BLOCK_SIZE, width - BLOCK_SIZE);
 			int sum = 0;
-			uint8_t min = 0xFF;
-			uint8_t max = 0;
+			uint8_t min = luminances[yoffset * rowStride + xoffset];
+			uint8_t max = min;
 			for (int yy = 0, offset = yoffset * rowStride + xoffset; yy < BLOCK_SIZE; yy++, offset += rowStride) {
 				for (int xx = 0; xx < BLOCK_SIZE; xx++) {
 					auto pixel = luminances[offset + xx];
 					sum += pixel;
-					min = min < pixel ? min : pixel;
-					max = max > pixel ? max : pixel;
+					if (pixel < min)
+						min = pixel;
+					if (pixel > max)
+						max = pixel;
 				}
 				// short-circuit min/max tests once dynamic range is met
 				if (max - min > MIN_DYNAMIC_RANGE) {
@@ -99,25 +116,16 @@ static Matrix<int> CalculateBlackPoints(const uint8_t* luminances, int subWidth,
 /**
 * Applies a single threshold to a block of pixels.
 */
-static void ThresholdBlock(const uint8_t* luminances, int xoffset, int yoffset, int threshold, int rowStride, BitMatrix& matrix)
+static void ThresholdBlock(const uint8_t* __restrict luminances, int xoffset, int yoffset, int threshold, int rowStride,
+						   BitMatrix& matrix)
 {
-#ifdef ZX_FAST_BIT_STORAGE
 	for (int y = yoffset; y < yoffset + BLOCK_SIZE; ++y) {
 		auto* src = luminances + y * rowStride + xoffset;
 		auto* const dstBegin = matrix.row(y).begin() + xoffset;
+		// TODO: fix pixelStride > 1 case
 		for (auto* dst = dstBegin; dst < dstBegin + BLOCK_SIZE; ++dst, ++src)
-			*dst = *src <= threshold;
+			*dst = (*src <= threshold) * BitMatrix::SET_V;
 	}
-#else
-	for (int y = 0, offset = yoffset * rowStride + xoffset; y < BLOCK_SIZE; y++, offset += rowStride) {
-		for (int x = 0; x < BLOCK_SIZE; x++) {
-			// Comparison needs to be <= so that black == 0 pixels are black even if the threshold is 0.
-			if (luminances[offset + x] <= threshold) {
-				matrix.set(xoffset + x, yoffset + y);
-			}
-		}
-	}
-#endif
 }
 
 /**
@@ -125,7 +133,7 @@ static void ThresholdBlock(const uint8_t* luminances, int xoffset, int yoffset, 
 * of the blocks around it. Also handles the corner cases (fractional blocks are computed based
 * on the last pixels in the row/column which are also used in the previous block).
 */
-static std::shared_ptr<BitMatrix> CalculateMatrix(const uint8_t* luminances, int subWidth, int subHeight, int width,
+static std::shared_ptr<BitMatrix> CalculateMatrix(const uint8_t* __restrict luminances, int subWidth, int subHeight, int width,
 												  int height, int rowStride, const Matrix<int>& blackPoints)
 {
 	auto matrix = std::make_shared<BitMatrix>(width, height);

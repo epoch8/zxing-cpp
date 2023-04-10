@@ -1,4 +1,4 @@
-[![Build Status](https://github.com/nu-book/zxing-cpp/workflows/CI/badge.svg?branch=master)](https://github.com/nu-book/zxing-cpp/actions?query=workflow%3ACI)
+[![Build Status](https://github.com/zxing-cpp/zxing-cpp/workflows/CI/badge.svg?branch=master)](https://github.com/zxing-cpp/zxing-cpp/actions?query=workflow%3ACI)
 
 # ZXing-C++
 
@@ -6,15 +6,27 @@ ZXing-C++ ("zebra crossing") is an open-source, multi-format linear/matrix barco
 
 It was originally ported from the Java [ZXing Library](https://github.com/zxing/zxing) but has been developed further and now includes many improvements in terms of quality and performance. It can both read and write barcodes in a number of formats.
 
+## Sponsors
+
+You can sponsor this library at [GitHub Sponsors](https://github.com/sponsors/axxel).
+
+Named Sponsors:
+* [Useful Sensors Inc](https://github.com/usefulsensors)
+* [Sergio Olivo](https://github.com/sergio-)
+
+Thanks a lot for your contribution!
+
 ## Features
 
-* In pure C++17, no third-party dependencies (for the library)
-* Stateless, thread-safe readers/scanners and writers/generators
-* Wrapper/Bindings for:
-  * WinRT
-  * Android
-  * WebAssembly
+* Written in pure C++17 (/C++20), no third-party dependencies (for the library itself)
+* Thread safe
+* Wrappers/Bindings for:
+  * [Android](wrappers/android/README.md)
+  * [iOS](wrappers/ios/README.md)
   * [Python](wrappers/python/README.md)
+  * [WebAssembly](wrappers/wasm/README.md)
+  * [WinRT](wrappers/winrt/README.md)
+  * [Flutter](https://pub.dev/packages/flutter_zxing) (external project)
 
 ## Supported Formats
 
@@ -24,10 +36,13 @@ It was originally ported from the Java [ZXing Library](https://github.com/zxing/
 | UPC-E          | Code 93           | Micro QR Code      |
 | EAN-8          | Code 128          | Aztec              |
 | EAN-13         | Codabar           | DataMatrix         |
-| DataBar        | DataBar Exanded   | PDF417             |
+| DataBar        | DataBar Expanded  | PDF417             |
 |                | ITF               | MaxiCode (partial) |
 
-Note: DataBar used to be called RSS. DataBar is not supported for writing.
+[Note:]
+ * DataBar used to be called RSS.
+ * DataBar, MaxiCode and Micro QR Code are not supported for writing.
+ * Building with C++20 (see [CMakeLists.txt](https://github.com/zxing-cpp/zxing-cpp/blob/d4b0f502775857f257d13efd25fb840ece1bca3e/CMakeLists.txt#L45)) changes the behaviour of the library: it then supports multi-symbol and position independent detection for DataMatrix. This comes at a noticable performace cost. To enable this in the Android library, one needs to use at least NDK [version 25](https://github.com/zxing-cpp/zxing-cpp/blob/d4b0f502775857f257d13efd25fb840ece1bca3e/wrappers/android/zxingcpp/build.gradle#L9).
 
 ## Getting Started
 
@@ -43,41 +58,27 @@ As an example, have a look at [`ZXingWriter.cpp`](example/ZXingWriter.cpp).
 3. Convert the bit matrix to your native image format. See also the `ToMatrix<T>(BitMatrix&)` helper function.
 
 ## Web Demos
-- [Read barcodes](https://nu-book.github.io/zxing-cpp/demo_reader.html)
-- [Write barcodes](https://nu-book.github.io/zxing-cpp/demo_writer.html)
-- [Scan with camera](https://nu-book.github.io/zxing-cpp/zxing_viddemo.html)
+- [Read barcodes](https://zxing-cpp.github.io/zxing-cpp/demo_reader.html)
+- [Write barcodes](https://zxing-cpp.github.io/zxing-cpp/demo_writer.html)
+- [Scan with camera](https://zxing-cpp.github.io/zxing-cpp/zxing_viddemo.html)
 
-## WinRT Package
-A nuget package is available for WinRT: [huycn.zxingcpp.winrt](https://www.nuget.org/packages/huycn.zxingcpp.winrt). 
-To install it, run the following command in the Package Manager Console
-```sh
-PM> Install-Package huycn.zxingcpp.winrt
-```
+[Note: those live demos are not necessarily fully up-to-date at all times.]
 
 ## Build Instructions
+These are the generic instructions to build the library on Windows/macOS/Linux. For details on how to build the individual wrappers, follow the links above.
 
-### Standard setup on Windows/macOS/Linux
-1. Make sure [CMake](https://cmake.org) version 3.14 or newer is installed.
+1. Make sure [CMake](https://cmake.org) version 3.15 or newer is installed.
 2. Make sure a C++17 compliant compiler is installed (minimum VS 2019 16.8 / gcc 7 / clang 5).
 3. See the cmake `BUILD_...` options to enable the testing code, python wrapper, etc.
 
-### Windows Universal Platform
-1. Make sure [CMake](https://cmake.org) version 3.4 or newer is installed.
-2. Make sure a C++17 compliant compiler is installed (minimum VS 2019 16.8).
-3. Edit the file [`wrappers/winrt/BuildWinCom.bat`](wrappers/winrt/BuildWinCom.bat) to adjust the path to your CMake installation.
-4. Double-click on the batch script to run it.
-5. If the build succeeds, it will put the results in the folder UAP which is ready-to-use SDK extension.
+```
+git clone https://github.com/zxing-cpp/zxing-cpp.git --single-branch --depth 1
+cmake -S zxing-cpp -B zxing-cpp.release -DCMAKE_BUILD_TYPE=Release
+cmake --build zxing-cpp.release -j8
+```
 
-### Android
-1. Install AndroidStudio including NDK and CMake (see 'SDK Tools').
-2. Open the project in folder [wrappers/android](wrappers/android).
-3. The project contains 2 modules: `zxingcpp` is the wrapper library, `app` is the demo app using `zxingcpp`.
-
-### WebAssembly
-1. [Install Emscripten](https://kripken.github.io/emscripten-site/docs/getting_started/) if not done already.
-2. In an empty build folder, invoke `emcmake cmake <path to zxing-cpp.git/wrappers/wasm>`.
-3. Invoke `cmake --build .` to create `zxing.js` and `zxing.wasm` (and `_reader`/`_writer` versions).
-4. To see how to include these into a working HTML page, have a look at the [reader](wrappers/wasm/demo_reader.html) and [writer](wrappers/wasm/demo_writer.html) demos.
-5. To quickly test your build, copy those demo files into your build directory and run e.g. `emrun --serve_after_close demo_reader.html`.
-
-You can also download the latest build output from the continuous integration system from the [Actions](https://github.com/nu-book/zxing-cpp/actions) tab. Look for 'wasm-artifacts'. Also check out the [live demos](https://nu-book.github.io/zxing-cpp/).
+[Note: binary packages are available for/as
+[vcpkg](https://github.com/Microsoft/vcpkg/tree/master/ports/nu-book-zxing-cpp),
+[conan](https://github.com/conan-io/conan-center-index/tree/master/recipes/zxing-cpp),
+[mingw](https://github.com/msys2/MINGW-packages/tree/master/mingw-w64-zxing-cpp) and a bunch of
+[linux distributions](https://repology.org/project/zxing-cpp-nu-book/versions).]

@@ -12,12 +12,10 @@
 #include "DMBitLayout.h"
 #include "DMDataBlock.h"
 #include "DMVersion.h"
-#include "DecodeStatus.h"
 #include "DecoderResult.h"
 #include "GenericGF.h"
 #include "ReedSolomonDecoder.h"
-#include "TextDecoder.h"
-#include "ZXContainerAlgorithms.h"
+#include "ZXAlgorithms.h"
 #include "ZXTestSupport.h"
 
 #include <algorithm>
@@ -273,7 +271,7 @@ static void DecodeBase256Segment(BitSource& bits, Content& result)
 	for (int i = 0; i < count; i++) {
 		// readBits(8) may fail, have seen this particular error in the wild, such as at
 		// http://www.bcgen.com/demo/IDAutomationStreamingDataMatrix.aspx?MODE=3&D=Fred&PFMT=3&PT=F&X=0.3&O=0&LM=0.2
-		result += static_cast<uint8_t>(Unrandomize255State(bits.readBits(8), codewordPosition++));
+		result += narrow_cast<uint8_t>(Unrandomize255State(bits.readBits(8), codewordPosition++));
 	}
 }
 
@@ -342,10 +340,7 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 				if (oneByte <= 128) { // ASCII data (ASCII value + 1)
 					result.push_back(upperShift(oneByte) - 1);
 				} else if (oneByte <= 229) { // 2-digit data 00-99 (Numeric Value + 130)
-					int value = oneByte - 130;
-					if (value < 10) // pad with '0' for single digit values
-						result.push_back('0');
-					result.append(std::to_string(value));
+					result.append(ToString(oneByte - 130, 2));
 				} else if (oneByte >= 242) { // Not to be used in ASCII encodation
 					// work around encoders that use unlatch to ASCII as last code word (ask upstream)
 					if (oneByte == 254 && bits.available() == 0)
@@ -360,10 +355,10 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 	}
 
 	result.append(resultTrailer);
-	result.applicationIndicator = result.symbology.modifier == '2' ? "GS1" : "";
+	result.symbology.aiFlag = result.symbology.modifier == '2' ? AIFlag::GS1 : AIFlag::None;
 	result.symbology.modifier += isDMRE * 6;
 
-	return DecoderResult(std::move(bytes), std::move(result))
+	return DecoderResult(std::move(result))
 		.setError(std::move(error))
 		.setStructuredAppend(sai)
 		.setReaderInit(readerInit);
@@ -408,8 +403,10 @@ static DecoderResult DoDecode(const BitMatrix& bits)
 	if (codewords.empty())
 		return FormatError("Invalid number of code words");
 
+	bool fix259 = false; // see https://github.com/zxing-cpp/zxing-cpp/issues/259
+retry:
 	// Separate into data blocks
-	std::vector<DataBlock> dataBlocks = GetDataBlocks(codewords, *version);
+	std::vector<DataBlock> dataBlocks = GetDataBlocks(codewords, *version, fix259);
 	if (dataBlocks.empty())
 		return FormatError("Invalid number of data blocks");
 
@@ -419,20 +416,28 @@ static DecoderResult DoDecode(const BitMatrix& bits)
 	// Error-correct and copy data blocks together into a stream of bytes
 	const int dataBlocksCount = Size(dataBlocks);
 	for (int j = 0; j < dataBlocksCount; j++) {
-		auto& dataBlock = dataBlocks[j];
-		ByteArray& codewordBytes = dataBlock.codewords;
-		int numDataCodewords = dataBlock.numDataCodewords;
-		if (!CorrectErrors(codewordBytes, numDataCodewords))
+		auto& [numDataCodewords, codewords] = dataBlocks[j];
+		if (!CorrectErrors(codewords, numDataCodewords)) {
+			if(version->versionNumber == 24 && !fix259) {
+				fix259 = true;
+				goto retry;
+			}
 			return ChecksumError();
+		}
 
 		for (int i = 0; i < numDataCodewords; i++) {
 			// De-interlace data blocks.
-			resultBytes[i * dataBlocksCount + j] = codewordBytes[i];
+			resultBytes[i * dataBlocksCount + j] = codewords[i];
 		}
 	}
+#ifdef PRINT_DEBUG
+	if (fix259)
+		printf("-> needed retry with fix259 for 144x144 symbol\n");
+#endif
 
 	// Decode the contents of that stream of bytes
-	return DecodedBitStreamParser::Decode(std::move(resultBytes), version->isDMRE());
+	return DecodedBitStreamParser::Decode(std::move(resultBytes), version->isDMRE())
+		.setVersionNumber(version->versionNumber);
 }
 
 static BitMatrix FlippedL(const BitMatrix& bits)

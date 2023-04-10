@@ -34,15 +34,11 @@ static bool hasValidDimension(const BitMatrix& bitMatrix, bool isMicro)
 const Version* ReadVersion(const BitMatrix& bitMatrix)
 {
 	int dimension = bitMatrix.height();
-	bool isMicro = dimension < 21;
 
-	if (!hasValidDimension(bitMatrix, isMicro))
-		return nullptr;
+	const Version* version = Version::FromDimension(dimension);
 
-	int provisionalVersion = (dimension - Version::DimensionOffset(isMicro)) / Version::DimensionStep(isMicro);
-
-	if (provisionalVersion <= 6)
-		return Version::VersionForNumber(provisionalVersion, isMicro);
+	if (!version || version->versionNumber() < 7)
+		return version;
 
 	for (bool mirror : {false, true}) {
 		// Read top-right/bottom-left version info: 3 wide by 6 tall (depending on mirrored)
@@ -51,10 +47,9 @@ const Version* ReadVersion(const BitMatrix& bitMatrix)
 			for (int x = dimension - 9; x >= dimension - 11; --x)
 				AppendBit(versionBits, getBit(bitMatrix, x, y, mirror));
 
-		auto theParsedVersion = Version::DecodeVersionInformation(versionBits);
-		// TODO: why care for the contents of the version bits if we know the dimension already?
-		if (theParsedVersion != nullptr && theParsedVersion->dimensionForVersion() == dimension)
-			return theParsedVersion;
+		version = Version::DecodeVersionInformation(versionBits);
+		if (version && version->dimension() == dimension)
+			return version;
 	}
 
 	return nullptr;
@@ -88,10 +83,12 @@ FormatInformation ReadFormatInformation(const BitMatrix& bitMatrix, bool isMicro
 	for (int y = 5; y >= 0; y--)
 		AppendBit(formatInfoBits1, getBit(bitMatrix, 8, y));
 
-	// Read the top-right/bottom-left pattern too
+	// Read the top-right/bottom-left pattern including the 'Dark Module' from the bottom-left
+	// part that has to be considered separately when looking for mirrored symbols.
+	// See also FormatInformation::DecodeQR
 	int dimension = bitMatrix.height();
 	int formatInfoBits2 = 0;
-	for (int y = dimension - 1; y >= dimension - 7; y--)
+	for (int y = dimension - 1; y >= dimension - 8; y--)
 		AppendBit(formatInfoBits2, getBit(bitMatrix, 8, y));
 	for (int x = dimension - 8; x < dimension; x++)
 		AppendBit(formatInfoBits2, getBit(bitMatrix, x, 8));

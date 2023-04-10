@@ -10,7 +10,7 @@
 #include "BarcodeFormat.h"
 #include "ByteArray.h"
 #include "Content.h"
-#include "DecodeStatus.h"
+#include "DecodeHints.h"
 #include "Error.h"
 #include "Quadrilateral.h"
 #include "StructuredAppend.h"
@@ -21,6 +21,7 @@
 namespace ZXing {
 
 class DecoderResult;
+class ImageView;
 
 using Position = QuadrilateralI;
 
@@ -29,21 +30,25 @@ using Position = QuadrilateralI;
  */
 class Result
 {
+	void setIsInverted(bool v) { _isInverted = v; }
+	Result& setDecodeHints(DecodeHints hints);
+
+	friend Result MergeStructuredAppendSequence(const std::vector<Result>& results);
+	friend std::vector<Result> ReadBarcodes(const ImageView&, const DecodeHints&);
+	friend void IncrementLineCount(Result&);
+
 public:
 	Result() = default;
-	explicit Result(DecodeStatus status);
 
-	// 1D convenience constructor
+	// linear symbology convenience constructor
 	Result(const std::string& text, int y, int xStart, int xStop, BarcodeFormat format, SymbologyIdentifier si, Error error = {},
-		   ByteArray&& rawBytes = {}, bool readerInit = false, const std::string& ai = {});
+		   bool readerInit = false);
 
 	Result(DecoderResult&& decodeResult, Position&& position, BarcodeFormat format);
 
-	bool isValid() const { return format() != BarcodeFormat::None && !error(); }
+	bool isValid() const;
 
 	const Error& error() const { return _error; }
-
-	[[deprecated]] DecodeStatus status() const;
 
 	BarcodeFormat format() const { return _format; }
 
@@ -58,28 +63,19 @@ public:
 	ByteArray bytesECI() const;
 
 	/**
-	 * @brief utf8/utf16 is the bytes() content converted to utf8/16 based on ECI or guessed character set information
-	 *
-	 * Note: these two properties might only be available while transitioning text() from std::wstring to std::string. time will tell.
-	 * see https://github.com/nu-book/zxing-cpp/issues/338 for a background discussion on the issue.
+	 * @brief text returns the bytes() content rendered to unicode/utf8 text accoring to specified TextMode
 	 */
-	std::string utf8() const;
-	std::wstring utf16() const;
-
-#ifdef ZX_USE_UTF8
-	std::string text() const { return utf8(); }
-	std::string ecLevel() const { return _ecLevel; }
-#else
-#pragma message( \
-	"Warning: the return type of text() and ecLevel() will change to std::string. Please #define ZX_USE_UTF8 to transition before the next release.")
-	std::wstring text() const { return utf16(); }
-	std::wstring ecLevel() const { return {_ecLevel.begin(), _ecLevel.end()}; }
-#endif
+	std::string text(TextMode mode) const;
 
 	/**
-	 * @brief utf8ECI is the standard content following the ECI protocol with every character set ECI segment transcoded to utf8
+	 * @brief text returns the bytes() content rendered to unicode/utf8 text accoring to the TextMode set in the DecodingHints
 	 */
-	std::string utf8ECI() const;
+	std::string text() const;
+
+	/**
+	 * @brief ecLevel returns the error correction level of the symbol (empty string if not applicable)
+	 */
+	std::string ecLevel() const;
 
 	/**
 	 * @brief contentType gives a hint to the type of content found (Text/Binary/GS1/etc.)
@@ -104,9 +100,10 @@ public:
 	 */
 	bool isMirrored() const { return _isMirrored; }
 
-	/// see bytes() above for a proper replacement of rawByes
-	[[deprecated]] const ByteArray& rawBytes() const { return _rawBytes; }
-	[[deprecated]] int numBits() const { return _numBits; }
+	/**
+	 * @brief isInverted is the symbol inverted / has reveresed reflectance (see DecodeHints::tryInvert)
+	 */
+	bool isInverted() const { return _isInverted; }
 
 	/**
 	 * @brief symbologyIdentifier Symbology identifier "]cm" where "c" is symbology code character, "m" the modifier.
@@ -145,39 +142,33 @@ public:
 	bool readerInit() const { return _readerInit; }
 
 	/**
-	 * @brief How many lines have been detected with this code (applies only to 1D symbologies)
+	 * @brief lineCount How many lines have been detected with this code (applies only to linear symbologies)
 	 */
 	int lineCount() const { return _lineCount; }
 
-	// only for internal use
-	void incrementLineCount() { ++_lineCount; }
-	Result& setCharacterSet(const std::string& defaultCS);
+	/**
+	 * @brief version QRCode / DataMatrix / Aztec version or size.
+	 */
+	std::string version() const;
 
 	bool operator==(const Result& o) const;
 
-	friend Result MergeStructuredAppendSequence(const std::vector<Result>& results);
-
 private:
-	BarcodeFormat _format = BarcodeFormat::None;
 	Content _content;
 	Error _error;
 	Position _position;
-	ByteArray _rawBytes;
-	int _numBits = 0;
-	std::string _ecLevel;
+	DecodeHints _decodeHints;
 	StructuredAppendInfo _sai;
-	bool _isMirrored = false;
-	bool _readerInit = false;
+	BarcodeFormat _format = BarcodeFormat::None;
+	char _ecLevel[4] = {};
+	char _version[4] = {};
 	int _lineCount = 0;
+	bool _isMirrored = false;
+	bool _isInverted = false;
+	bool _readerInit = false;
 };
 
 using Results = std::vector<Result>;
-
-// Consider this an internal function that can change/disappear anytime without notice
-inline Result FirstOrDefault(Results&& results)
-{
-	return results.empty() ? Result() : std::move(results.front());
-}
 
 /**
  * @brief Merge a list of Results from one Structured Append sequence to a single result

@@ -8,13 +8,7 @@
 
 #include "Reader.h"
 
-#include <string>
-
-namespace ZXing {
-
-class DecodeHints;
-
-namespace Aztec {
+namespace ZXing::Aztec {
 
 class Reader : public ZXing::Reader
 {
@@ -22,7 +16,7 @@ public:
 	using ZXing::Reader::Reader;
 
 	Result decode(const BinaryBitmap& image) const override;
+	Results decode(const BinaryBitmap& image, int maxSymbols) const override;
 };
 
-} // Aztec
-} // ZXing
+} // namespace ZXing::Aztec

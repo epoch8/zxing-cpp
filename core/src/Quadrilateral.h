@@ -6,7 +6,7 @@
 #pragma once
 
 #include "Point.h"
-#include "ZXContainerAlgorithms.h"
+#include "ZXAlgorithms.h"
 
 #include <array>
 #include <cmath>
@@ -53,6 +53,12 @@ Quadrilateral<PointT> Rectangle(int width, int height, typename PointT::value_t 
 		PointT{margin, margin}, {width - margin, margin}, {width - margin, height - margin}, {margin, height - margin}};
 }
 
+template <typename PointT = PointF>
+Quadrilateral<PointT> CenteredSquare(int size)
+{
+	return Scale(Quadrilateral(PointT{-1, -1}, {1, -1}, {1, 1}, {-1, 1}), size / 2);
+}
+
 template <typename PointT = PointI>
 Quadrilateral<PointT> Line(int y, int xStart, int xStop)
 {
@@ -73,8 +79,9 @@ bool IsConvex(const Quadrilateral<PointT>& poly)
 		auto d2 = poly[i] - poly[(i + 1) % N];
 		auto cp = cross(d1, d2);
 
-		m = std::min(std::fabs(m), cp);
-		M = std::max(std::fabs(M), cp);
+		// TODO: see if the isInside check for all boundary points in GridSampler is still required after fixing the wrong fabs()
+		// application in the following line
+		UpdateMinMax(m, M, std::fabs(cp));
 
 		if (i == 0)
 			sign = cp > 0;
@@ -105,10 +112,12 @@ PointT Center(const Quadrilateral<PointT>& q)
 }
 
 template <typename PointT>
-Quadrilateral<PointT> RotatedCorners(const Quadrilateral<PointT>& q, int n = 1)
+Quadrilateral<PointT> RotatedCorners(const Quadrilateral<PointT>& q, int n = 1, bool mirror = false)
 {
 	Quadrilateral<PointT> res;
 	std::rotate_copy(q.begin(), q.begin() + ((n + 4) % 4), q.end(), res.begin());
+	if (mirror)
+		std::swap(res[1], res[3]);
 	return res;
 }
 
@@ -129,6 +138,20 @@ bool HaveIntersectingBoundingBoxes(const Quadrilateral<PointT>& a, const Quadril
 	bool x = b.topRight().x < a.topLeft().x || b.topLeft().x > a.topRight().x;
 	bool y = b.bottomLeft().y < a.topLeft().y || b.topLeft().y > a.bottomLeft().y;
 	return !(x || y);
+}
+
+template <typename PointT>
+Quadrilateral<PointT> Blend(const Quadrilateral<PointT>& a, const Quadrilateral<PointT>& b)
+{
+	auto dist2First = [c = a[0]](auto a, auto b) { return distance(a, c) < distance(b, c); };
+	// rotate points such that the the two topLeft points are closest to each other
+	auto offset = std::min_element(b.begin(), b.end(), dist2First) - b.begin();
+
+	Quadrilateral<PointT> res;
+	for (int i = 0; i < 4; ++i)
+		res[i] = (a[i] + b[(i + offset) % 4]) / 2;
+
+	return res;
 }
 
 } // ZXing

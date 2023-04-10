@@ -10,8 +10,7 @@
 
 #include <utility>
 
-namespace ZXing {
-namespace Aztec {
+namespace ZXing::Aztec {
 
 class DetectorResult : public ZXing::DetectorResult
 {
@@ -19,25 +18,30 @@ class DetectorResult : public ZXing::DetectorResult
 	int _nbDatablocks = 0;
 	int _nbLayers = 0;
 	bool _readerInit = false;
+	bool _isMirrored = false;
 
 	DetectorResult(const DetectorResult&) = delete;
 	DetectorResult& operator=(const DetectorResult&) = delete;
 
 public:
 	DetectorResult() = default;
-	DetectorResult(DetectorResult&&) = default;
-	DetectorResult& operator=(DetectorResult&&) = default;
+	DetectorResult(DetectorResult&&) noexcept = default;
+	DetectorResult& operator=(DetectorResult&&) noexcept = default;
 
-	DetectorResult(ZXing::DetectorResult&& result, bool isCompact, int nbDatablocks, int nbLayers, bool readerInit)
-		: ZXing::DetectorResult{std::move(result)}, _compact(isCompact), _nbDatablocks(nbDatablocks),
-		  _nbLayers(nbLayers), _readerInit(readerInit)
+	DetectorResult(ZXing::DetectorResult&& result, bool isCompact, int nbDatablocks, int nbLayers, bool readerInit, bool isMirrored)
+		: ZXing::DetectorResult{std::move(result)},
+		  _compact(isCompact),
+		  _nbDatablocks(nbDatablocks),
+		  _nbLayers(nbLayers),
+		  _readerInit(readerInit),
+		  _isMirrored(isMirrored)
 	{}
 
 	bool isCompact() const { return _compact; }
 	int nbDatablocks() const { return _nbDatablocks; }
 	int nbLayers() const { return _nbLayers; }
 	bool readerInit() const { return _readerInit; }
+	bool isMirrored() const { return _isMirrored; }
 };
 
-} // Aztec
-} // ZXing
+} // namespace ZXing::Aztec

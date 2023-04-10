@@ -8,7 +8,6 @@
 #include "CharacterSet.h"
 #include "DecoderResult.h"
 #include "PseudoRandom.h"
-#include "TextDecoder.h"
 #include "TextEncoder.h"
 #include "aztec/AZDecoder.h"
 #include "aztec/AZDetectorResult.h"
@@ -36,7 +35,7 @@ namespace {
 	// Shorthand to call Decode()
 	static DecoderResult parse(BitMatrix&& bits, bool compact, int nbDatablocks, int nbLayers)
 	{
-		return Aztec::Decode({{std::move(bits), {}}, compact, nbDatablocks, nbLayers, false /*readerInit*/});
+		return Aztec::Decode({{std::move(bits), {}}, compact, nbDatablocks, nbLayers, false /*readerInit*/, false /*isMirrored*/});
 	}
 
 	void TestEncodeDecode(const std::string& data, bool compact, int layers) {

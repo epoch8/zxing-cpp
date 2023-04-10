@@ -5,7 +5,9 @@
 
 #pragma once
 
-#include "ZXContainerAlgorithms.h"
+#include "BitHacks.h"
+#include "Range.h"
+#include "ZXAlgorithms.h"
 
 #include <algorithm>
 #include <array>
@@ -18,7 +20,9 @@
 
 namespace ZXing {
 
-using PatternRow = std::vector<uint16_t>;
+using PatternType = uint16_t;
+template<int N> using Pattern = std::array<PatternType, N>;
+using PatternRow = std::vector<PatternType>;
 
 class PatternView
 {
@@ -42,7 +46,7 @@ public:
 	PatternView(Iterator data, int size, Iterator base, Iterator end) : _data(data), _size(size), _base(base), _end(end) {}
 
 	template <size_t N>
-	PatternView(const std::array<value_type, N>& row) : _data(row.data()), _size(N)
+	PatternView(const Pattern<N>& row) : _data(row.data()), _size(N)
 	{}
 
 	Iterator data() const { return _data; }
@@ -59,7 +63,7 @@ public:
 	int size() const { return _size; }
 
 	// index is the number of bars and spaces from the first bar to the current position
-	int index() const { return static_cast<int>(_data - (_base + 1)); }
+	int index() const { return narrow_cast<int>(_data - _base) - 1; }
 	int pixelsInFront() const { return std::accumulate(_base, _data, 0); }
 	int pixelsTillEnd() const { return std::accumulate(_base, _data + _size, 0) - 1; }
 	bool isAtFirstBar() const { return _data == _base + 1; }
@@ -93,8 +97,7 @@ public:
 
 	bool shift(int n)
 	{
-		_data += n;
-		return _data + _size <= _end;
+		return _data && ((_data += n) + _size <= _end);
 	}
 
 	bool skipPair()
@@ -114,7 +117,7 @@ public:
 
 	void extend()
 	{
-		_size = std::max(0, static_cast<int>(_end - _data));
+		_size = std::max(0, narrow_cast<int>(_end - _data));
 	}
 };
 
@@ -134,7 +137,7 @@ struct BarAndSpace
 	bool isValid() const { return bar != T{} && space != T{}; }
 };
 
-using BarAndSpaceI = BarAndSpace<PatternView::value_type>;
+using BarAndSpaceI = BarAndSpace<PatternType>;
 
 /**
  * @brief FixedPattern describes a compile-time constant (start/stop) pattern.
@@ -156,12 +159,12 @@ struct FixedPattern
 template <int N, int SUM>
 using FixedSparcePattern = FixedPattern<N, SUM, true>;
 
-template <bool RELAXED_THRESHOLD = false, int N, int SUM>
-float IsPattern(const PatternView& view, const FixedPattern<N, SUM, false>& pattern, int spaceInPixel = 0,
+template <bool RELAXED_THRESHOLD = false, int LEN, int SUM>
+float IsPattern(const PatternView& view, const FixedPattern<LEN, SUM, false>& pattern, int spaceInPixel = 0,
 				float minQuietZone = 0, float moduleSizeRef = 0)
 {
-	int width = view.sum(N);
-	if (SUM > N && width < SUM)
+	int width = view.sum(LEN);
+	if (SUM > LEN && width < SUM)
 		return 0;
 
 	const float moduleSize = (float)width / SUM;
@@ -176,7 +179,7 @@ float IsPattern(const PatternView& view, const FixedPattern<N, SUM, false>& patt
 	// TODO: review once we have upsampling in the binarizer in place.
 	const float threshold = moduleSizeRef * (0.5f + RELAXED_THRESHOLD * 0.25f) + 0.5f;
 
-	for (int x = 0; x < N; ++x)
+	for (int x = 0; x < LEN; ++x)
 		if (std::abs(view[x] - pattern[x] * moduleSizeRef) > threshold)
 			return 0;
 
@@ -246,6 +249,20 @@ PatternView FindLeftGuard(const PatternView& view, int minSize, const FixedPatte
 }
 
 template <int LEN, int SUM>
+std::array<int, LEN - 2> NormalizedE2EPattern(const PatternView& view)
+{
+	float moduleSize = static_cast<float>(view.sum(LEN)) / SUM;
+	std::array<int, LEN - 2> e2e;
+
+	for (int i = 0; i < LEN - 2; i++) {
+		float v = (view[i] + view[i + 1]) / moduleSize;
+		e2e[i] = int(v + .5f);
+	}
+
+	return e2e;
+}
+
+template <int LEN, int SUM>
 std::array<int, LEN> NormalizedPattern(const PatternView& view)
 {
 	float moduleSize = static_cast<float>(view.sum(LEN)) / SUM;
@@ -270,6 +287,76 @@ std::array<int, LEN> NormalizedPattern(const PatternView& view)
 	}
 
 	return is;
+}
+
+template<typename I>
+void GetPatternRow(Range<I> b_row, PatternRow& p_row)
+{
+	// TODO: if reactivating the bit-packed array (!ZX_FAST_BIT_STORAGE) should be of interest then the following code could be
+	// considerably speed up by using a specialized variant along the lines of the old BitArray::getNextSetTo() function that
+	// was removed between 1.4 and 2.0.
+
+#if 0
+	p_row.reserve(64);
+	p_row.clear();
+
+	auto lastPos = b_row.begin();
+	if (*lastPos)
+		p_row.push_back(0); // first value is number of white pixels, here 0
+
+	for (auto p = b_row.begin() + 1; p < b_row.end(); ++p)
+		if (bool(*p) != bool(*lastPos))
+			p_row.push_back(p - std::exchange(lastPos, p));
+
+	p_row.push_back(b_row.end() - lastPos);
+
+	if (*lastPos)
+		p_row.push_back(0); // last value is number of white pixels, here 0
+#else
+	p_row.resize(b_row.size() + 2);
+	std::fill(p_row.begin(), p_row.end(), 0);
+
+	auto bitPos = b_row.begin();
+	const auto bitPosEnd = b_row.end();
+	auto intPos = p_row.data();
+
+	if (*bitPos)
+		intPos++; // first value is number of white pixels, here 0
+
+	// The following code as been observed to cause a speedup of up to 30% on large images on an AVX cpu
+	// and on an a Google Pixel 3 Android phone. Your mileage may vary.
+	if constexpr (std::is_pointer_v<I> && sizeof(I) == 8 && sizeof(std::remove_pointer_t<I>) == 1) {
+		using simd_t = uint64_t;
+		while (bitPos < bitPosEnd - sizeof(simd_t)) {
+			auto asSimd0 = BitHacks::LoadU<simd_t>(bitPos);
+			auto asSimd1 = BitHacks::LoadU<simd_t>(bitPos + 1);
+			auto z = asSimd0 ^ asSimd1;
+			if (z) {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+				int step = BitHacks::NumberOfTrailingZeros(z) / 8 + 1;
+#else
+				int step = BitHacks::NumberOfLeadingZeros(z) / 8 + 1;
+#endif
+				(*intPos++) += step;
+				bitPos += step;
+			} else {
+				(*intPos) += sizeof(simd_t);
+				bitPos += sizeof(simd_t);
+			}
+		}
+	}
+
+	while (++bitPos != bitPosEnd) {
+		++(*intPos);
+		intPos += bitPos[0] != bitPos[-1];
+	}
+	++(*intPos);
+
+	if (bitPos[-1])
+		intPos++;
+
+	p_row.resize(intPos - p_row.data() + 1);
+#endif
 }
 
 } // ZXing

@@ -8,17 +8,13 @@
 
 #include "ByteArray.h"
 #include "DMSymbolInfo.h"
-#include "DMSymbolShape.h"
-#include "ZXContainerAlgorithms.h"
+#include "ZXAlgorithms.h"
 
 #include <stdexcept>
 #include <string>
 #include <utility>
 
-namespace ZXing {
-namespace DataMatrix {
-
-class SymbolInfo;
+namespace ZXing::DataMatrix {
 
 class EncoderContext
 {
@@ -103,7 +99,7 @@ public:
 	}
 
 	int totalMessageCharCount() const {
-		return static_cast<int>(_msg.length() - _skipAtEnd);
+		return narrow_cast<int>(_msg.length() - _skipAtEnd);
 	}
 
 	int remainingCharacters() const {
@@ -129,5 +125,4 @@ public:
 	}
 };
 
-} // DataMatrix
-} // ZXing
+} // namespace ZXing::DataMatrix

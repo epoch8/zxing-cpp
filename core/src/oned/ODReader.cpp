@@ -22,6 +22,20 @@
 #include <algorithm>
 #include <utility>
 
+#ifdef PRINT_DEBUG
+#include "BitMatrix.h"
+#include "BitMatrixIO.h"
+#endif
+
+namespace ZXing {
+
+void IncrementLineCount(Result& r)
+{
+	++r._lineCount;
+}
+
+} // namespace ZXing
+
 namespace ZXing::OneD {
 
 Reader::Reader(const DecodeHints& hints) : ZXing::Reader(hints)
@@ -36,9 +50,9 @@ Reader::Reader(const DecodeHints& hints) : ZXing::Reader(hints)
 	if (formats.testFlag(BarcodeFormat::Code39))
 		_readers.emplace_back(new Code39Reader(hints));
 	if (formats.testFlag(BarcodeFormat::Code93))
-		_readers.emplace_back(new Code93Reader());
+		_readers.emplace_back(new Code93Reader(hints));
 	if (formats.testFlag(BarcodeFormat::Code128))
-		_readers.emplace_back(new Code128Reader());
+		_readers.emplace_back(new Code128Reader(hints));
 	if (formats.testFlag(BarcodeFormat::ITF))
 		_readers.emplace_back(new ITFReader(hints));
 	if (formats.testFlag(BarcodeFormat::Codabar))
@@ -87,6 +101,10 @@ static Results DoDecode(const std::vector<std::unique_ptr<RowReader>>& readers, 
 	PatternRow bars;
 	bars.reserve(128); // e.g. EAN-13 has 59 bars/spaces
 
+#ifdef PRINT_DEBUG
+	BitMatrix dbg(width, height);
+#endif
+
 	for (int i = 0; i < maxLines; i++) {
 
 		// Scanning from the middle out. Determine which row we're looking at next:
@@ -109,15 +127,25 @@ static Results DoDecode(const std::vector<std::unique_ptr<RowReader>>& readers, 
 				continue;
 		}
 
-		if (!image.getPatternRow(rowNumber, rotate ? 270 : 0, bars))
+		if (!image.getPatternRow(rowNumber, rotate ? 90 : 0, bars))
 			continue;
+
+#ifdef PRINT_DEBUG
+		bool val = false;
+		int x = 0;
+		for (auto b : bars) {
+			for(int j = 0; j < b; ++j)
+				dbg.set(x++, rowNumber, val);
+			val = !val;
+		}
+#endif
 
 		// While we have the image data in a PatternRow, it's fairly cheap to reverse it in place to
 		// handle decoding upside down barcodes.
 		// TODO: the DataBarExpanded (stacked) decoder depends on seeing each line from both directions. This
 		// 'surprising' and inconsistent. It also requires the decoderState to be shared between normal and reversed
 		// scans, which makes no sense in general because it would mix partial detection data from two codes of the same
-		// type next to each other. See also https://github.com/nu-book/zxing-cpp/issues/87
+		// type next to each other. See also https://github.com/zxing-cpp/zxing-cpp/issues/87
 		for (bool upsideDown : {false, true}) {
 			// trying again?
 			if (upsideDown) {
@@ -135,7 +163,7 @@ static Results DoDecode(const std::vector<std::unique_ptr<RowReader>>& readers, 
 				do {
 					Result result = readers[r]->decodePattern(rowNumber, next, decodingState[r]);
 					if (result.isValid() || (returnErrors && result.error())) {
-						result.incrementLineCount();
+						IncrementLineCount(result);
 						if (upsideDown) {
 							// update position (flip horizontally).
 							auto points = result.position();
@@ -147,7 +175,7 @@ static Results DoDecode(const std::vector<std::unique_ptr<RowReader>>& readers, 
 						if (rotate) {
 							auto points = result.position();
 							for (auto& p : points) {
-								p = {height - p.y - 1, p.x};
+								p = {p.y, width - p.x - 1};
 							}
 							result.setPosition(std::move(points));
 						}
@@ -168,28 +196,29 @@ static Results DoDecode(const std::vector<std::unique_ptr<RowReader>>& readers, 
 									points[3] = result.position()[3];
 								}
 								other.setPosition(points);
-								other.incrementLineCount();
+								IncrementLineCount(other);
 								// clear the result, so we don't insert it again below
 								result = Result();
 								break;
 							}
 						}
 
-						if (result.format() != BarcodeFormat::None)
+						if (result.format() != BarcodeFormat::None) {
 							res.push_back(std::move(result));
+
+							// if we found a valid code we have not seen before but a minLineCount > 1,
+							// add additional check rows above and below the current one
+							if (!isCheckRow && minLineCount > 1 && rowStep > 1) {
+								checkRows = {rowNumber - 1, rowNumber + 1};
+								if (rowStep > 2)
+									checkRows.insert(checkRows.end(), {rowNumber - 2, rowNumber + 2});
+							}
+						}
 
 						if (maxSymbols && Reduce(res, 0, [&](int s, const Result& r) {
 											  return s + (r.lineCount() >= minLineCount);
 										  }) == maxSymbols) {
 							goto out;
-						}
-
-						// if we found a valid code but have a minLineCount > 1, add additional check rows above and
-						// below the current one
-						if (!isCheckRow && minLineCount > 1 && rowStep > 1) {
-							checkRows = {rowNumber - 1, rowNumber + 1};
-							if (rowStep > 2)
-								checkRows.insert(checkRows.end(), {rowNumber - 2, rowNumber + 2});
 						}
 					}
 					// make sure we make progress and we start the next try on a bar
@@ -214,6 +243,10 @@ out:
 	//TODO: C++20 res.erase_if()
 	it = std::remove_if(res.begin(), res.end(), [](auto&& r) { return r.format() == BarcodeFormat::None; });
 	res.erase(it, res.end());
+
+#ifdef PRINT_DEBUG
+	SaveAsPBM(dbg, rotate ? "od-log-r.pnm" : "od-log.pnm");
+#endif
 
 	return res;
 }

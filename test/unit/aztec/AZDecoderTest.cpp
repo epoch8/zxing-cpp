@@ -7,7 +7,6 @@
 #include "aztec/AZDecoder.h"
 #include "BitArray.h"
 #include "BitMatrixIO.h"
-#include "DecodeStatus.h"
 #include "DecoderResult.h"
 #include "aztec/AZDetectorResult.h"
 
@@ -26,7 +25,7 @@ using namespace ZXing;
 // Shorthand to call Decode()
 static DecoderResult parse(BitMatrix&& bits, bool compact, int nbDatablocks, int nbLayers)
 {
-	return Aztec::Decode({{std::move(bits), {}}, compact, nbDatablocks, nbLayers, false /*readerInit*/});
+	return Aztec::Decode({{std::move(bits), {}}, compact, nbDatablocks, nbLayers, false /*readerInit*/, false /*isMirrored*/});
 }
 
 TEST(AZDecoderTest, AztecResult)

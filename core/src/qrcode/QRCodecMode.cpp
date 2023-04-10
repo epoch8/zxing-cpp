@@ -6,17 +6,18 @@
 
 #include "QRCodecMode.h"
 
+#include "Error.h"
 #include "QRVersion.h"
-#include "ZXContainerAlgorithms.h"
+#include "ZXAlgorithms.h"
 
 #include <array>
 #include <stdexcept>
 
 namespace ZXing::QRCode {
 
-CodecMode CodecModeForBits(int bits, bool isMirco)
+CodecMode CodecModeForBits(int bits, bool isMicro)
 {
-	if (!isMirco) {
+	if (!isMicro) {
 		if ((bits >= 0x00 && bits <= 0x05) || (bits >= 0x07 && bits <= 0x09) || bits == 0x0d)
 			return static_cast<CodecMode>(bits);
 	} else {
@@ -25,7 +26,7 @@ CodecMode CodecModeForBits(int bits, bool isMirco)
 			return Bits2Mode[bits];
 	}
 
-	throw std::invalid_argument("Invalid mode");
+	throw FormatError("Invalid codec mode");
 }
 
 int CharacterCountBits(CodecMode mode, const Version& version)

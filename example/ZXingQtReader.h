@@ -5,8 +5,6 @@
 
 #pragma once
 
-#define ZX_USE_UTF8 1 // see Result.h
-
 #include "ReadBarcode.h"
 
 #include <QImage>
@@ -36,23 +34,23 @@ Q_NAMESPACE
 enum class BarcodeFormat
 {
 	None            = 0,         ///< Used as a return value if no valid barcode has been detected
-	Aztec           = (1 << 0),  ///< Aztec (2D)
-	Codabar         = (1 << 1),  ///< Codabar (1D)
-	Code39          = (1 << 2),  ///< Code39 (1D)
-	Code93          = (1 << 3),  ///< Code93 (1D)
-	Code128         = (1 << 4),  ///< Code128 (1D)
+	Aztec           = (1 << 0),  ///< Aztec
+	Codabar         = (1 << 1),  ///< Codabar
+	Code39          = (1 << 2),  ///< Code39
+	Code93          = (1 << 3),  ///< Code93
+	Code128         = (1 << 4),  ///< Code128
 	DataBar         = (1 << 5),  ///< GS1 DataBar, formerly known as RSS 14
 	DataBarExpanded = (1 << 6),  ///< GS1 DataBar Expanded, formerly known as RSS EXPANDED
-	DataMatrix      = (1 << 7),  ///< DataMatrix (2D)
-	EAN8            = (1 << 8),  ///< EAN-8 (1D)
-	EAN13           = (1 << 9),  ///< EAN-13 (1D)
-	ITF             = (1 << 10), ///< ITF (Interleaved Two of Five) (1D)
-	MaxiCode        = (1 << 11), ///< MaxiCode (2D)
-	PDF417          = (1 << 12), ///< PDF417 (1D) or (2D)
-	QRCode          = (1 << 13), ///< QR Code (2D)
-	UPCA            = (1 << 14), ///< UPC-A (1D)
-	UPCE            = (1 << 15), ///< UPC-E (1D)
-	MicroQRCode     = (1 << 16), ///< Micro QR Code (2D)
+	DataMatrix      = (1 << 7),  ///< DataMatrix
+	EAN8            = (1 << 8),  ///< EAN-8
+	EAN13           = (1 << 9),  ///< EAN-13
+	ITF             = (1 << 10), ///< ITF (Interleaved Two of Five)
+	MaxiCode        = (1 << 11), ///< MaxiCode
+	PDF417          = (1 << 12), ///< PDF417 or
+	QRCode          = (1 << 13), ///< QR Code
+	UPCA            = (1 << 14), ///< UPC-A
+	UPCE            = (1 << 15), ///< UPC-E
+	MicroQRCode     = (1 << 16), ///< Micro QR Code
 
 	LinearCodes = Codabar | Code39 | Code93 | Code128 | EAN8 | EAN13 | ITF | DataBar | DataBarExpanded | UPCA | UPCE,
 	MatrixCodes = Aztec | DataMatrix | MaxiCode | PDF417 | QRCode | MicroQRCode,
@@ -182,17 +180,6 @@ inline QList<Result> ReadBarcodes(const QVideoFrame& frame, const DecodeHints& h
 {
 	using namespace ZXing;
 
-	auto img = frame; // shallow copy just get access to non-const map() function
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-	if (!frame.isValid() || !img.map(QAbstractVideoBuffer::ReadOnly)){
-#else
-	if (!frame.isValid() || !img.map(QVideoFrame::ReadOnly)){
-#endif
-		qWarning() << "invalid QVideoFrame: could not map memory";
-		return {};
-	}
-	auto unmap = qScopeGuard([&] { img.unmap(); });
-
 	ImageFormat fmt = ImageFormat::None;
 	int pixStride = 0;
 	int pixOffset = 0;
@@ -205,7 +192,7 @@ inline QList<Result> ReadBarcodes(const QVideoFrame& frame, const DecodeHints& h
 #define FIRST_PLANE 0
 #endif
 
-	switch (img.pixelFormat()) {
+	switch (frame.pixelFormat()) {
 	case FORMAT(ARGB32, ARGB8888):
 	case FORMAT(ARGB32_Premultiplied, ARGB8888_Premultiplied):
 	case FORMAT(RGB32, RGBX8888):
@@ -274,17 +261,34 @@ inline QList<Result> ReadBarcodes(const QVideoFrame& frame, const DecodeHints& h
 	}
 
 	if (fmt != ImageFormat::None) {
+		auto img = frame; // shallow copy just get access to non-const map() function
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+		if (!img.isValid() || !img.map(QAbstractVideoBuffer::ReadOnly)){
+#else
+		if (!img.isValid() || !img.map(QVideoFrame::ReadOnly)){
+#endif
+			qWarning() << "invalid QVideoFrame: could not map memory";
+			return {};
+		}
+		QScopeGuard unmap([&] { img.unmap(); });
+
 		return QListResults(ZXing::ReadBarcodes(
 			{img.bits(FIRST_PLANE) + pixOffset, img.width(), img.height(), fmt, img.bytesPerLine(FIRST_PLANE), pixStride}, hints));
-	} else {
+	}
+	else {
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-		if (QVideoFrame::imageFormatFromPixelFormat(img.pixelFormat()) != QImage::Format_Invalid)
-			return ReadBarcodes(img.image(), hints);
-		qWarning() << "unsupported QVideoFrame::pixelFormat";
-		return {};
+		if (QVideoFrame::imageFormatFromPixelFormat(frame.pixelFormat()) != QImage::Format_Invalid) {
+			qWarning() << "unsupported QVideoFrame::pixelFormat";
+			return {};
+		}
+		auto qimg = frame.image();
 #else
-		return ReadBarcodes(img.toImage(), hints);
+		auto qimg = frame.toImage();
 #endif
+		if (qimg.format() != QImage::Format_Invalid)
+			return ReadBarcodes(qimg, hints);
+		qWarning() << "failed to convert QVideoFrame to QImage";
+		return {};
 	}
 }
 

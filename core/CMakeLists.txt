@@ -1,4 +1,12 @@
-cmake_minimum_required (VERSION 3.10)
+cmake_minimum_required(VERSION 3.15)
+
+project (ZXing VERSION "2.0.0")
+set (ZXING_SONAME 3) # see https://github.com/zxing-cpp/zxing-cpp/issues/333
+
+include(../zxing.cmake)
+if (BUILD_SHARED_LIBS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
 
 if (NOT DEFINED BUILD_WRITERS)
     set (BUILD_WRITERS OFF)
@@ -19,7 +27,6 @@ set (ZXING_CORE_LOCAL_DEFINES
     $<$<BOOL:${BUILD_READERS}>:-DZXING_BUILD_READERS>
     $<$<BOOL:${BUILD_WRITERS}>:-DZXING_BUILD_WRITERS>
     $<$<BOOL:${BUILD_UNIT_TESTS}>:-DZXING_BUILD_FOR_TEST>
-    -DZX_USE_UTF8 # silence deprecation warning in Result.h
 )
 if (MSVC)
     set (ZXING_CORE_LOCAL_DEFINES ${ZXING_CORE_LOCAL_DEFINES}
@@ -27,6 +34,7 @@ if (MSVC)
         -D_CRT_SECURE_NO_WARNINGS
         -D_CRT_NONSTDC_NO_WARNINGS
         -DNOMINMAX
+        /Zc:__cplusplus
     )
 else()
     set (ZXING_CORE_LOCAL_DEFINES ${ZXING_CORE_LOCAL_DEFINES}
@@ -51,7 +59,6 @@ set (COMMON_FILES
     src/ByteMatrix.h
     src/CharacterSet.h
     src/CharacterSet.cpp
-    src/CharacterSetECI.h
     src/ConcentricFinder.h
     src/ConcentricFinder.cpp
     src/CustomData.h
@@ -70,16 +77,19 @@ set (COMMON_FILES
     src/Pattern.h
     src/Point.h
     src/Quadrilateral.h
+    src/Range.h
     src/RegressionLine.h
     src/Scope.h
-    src/TextUtfEncoding.h
-    src/TextUtfEncoding.cpp
+    src/TextUtfEncoding.h # [[deprecated]]
+    src/TextUtfEncoding.cpp # [[deprecated]]
     src/TritMatrix.h
+    src/Utf.h
+    src/Utf.cpp
+    src/ZXAlgorithms.h
     src/ZXBigInteger.h
     src/ZXBigInteger.cpp
     src/ZXConfig.h
     src/ZXNullable.h
-    src/ZXContainerAlgorithms.h
     src/ZXTestSupport.h
 )
 if (BUILD_READERS)
@@ -92,8 +102,6 @@ if (BUILD_READERS)
         src/Content.cpp
         src/DecodeHints.h
         src/DecodeHints.cpp
-        src/DecodeStatus.h
-        src/DecodeStatus.cpp
         src/DecoderResult.h
         src/DetectorResult.h
         src/Error.h
@@ -101,8 +109,8 @@ if (BUILD_READERS)
         src/GlobalHistogramBinarizer.cpp
         src/GridSampler.h
         src/GridSampler.cpp
-        src/GS1.h
-        src/GS1.cpp
+        src/HRI.h
+        src/HRI.cpp
         src/HybridBinarizer.h
         src/HybridBinarizer.cpp
         src/ImageView.h
@@ -119,6 +127,7 @@ if (BUILD_READERS)
         src/Result.cpp
         src/ResultPoint.h
         src/ResultPoint.cpp
+        src/StructuredAppend.h
         src/TextDecoder.h
         src/TextDecoder.cpp
         src/ThresholdBinarizer.h
@@ -144,18 +153,16 @@ set (PUBLIC_HEADERS
     src/BitHacks.h
     src/ByteArray.h
     src/CharacterSet.h
-    src/CharacterSetECI.h # deprecated
     src/Flags.h
     src/GTIN.h
-    src/TextUtfEncoding.h
+    src/TextUtfEncoding.h # [[deprecated]]
+    src/ZXAlgorithms.h
     src/ZXConfig.h
-    src/ZXContainerAlgorithms.h
 )
 if (BUILD_READERS)
     set (PUBLIC_HEADERS ${PUBLIC_HEADERS}
         src/Content.h
         src/DecodeHints.h
-        src/DecodeStatus.h
         src/Error.h
         src/ImageView.h
         src/Point.h
@@ -171,6 +178,7 @@ if (BUILD_WRITERS)
         src/BitMatrixIO.h
         src/Matrix.h
         src/MultiFormatWriter.h
+        src/Range.h
     )
 endif()
 # end of public header set
@@ -395,36 +403,16 @@ if (BUILD_WRITERS)
     )
 endif()
 
-
-set (TEXT_CODEC_FILES
-    src/textcodec/Big5MapTable.h
-    src/textcodec/Big5MapTable.cpp
-    src/textcodec/KRHangulMapping.h
-    src/textcodec/KRHangulMapping.cpp
+set (LIBZUECI_FILES
+    src/libzueci/zueci.c
+    src/libzueci/zueci.h
 )
-if (BUILD_READERS)
-    set (TEXT_CODEC_FILES ${TEXT_CODEC_FILES}
-        src/textcodec/Big5TextDecoder.h
-        src/textcodec/Big5TextDecoder.cpp
-        src/textcodec/GBTextDecoder.h
-        src/textcodec/GBTextDecoder.cpp
-        src/textcodec/JPTextDecoder.h
-        src/textcodec/JPTextDecoder.cpp
-        src/textcodec/KRTextDecoder.h
-        src/textcodec/KRTextDecoder.cpp
-    )
+
+if (NOT BUILD_READERS)
+    set_source_files_properties(src/libzueci/zueci.c PROPERTIES COMPILE_FLAGS -DZUECI_EMBED_NO_TO_UTF)
 endif()
-if (BUILD_WRITERS)
-    set (TEXT_CODEC_FILES ${TEXT_CODEC_FILES}
-        src/textcodec/Big5TextEncoder.h
-        src/textcodec/Big5TextEncoder.cpp
-        src/textcodec/GBTextEncoder.h
-        src/textcodec/GBTextEncoder.cpp
-        src/textcodec/JPTextEncoder.h
-        src/textcodec/JPTextEncoder.cpp
-        src/textcodec/KRTextEncoder.h
-        src/textcodec/KRTextEncoder.cpp
-    )
+if (NOT BUILD_WRITERS)
+    set_source_files_properties(src/libzueci/zueci.c PROPERTIES COMPILE_FLAGS -DZUECI_EMBED_NO_TO_ECI)
 endif()
 
 source_group (Sources FILES ${COMMON_FILES})
@@ -434,7 +422,7 @@ source_group (Sources\\maxicode FILES ${MAXICODE_FILES})
 source_group (Sources\\oned FILES ${ONED_FILES})
 source_group (Sources\\pdf417 FILES ${PDF417_FILES})
 source_group (Sources\\qrcode FILES ${QRCODE_FILES})
-source_group (Sources\\textcodec FILES ${TEXT_CODEC_FILES})
+source_group (Sources\\libzueci FILES ${LIBZUECI_FILES})
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 set(THREADS_PREFER_PTHREAD_FLAG TRUE)
@@ -448,11 +436,11 @@ add_library (ZXing
     ${ONED_FILES}
     ${PDF417_FILES}
     ${QRCODE_FILES}
-    ${TEXT_CODEC_FILES}
+    ${LIBZUECI_FILES}
 )
 
 target_include_directories (ZXing
-    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+    PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>" "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
     INTERFACE "$<INSTALL_INTERFACE:include>"
 )
 
@@ -470,8 +458,7 @@ if (COMPILER_NEEDS_FLOAT_STORE)
     )
 endif()
 
-# the lib needs a c++-17 compiler but can be used with a c++-11 compiler (see examples)
-target_compile_features(ZXing PRIVATE cxx_std_17 INTERFACE cxx_std_11)
+target_compile_features(ZXing PUBLIC cxx_std_17)
 
 target_link_libraries (ZXing PRIVATE Threads::Threads)
 
@@ -486,18 +473,38 @@ set_target_properties(ZXing PROPERTIES EXPORT_NAME ZXing)
 set_target_properties(ZXing PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if (PROJECT_VERSION)
     set_target_properties(ZXing PROPERTIES VERSION ${PROJECT_VERSION})
-    set_target_properties(ZXing PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR})
+    set_target_properties(ZXing PROPERTIES SOVERSION ${ZXING_SONAME})
 endif()
 
 set_target_properties(ZXing PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
+if (APPLE AND BUILD_APPLE_FRAMEWORK)
+    set_target_properties(ZXing PROPERTIES
+        FRAMEWORK TRUE
+        FRAMEWORK_VERSION "C"
+        XCODE_ATTRIBUTE_DEFINES_MODULE YES
+        XCODE_ATTRIBUTE_BUILD_LIBRARY_FOR_DISTRIBUTION YES
+        XCODE_ATTRIBUTE_MODULEMAP_FILE "wrappers/ios/Sources/Wrapper/module.modulemap"
+        XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
+        MACOSX_FRAMEWORK_IDENTIFIER "com.zxing-cpp.ios"
+        CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH NO
+        #MACOSX_FRAMEWORK_INFO_PLIST Info.plist
+        PUBLIC_HEADER "${PUBLIC_HEADERS}"
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "iPhone Developer"
+        XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
+    )
+endif()
+
 include (GNUInstallDirs)
 
+set(ZX_INSTALL_TARGETS ZXing)
+
 install (
-    TARGETS ZXing EXPORT ZXingTargets
+    TARGETS ${ZX_INSTALL_TARGETS} EXPORT ZXingTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    FRAMEWORK DESTINATION ${CMAKE_INSTALL_LIBDIR}
 #    INCLUDES DESTINATION include
     PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ZXing"
 )
@@ -509,7 +516,7 @@ install (
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/ZXing"
 )
 
-if(MSVC)
+if (MSVC)
     set_target_properties(ZXing PROPERTIES
         COMPILE_PDB_NAME ZXing
         COMPILE_PDB_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
@@ -518,3 +525,36 @@ if(MSVC)
             CONFIGURATIONS Debug RelWithDebInfo 
             OPTIONAL)
 endif()
+
+set (CMAKECONFIG_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/ZXing")
+
+install (
+    EXPORT ZXingTargets
+    DESTINATION ${CMAKECONFIG_INSTALL_DIR} NAMESPACE ZXing::
+)
+
+IF (NOT WIN32 OR MINGW)
+    configure_file(zxing.pc.in zxing.pc @ONLY)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/zxing.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+ENDIF()
+
+include (CMakePackageConfigHelpers)
+
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/ZXingConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+configure_package_config_file (
+    ZXingConfig.cmake.in
+    ZXingConfig.cmake
+    INSTALL_DESTINATION ${CMAKECONFIG_INSTALL_DIR}
+)
+
+install (
+    FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/ZXingConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/ZXingConfigVersion.cmake"
+    DESTINATION ${CMAKECONFIG_INSTALL_DIR}
+)

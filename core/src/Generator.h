@@ -6,13 +6,30 @@
 #pragma once
 
 #ifdef __cpp_impl_coroutine
+#ifdef __ANDROID__
+// NDK 25.1.8937393 can compile this code with c++20 but needs a few tweaks:
+#include <experimental/coroutine>
+namespace std {
+	using experimental::suspend_always;
+	using experimental::coroutine_handle;
+	struct default_sentinel_t {};
+}
+#else
+#include <concepts>
 #include <coroutine>
+#endif
+
 #include <optional>
+#include <iterator>
 
 // this code is based on https://en.cppreference.com/w/cpp/coroutine/coroutine_handle#Example
 // but modified trying to prevent accidental copying of generated objects
 
+#ifdef __ANDROID__
+template <class T>
+#else
 template <std::movable T>
+#endif
 class Generator
 {
 public:
@@ -27,6 +44,7 @@ public:
 			return {};
 		}
 //		void return_value(T&& value) noexcept { current_value = std::move(value); }
+		static void return_void() {} // required to compile in VisualStudio, no idea why clang/gcc are happy without
 		// Disallow co_await in generator coroutines.
 		void await_transform() = delete;
 		[[noreturn]] static void unhandled_exception() { throw; }

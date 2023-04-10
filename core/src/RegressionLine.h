@@ -6,6 +6,7 @@
 #pragma once
 
 #include "Point.h"
+#include "ZXAlgorithms.h"
 
 #include <algorithm>
 #include <cmath>
@@ -94,6 +95,11 @@ public:
 	}
 
 	void pop_back() { _points.pop_back(); }
+	void pop_front()
+	{
+		std::rotate(_points.begin(), _points.begin() + 1, _points.end());
+		_points.pop_back();
+	}
 
 	void setDirectionInward(PointF d) { _directionInward = normalized(d); }
 
@@ -104,10 +110,12 @@ public:
 			auto points = _points;
 			while (true) {
 				auto old_points_size = points.size();
-				points.erase(
-					std::remove_if(points.begin(), points.end(),
-								   [this, maxSignedDist](auto p) { return this->signedDistance(p) > maxSignedDist; }),
-					points.end());
+				// remove points that are further 'inside' than maxSignedDist or further 'outside' than 2 x maxSignedDist
+				auto end = std::remove_if(points.begin(), points.end(), [this, maxSignedDist](auto p) {
+					auto sd = this->signedDistance(p);
+                    return sd > maxSignedDist || sd < -2 * maxSignedDist;
+				});
+				points.erase(end, points.end());
 				if (old_points_size == points.size())
 					break;
 #ifdef PRINT_DEBUG
@@ -126,10 +134,8 @@ public:
 	{
 		PointF min = _points.front(), max = _points.front();
 		for (auto p : _points) {
-			min.x = std::min(min.x, p.x);
-			min.y = std::min(min.y, p.y);
-			max.x = std::max(max.x, p.x);
-			max.y = std::max(max.y, p.y);
+			UpdateMinMax(min.x, max.x, p.x);
+			UpdateMinMax(min.y, max.y, p.y);
 		}
 		auto diff  = max - min;
 		auto len   = maxAbsComponent(diff);

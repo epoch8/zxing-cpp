@@ -14,11 +14,9 @@
 #include "ODUPCEANCommon.h"
 #include "Result.h"
 
+#include <cmath>
+
 namespace ZXing::OneD {
-
-MultiUPCEANReader::MultiUPCEANReader(const DecodeHints& hints) : _hints(hints) {}
-
-MultiUPCEANReader::~MultiUPCEANReader() = default;
 
 constexpr int CHAR_LEN = 4;
 
@@ -54,11 +52,14 @@ static bool DecodeDigit(const PatternView& view, std::string& txt, int* lgPatter
 	int bestMatch =
 		lgPattern ? RowReader::DecodeDigit(view, UPCEANCommon::L_AND_G_PATTERNS, MAX_AVG_VARIANCE, MAX_INDIVIDUAL_VARIANCE, false)
 				  : RowReader::DecodeDigit(view, UPCEANCommon::L_PATTERNS, MAX_AVG_VARIANCE, MAX_INDIVIDUAL_VARIANCE, false);
-	txt += '0' + (bestMatch % 10);
+	if (bestMatch == -1)
+		return false;
+
+	txt += ToDigit(bestMatch % 10);
 	if (lgPattern)
 		AppendBit(*lgPattern, bestMatch >= 10);
 
-	return bestMatch != -1;
+	return true;
 #else
 	constexpr int CHAR_SUM = 7;
 	auto pattern = RowReader::OneToFourBitPattern<CHAR_LEN, CHAR_SUM>(view);
@@ -84,7 +85,7 @@ static bool DecodeDigit(const PatternView& view, std::string& txt, int* lgPatter
 	8 	11011 	00100 	00100
 	9 	00101 	01011 	11010
 */
-	constexpr char I = -1; // invalid pattern
+	constexpr char I = 0xf0; // invalid pattern
 
 	const char digit[] = {I,    I,    0x16, I,    0x18, 0x09, 0x00, I,
                           0x17, 0x02, I,    0x19, 0x01, 0x12, 0x14, I,
@@ -93,7 +94,7 @@ static bool DecodeDigit(const PatternView& view, std::string& txt, int* lgPatter
 	// clang-format on
 
 	char d = digit[pattern];
-	txt += '0' + (d & 0xf);
+	txt += ToDigit(d & 0xf);
 	if (lgPattern)
 		AppendBit(*lgPattern, (d >> 4) & 1);
 
@@ -142,8 +143,9 @@ static bool EAN13(PartialResult& res, PatternView begin)
 
 	CHECK(DecodeDigits(6, next, res.txt));
 
-	res.txt[0] = '0' + IndexOf(FIRST_DIGIT_ENCODINGS, lgPattern);
-	CHECK(res.txt[0] != '0' - 1);
+	int i = IndexOf(FIRST_DIGIT_ENCODINGS, lgPattern);
+	CHECK(i != -1);
+	res.txt[0] = ToDigit(i);
 
 	res.end = end;
 	res.format = BarcodeFormat::EAN13;
@@ -206,8 +208,8 @@ static bool UPCE(PartialResult& res, PatternView begin)
 	int i = IndexOf(UPCEANCommon::NUMSYS_AND_CHECK_DIGIT_PATTERNS, lgPattern);
 	CHECK(i != -1);
 
-	res.txt[0] = '0' + i / 10;
-	res.txt += '0' + i % 10;
+	res.txt[0] = ToDigit(i / 10);
+	res.txt += ToDigit(i % 10);
 
 	res.end = end;
 	res.format = BarcodeFormat::UPCE;
@@ -218,10 +220,10 @@ static int Ean5Checksum(const std::string& s)
 {
 	int sum = 0, N = Size(s);
 	for (int i = N - 2; i >= 0; i -= 2)
-		sum += (int)s[i] - (int)'0';
+		sum += s[i] - '0';
 	sum *= 3;
 	for (int i = N - 1; i >= 0; i -= 2)
-		sum += (int)s[i] - (int)'0';
+		sum += s[i] - '0';
 	sum *= 3;
 	return sum % 10;
 }
@@ -292,25 +294,25 @@ Result MultiUPCEANReader::decodePattern(int rowNumber, PatternView& next, std::u
 	// i.e. converted to EAN-13 if UPC-A/E, but not doing this here to maintain backward compatibility
 	SymbologyIdentifier symbologyIdentifier = {'E', res.format == BarcodeFormat::EAN8 ? '4' : '0'};
 
+	next = res.end;
+
 	auto ext = res.end;
 	PartialResult addOnRes;
 	if (_hints.eanAddOnSymbol() != EanAddOnSymbol::Ignore && ext.skipSymbol() && ext.skipSingle(static_cast<int>(begin.sum() * 3.5))
 		&& (AddOn(addOnRes, ext, 5) || AddOn(addOnRes, ext, 2))) {
 		// ISO/IEC 15420:2009 states that the content for "]E3" should be 15 or 18 digits, i.e. converted to EAN-13
 		// and extended with no separator, and that the content for "]E4" should be 8 digits, i.e. no add-on
-		//TODO: extend position in include extension
 		res.txt += " " + addOnRes.txt;
+		next = addOnRes.end;
 
 		if (res.format != BarcodeFormat::EAN8) // Keeping EAN-8 with add-on as "]E4"
 			symbologyIdentifier.modifier = '3'; // Combined packet, EAN-13, UPC-A, UPC-E, with add-on
 	}
 
-	next = res.end;
-
 	if (_hints.eanAddOnSymbol() == EanAddOnSymbol::Require && !addOnRes.isValid())
 		return {};
 
-	return Result(res.txt, rowNumber, begin.pixelsInFront(), res.end.pixelsTillEnd(), res.format, symbologyIdentifier, error);
+	return Result(res.txt, rowNumber, begin.pixelsInFront(), next.pixelsTillEnd(), res.format, symbologyIdentifier, error);
 }
 
 } // namespace ZXing::OneD

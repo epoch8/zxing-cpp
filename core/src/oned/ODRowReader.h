@@ -8,11 +8,13 @@
 #pragma once
 
 #include "BitArray.h"
-#include "DecodeStatus.h"
 #include "Pattern.h"
+#include "Result.h"
+#include "ZXAlgorithms.h"
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstddef>
 #include <iterator>
 #include <limits>
@@ -38,7 +40,7 @@ RSSExp.:  v?-74d/?-41c
 
 namespace ZXing {
 
-class Result;
+class DecodeHints;
 
 namespace OneD {
 
@@ -48,15 +50,17 @@ namespace OneD {
 */
 class RowReader
 {
+protected:
+	const DecodeHints& _hints;
+
 public:
+	explicit RowReader(const DecodeHints& hints) : _hints(hints) {}
+	explicit RowReader(DecodeHints&& hints) = delete;
 
 	struct DecodingState
 	{
 		virtual ~DecodingState() = default;
 	};
-
-	//TODO: this is only testing code -> move outside of this interface (and remove rowNumber parameter)
-	Result decodeSingleRow(int rowNumber, const BitArray& row) const;
 
 	virtual ~RowReader() {}
 
@@ -143,13 +147,10 @@ public:
 	 */
 	static BarAndSpaceI NarrowWideThreshold(const PatternView& view)
 	{
-		BarAndSpaceI m = {std::numeric_limits<BarAndSpaceI::value_type>::max(),
-						  std::numeric_limits<BarAndSpaceI::value_type>::max()};
-		BarAndSpaceI M = {0, 0};
-		for (int i = 0; i < view.size(); ++i) {
-			m[i] = std::min(m[i], view[i]);
-			M[i] = std::max(M[i], view[i]);
-		}
+		BarAndSpaceI m = {view[0], view[1]};
+		BarAndSpaceI M = m;
+		for (int i = 2; i < view.size(); ++i)
+			UpdateMinMax(m[i], M[i], view[i]);
 
 		BarAndSpaceI res;
 		for (int i = 0; i < 2; ++i) {
@@ -212,6 +213,17 @@ public:
 		return LookupBitPattern(NarrowWideBitPattern(view), table, alphabet);
 	}
 };
+
+template<typename Range>
+Result DecodeSingleRow(const RowReader& reader, const Range& range)
+{
+	PatternRow row;
+	GetPatternRow(range, row);
+	PatternView view(row);
+
+	std::unique_ptr<RowReader::DecodingState> state;
+	return reader.decodePattern(0, view, state);
+}
 
 } // OneD
 } // ZXing

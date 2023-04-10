@@ -27,6 +27,8 @@ class BinaryBitmap
 {
 	struct Cache;
 	std::unique_ptr<Cache> _cache;
+	bool _inverted = false;
+	bool _closed = false;
 
 protected:
 	const ImageView _buffer;
@@ -37,6 +39,8 @@ protected:
 	* @return The 2D array of bits for the image, nullptr on error.
 	*/
 	virtual std::shared_ptr<const BitMatrix> getBlackMatrix() const = 0;
+
+	BitMatrix binarize(const uint8_t threshold) const;
 
 public:
 	BinaryBitmap(const ImageView& buffer);
@@ -51,6 +55,12 @@ public:
 	virtual bool getPatternRow(int row, int rotation, PatternRow& res) const = 0;
 
 	const BitMatrix* getBitMatrix() const;
+
+	void invert();
+	bool inverted() const { return _inverted; }
+
+	void close();
+	bool closed() const { return _closed; }
 };
 
 } // ZXing
