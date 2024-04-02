@@ -103,6 +103,11 @@
             android:text="tryDownscale" />
 
         <com.google.android.material.chip.Chip
+            android:id="@+id/multiSymbol"
+            style="@style/ChipR"
+            android:text="multiSymbol" />
+
+        <com.google.android.material.chip.Chip
             android:id="@+id/crop"
             style="@style/ChipR"
             android:text="crop" />

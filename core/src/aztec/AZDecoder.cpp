@@ -258,6 +258,8 @@ static void DecodeContent(const BitArray& bits, Content& res)
 
 	while (remBits.size() >= (shiftTable == Table::DIGIT ? 4 : 5)) { // see ISO/IEC 24778:2008 7.3.1.2 regarding padding bits
 		if (shiftTable == Table::BINARY) {
+			if (remBits.size() <= 6) // padding bits
+				break;
 			int length = remBits.readBits(5);
 			if (length == 0)
 				length = remBits.readBits(11) + 31;
@@ -321,7 +323,7 @@ DecoderResult Decode(const BitArray& bits)
 
 	// As converting character set ECIs ourselves and ignoring/skipping non-character ECIs, not using
 	// modifiers that indicate ECI protocol (ISO/IEC 24778:2008 Annex F Table F.1)
-	if (res.bytes[0] == 29) {
+	if (res.bytes.size() > 1 && res.bytes[0] == 29) {
 		res.symbology.modifier = '1'; // GS1
 		res.symbology.aiFlag = AIFlag::GS1;
 		res.erase(0, 1); // Remove FNC1

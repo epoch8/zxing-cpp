@@ -78,7 +78,11 @@ public:
 	auto signedDistance(PointF p) const { return dot(normal(), p) - c; }
 	template <typename T> auto distance(PointT<T> p) const { return std::abs(signedDistance(PointF(p))); }
 	PointF project(PointF p) const { return p - signedDistance(p) * normal(); }
+//<<<<<<< HEAD
 	PointF centroid() const { return Reduce(_points) / _points.size(); }
+// =======
+// 	PointF centroid() const { return std::accumulate(_points.begin(), _points.end(), PointF()) / _points.size(); }
+// >>>>>>> tags/v2.2.1
 
 	void reset()
 	{
@@ -123,7 +127,6 @@ public:
 					break;
 #ifdef PRINT_DEBUG
 				printf("removed %zu points -> %zu remaining\n", old_points_size - points.size(), points.size());
-				fflush(stdout);
 #endif
 				ret = evaluate(points);
 			}

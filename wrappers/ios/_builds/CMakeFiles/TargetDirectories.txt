@@ -1,0 +1,7 @@
+/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/RUN_TESTS.dir
+/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/install.dir
+/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/ALL_BUILD.dir
+/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/ZERO_CHECK.dir
+/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/core/CMakeFiles/ZXing.dir
+/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/core/CMakeFiles/RUN_TESTS.dir
+/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/core/CMakeFiles/install.dir

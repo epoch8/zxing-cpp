@@ -1,6 +1,5 @@
 # Python bindings for zxing-cpp
 
-[![Build + Deploy](https://github.com/zxing-cpp/zxing-cpp/actions/workflows/python-build.yml/badge.svg)](https://github.com/zxing-cpp/zxing-cpp/actions/workflows/python-build.yml)
 [![PyPI](https://img.shields.io/pypi/v/zxing-cpp.svg)](https://pypi.org/project/zxing-cpp/)
 
 ## Installation
@@ -19,14 +18,18 @@ python setup.py install
 ## Usage
 
 ```python
-import cv2
-import zxingcpp
+import cv2, zxingcpp
 
-img = cv2.imread('myimage.png')
+img = cv2.imread('test.png')
 results = zxingcpp.read_barcodes(img)
 for result in results:
-	print("Found barcode:\n Text:    '{}'\n Format:   {}\n Position: {}"
-		.format(result.text, result.format, result.position))
+	print('Found barcode:'
+		f'\n Text:    "{result.text}"'
+		f'\n Format:   {result.format}'
+		f'\n Content:  {result.content_type}'
+		f'\n Position: {result.position}')
 if len(results) == 0:
 	print("Could not find any barcode.")
 ```
+
+To get a full list of available parameters for `read_barcodes` and `write_barcode` as well as the properties of the result objects, have a look at the `PYBIND11_MODULE` definition in [this c++ source file](https://github.com/zxing-cpp/zxing-cpp/blob/master/wrappers/python/zxing.cpp).

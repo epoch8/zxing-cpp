@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 
 <head>
@@ -37,6 +38,7 @@
 		<option value="PDF417">PDF417</option>
 		<option value="QRCode">QRCode</option>
 		<option value="MicroQRCode">Micro QRCode</option>
+		<option value="RMQRCode">rMQR Code</option>
 		<option value="UPCA">UPC-A</option>
 		<option value="UPCE">UPC-E</option>
 		<option value="LinearCodes">Linear Codes</option>
@@ -110,12 +112,16 @@
 			}
 		}
 
+		function escapeTags(htmlStr) {
+			return htmlStr.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+		}
+
 		const processFrame = function () {
 			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
 			const code = readBarcodeFromCanvas(canvas, format.value, mode.value === 'true');
 			if (code.format) {
-				resultElement.innerText = code.format + ": " + code.text;
+				resultElement.innerText = code.format + ": " + escapeTags(code.text);
 				drawResult(code)
 			} else {
 				resultElement.innerText = "No barcode found";

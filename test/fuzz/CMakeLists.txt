@@ -5,7 +5,7 @@ set (CMAKE_CXX_COMPILER /usr/bin/clang++)
 
 project (ZXingFuzz)
 
-set (CMAKE_CXX_STANDARD 17)
+set (CMAKE_CXX_STANDARD 20)
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -march=native -fsanitize=address,fuzzer")
 
 set (BUILD_WRITERS ON)
@@ -16,9 +16,10 @@ add_subdirectory (${CMAKE_CURRENT_SOURCE_DIR}/../../core ${CMAKE_BINARY_DIR}/ZXi
 
 set (TESTS
     DBEDecoder
-    DMDecoder
     DMEncoder
-    ODDecoders
+    ReadLinear
+    ReadMatrix
+    DecodeMatrix
 )
 
 foreach (test ${TESTS})
@@ -26,3 +27,4 @@ foreach (test ${TESTS})
     add_executable (${name} "${name}.cpp")
     target_link_libraries (${name} ZXing::ZXing)
 endforeach()
+

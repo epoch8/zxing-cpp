@@ -1458,12 +1458,11 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 	auto result = DetectPure(image);
 	if (!result.isValid() && !isPure)
 		result = DetectNew(image, tryHarder, tryRotate);
+
 	//if (!result.isValid() && tryHarder && !isPure)
 	//	result = DetectOld(image);
 	if (!result.isValid() && tryHarder && !isPure)
 		result = DetectCRPT(image);
-	
-	
 	return result;
 #endif
 }

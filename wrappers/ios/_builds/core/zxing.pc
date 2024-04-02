@@ -1,0 +1,8 @@
+libdir=/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_install/lib
+includedir=/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_install/include
+
+Name: ZXing
+Description: ZXing-C++ library
+Version: 2.0.0
+Libs: -L${libdir} -lZXing
+Cflags: -I${includedir} -I${includedir}/ZXing

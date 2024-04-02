@@ -3,17 +3,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #import <Foundation/Foundation.h>
-#import "ZXIFormat.h"
+#import "ZXIWriterOptions.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 @interface ZXIBarcodeWriter : NSObject
+@property(nonatomic, strong) ZXIWriterOptions *options;
 
--(nullable CGImageRef)write:(NSString *)contents
-                      width:(int)width
-                     height:(int)height
-                     format:(ZXIFormat)format
-                      error:(NSError **)error;
+-(instancetype)initWithOptions:(ZXIWriterOptions*)options;
+
+-(nullable CGImageRef)writeString:(NSString *)contents
+                            error:(NSError *__autoreleasing  _Nullable *)error;
+
+-(nullable CGImageRef)writeData:(NSData *)data
+                          error:(NSError *__autoreleasing  _Nullable *)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

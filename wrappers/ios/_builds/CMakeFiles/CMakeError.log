@@ -1,0 +1,72 @@
+Performing C++ SOURCE FILE Test COMPILER_NEEDS_FLOAT_STORE failed with the following output:
+Change Dir: /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+
+Run Build Command(s):/usr/bin/xcodebuild -project CMAKE_TRY_COMPILE.xcodeproj build -target cmTC_2fe37 -parallelizeTargets -configuration Debug -hideShellScriptEnvironment && Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project CMAKE_TRY_COMPILE.xcodeproj build -target cmTC_2fe37 -parallelizeTargets -configuration Debug -hideShellScriptEnvironment
+
+User defaults from command line:
+    HideShellScriptEnvironment = YES
+    IDEPackageSupportUseBuiltinSCM = YES
+
+Computing target dependency graph and provisioning inputs
+
+Create build description
+Build description signature: 453970a83f13082e85d06b39fd0cece1
+Build description path: /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/build/XCBuildData/453970a83f13082e85d06b39fd0cece1-desc.xcbuild
+
+note: Building targets in dependency order
+CreateBuildDirectory /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.xcodeproj
+    builtin-create-build-directory /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+
+CreateBuildDirectory /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/EagerLinkingTBDs
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.xcodeproj
+    builtin-create-build-directory /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/EagerLinkingTBDs
+
+CreateBuildDirectory /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.xcodeproj
+    builtin-create-build-directory /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug
+
+MkDir /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app (in target 'cmTC_2fe37' from project 'CMAKE_TRY_COMPILE')
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    /bin/mkdir -p /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app
+
+ProcessInfoPlistFile /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app/Info.plist /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMakeFiles/cmTC_2fe37.dir/Info.plist (in target 'cmTC_2fe37' from project 'CMAKE_TRY_COMPILE')
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    builtin-infoPlistUtility /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMakeFiles/cmTC_2fe37.dir/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app/PkgInfo -expandbuildsettings -format binary -platform iphoneos -requiredArchitecture arm64 -o /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app/Info.plist
+
+WriteAuxiliaryFile /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/Objects-normal/arm64/cmTC_2fe37.LinkFileList (in target 'cmTC_2fe37' from project 'CMAKE_TRY_COMPILE')
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    write-file /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/Objects-normal/arm64/cmTC_2fe37.LinkFileList
+
+CompileC /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/Objects-normal/arm64/src.o /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/src.cxx normal arm64 c++ com.apple.compilers.llvm.clang.1_0.compiler (in target 'cmTC_2fe37' from project 'CMAKE_TRY_COMPILE')
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -x c++ -target arm64-apple-ios11.0 -fmessage-length\=0 -fdiagnostics-show-note-include-stack -fmacro-backtrace-limit\=0 -Wno-trigraphs -fpascal-strings -O0 -Wno-missing-field-initializers -Wno-missing-prototypes -Wno-return-type -Wno-non-virtual-dtor -Wno-overloaded-virtual -Wno-exit-time-destructors -Wno-missing-braces -Wparentheses -Wswitch -Wno-unused-function -Wno-unused-label -Wno-unused-parameter -Wno-unused-variable -Wunused-value -Wno-empty-body -Wno-uninitialized -Wno-unknown-pragmas -Wno-shadow -Wno-four-char-constants -Wno-conversion -Wno-constant-conversion -Wno-int-conversion -Wno-bool-conversion -Wno-enum-conversion -Wno-float-conversion -Wno-non-literal-null-conversion -Wno-objc-literal-conversion -Wshorten-64-to-32 -Wno-newline-eof -Wno-c++11-extensions -Wno-implicit-fallthrough -DCMAKE_INTDIR\=\"Debug-iphoneos\" -DCOMPILER_NEEDS_FLOAT_STORE -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk -fstrict-aliasing -Wdeprecated-declarations -Winvalid-offsetof -g -Wno-sign-conversion -Wno-infinite-recursion -Wno-move -Wno-comma -Wno-block-capture-autoreleasing -Wno-strict-prototypes -Wno-range-loop-analysis -Wno-semicolon-before-method-body -I/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/include -I/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/DerivedSources-normal/arm64 -I/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/DerivedSources/arm64 -I/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/DerivedSources -F/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug -fPIE -std\=c++17 -ffloat-store -MMD -MT dependencies -MF /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/Objects-normal/arm64/src.d --serialize-diagnostics /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/Objects-normal/arm64/src.dia -c /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/src.cxx -o /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/Objects-normal/arm64/src.o
+clang: warning: optimization flag '-ffloat-store' is not supported [-Wignored-optimization-argument]
+
+Ld /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app/cmTC_2fe37 normal (in target 'cmTC_2fe37' from project 'CMAKE_TRY_COMPILE')
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -target arm64-apple-ios11.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS16.2.sdk -L/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/EagerLinkingTBDs -L/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug -F/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/EagerLinkingTBDs -F/Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug -filelist /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/Objects-normal/arm64/cmTC_2fe37.LinkFileList -dead_strip -Xlinker -object_path_lto -Xlinker /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/Objects-normal/arm64/cmTC_2fe37_lto.o -Xlinker -no_deduplicate -Wl,-headerpad_max_install_names -Xlinker -dependency_info -Xlinker /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/CMAKE_TRY_COMPILE.build/Debug-iphoneos/cmTC_2fe37.build/Objects-normal/arm64/cmTC_2fe37_dependency_info.dat -o /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app/cmTC_2fe37
+
+GenerateDSYMFile /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app.dSYM /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app/cmTC_2fe37 (in target 'cmTC_2fe37' from project 'CMAKE_TRY_COMPILE')
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app/cmTC_2fe37 -o /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app.dSYM
+
+RegisterExecutionPolicyException /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app (in target 'cmTC_2fe37' from project 'CMAKE_TRY_COMPILE')
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    builtin-RegisterExecutionPolicyException /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app
+
+Validate /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app (in target 'cmTC_2fe37' from project 'CMAKE_TRY_COMPILE')
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    builtin-validationUtility /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app
+
+Touch /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app (in target 'cmTC_2fe37' from project 'CMAKE_TRY_COMPILE')
+    cd /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp
+    /usr/bin/touch -c /Users/akor/Work/E8/git_repos/zxing-cpp/wrappers/ios/_builds/CMakeFiles/CMakeTmp/Debug/cmTC_2fe37.app
+
+** BUILD SUCCEEDED **
+
+
+
+Source file was:
+int main() { return 0; }

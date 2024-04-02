@@ -3,13 +3,36 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #import "ZXIBarcodeReader.h"
-#import "ZXing/ReadBarcode.h"
-#import "ZXing/ImageView.h"
-#import "ZXing/Result.h"
+#import "ReadBarcode.h"
+#import "ImageView.h"
+#import "Result.h"
+#import "GTIN.h"
 #import "ZXIFormatHelper.h"
 #import "ZXIPosition+Helper.h"
+#import "ZXIErrors.h"
 
 using namespace ZXing;
+
+NSString *stringToNSString(const std::string &text) {
+    return [[NSString alloc]initWithBytes:text.data() length:text.size() encoding:NSUTF8StringEncoding];
+}
+
+ZXIGTIN *getGTIN(const Result &result) {
+    try {
+        auto country = GTIN::LookupCountryIdentifier(result.text(TextMode::Plain), result.format());
+        auto addOn = GTIN::EanAddOn(result);
+        return country.empty()
+            ? nullptr
+            : [[ZXIGTIN alloc]initWithCountry:stringToNSString(country)
+                                        addOn:stringToNSString(addOn)
+                                        price:stringToNSString(GTIN::Price(addOn))
+                                  issueNumber:stringToNSString(GTIN::IssueNr(addOn))];
+    } catch (std::exception e) {
+        // Because invalid GTIN data can lead to exceptions, in which case
+        // we don't want to discard the whole result.
+        return nullptr;
+    }
+}
 
 @interface ZXIBarcodeReader()
 @property (nonatomic, strong) CIContext* ciContext;
@@ -18,17 +41,18 @@ using namespace ZXing;
 @implementation ZXIBarcodeReader
 
 - (instancetype)init {
-    return [self initWithHints: [[ZXIDecodeHints alloc] init]];
+    return [self initWithOptions: [[ZXIReaderOptions alloc] init]];
 }
 
-- (instancetype)initWithHints:(ZXIDecodeHints*)hints{
+- (instancetype)initWithOptions:(ZXIReaderOptions*)options{
     self = [super init];
     self.ciContext = [[CIContext alloc] initWithOptions:@{kCIContextWorkingColorSpace: [NSNull new]}];
-    self.hints = hints;
+    self.options = options;
     return self;
 }
 
-- (NSArray<ZXIResult *> *)readCVPixelBuffer:(nonnull CVPixelBufferRef)pixelBuffer {
+- (NSArray<ZXIResult *> *)readCVPixelBuffer:(nonnull CVPixelBufferRef)pixelBuffer
+                                      error:(NSError *__autoreleasing _Nullable *)error {
     OSType pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer);
 
     // We tried to work with all luminance based formats listed in kCVPixelFormatType
@@ -48,24 +72,26 @@ using namespace ZXing;
                                             ImageFormat::Lum,
                                             static_cast<int>(bytesPerRow),
                                             0);
-            NSArray* results = [self readImageView:imageView];
+            NSArray* results = [self readImageView:imageView error:error];
             CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);
             return results;
     }
 
     // If given pixel format is not a supported type with a luminance channel we just use the
     // default method
-    return [self readCIImage:[[CIImage alloc] initWithCVImageBuffer:pixelBuffer]];
+    return [self readCIImage:[[CIImage alloc] initWithCVImageBuffer:pixelBuffer] error:error];
 }
 
-- (NSArray<ZXIResult *> *)readCIImage:(nonnull CIImage *)image {
+- (NSArray<ZXIResult *> *)readCIImage:(nonnull CIImage *)image
+                                error:(NSError *__autoreleasing _Nullable *)error {
     CGImageRef cgImage = [self.ciContext createCGImage:image fromRect:image.extent];
-    auto results = [self readCGImage:cgImage];
+    auto results = [self readCGImage:cgImage error:error];
     CGImageRelease(cgImage);
     return results;
 }
 
-- (NSArray<ZXIResult *> *)readCGImage: (nonnull CGImageRef)image {
+- (NSArray<ZXIResult *> *)readCGImage:(nonnull CGImageRef)image
+                                error:(NSError *__autoreleasing _Nullable *)error {
     CGColorSpaceRef colorSpace = CGColorSpaceCreateWithName(kCGColorSpaceGenericGray);
     CGFloat cols = CGImageGetWidth(image);
     CGFloat rows = CGImageGetHeight(image);
@@ -88,45 +114,54 @@ using namespace ZXing;
               static_cast<int>(cols),
               static_cast<int>(rows),
               ImageFormat::Lum);
-    return [self readImageView:imageView];
+    return [self readImageView:imageView error:error];
 }
 
-+ (DecodeHints)DecodeHintsFromZXIOptions:(ZXIDecodeHints*)hints {
++ (ReaderOptions)ReaderOptionsFromZXIReaderOptions:(ZXIReaderOptions*)options {
     BarcodeFormats formats;
-    for(NSNumber* flag in hints.formats) {
+    for(NSNumber* flag in options.formats) {
         formats.setFlag(BarcodeFormatFromZXIFormat((ZXIFormat)flag.integerValue));
     }
-    DecodeHints resultingHints = DecodeHints()
-        .setTryRotate(hints.tryRotate)
-        .setTryHarder(hints.tryHarder)
-        .setTryInvert(hints.tryInvert)
-        .setTryDownscale(hints.tryDownscale)
-        .setTryCode39ExtendedMode(hints.tryCode39ExtendedMode)
-        .setValidateCode39CheckSum(hints.validateCode39CheckSum)
-        .setValidateITFCheckSum(hints.validateITFCheckSum)
-
+    ReaderOptions cppOpts = ReaderOptions()
         .setFormats(formats)
-        .setMaxNumberOfSymbols(hints.maxNumberOfSymbols);
-    return resultingHints;
+        .setTryRotate(options.tryRotate)
+        .setTryHarder(options.tryHarder)
+        .setTryInvert(options.tryInvert)
+        .setTryDownscale(options.tryDownscale)
+        .setTryCode39ExtendedMode(options.tryCode39ExtendedMode)
+        .setValidateCode39CheckSum(options.validateCode39CheckSum)
+        .setValidateITFCheckSum(options.validateITFCheckSum)
+        .setMaxNumberOfSymbols(options.maxNumberOfSymbols);
+    return cppOpts;
 }
 
-- (NSArray<ZXIResult*> *)readImageView: (ImageView)imageView {
-    Results results = ReadBarcodes(imageView, [ZXIBarcodeReader DecodeHintsFromZXIOptions:self.hints]);
-
-    NSMutableArray* zxiResults = [NSMutableArray array];
-    for (auto result: results) {
-        auto resultText = result.text();
-        NSString *text = [[NSString alloc]initWithBytes:resultText.data() length:resultText.size() encoding:NSUTF8StringEncoding];
-
-        NSData *bytes = [[NSData alloc] initWithBytes:result.bytes().data() length:result.bytes().size()];
-        [zxiResults addObject:
-         [[ZXIResult alloc] init:text
-                          format:ZXIFormatFromBarcodeFormat(result.format())
-                           bytes:bytes
-                        position:[[ZXIPosition alloc]initWithPosition: result.position()]
-         ]];
+- (NSArray<ZXIResult*> *)readImageView:(ImageView)imageView
+                                 error:(NSError *__autoreleasing _Nullable *)error {
+    try {
+        Results results = ReadBarcodes(imageView, [ZXIBarcodeReader ReaderOptionsFromZXIReaderOptions:self.options]);
+        NSMutableArray* zxiResults = [NSMutableArray array];
+        for (auto result: results) {
+            [zxiResults addObject:
+             [[ZXIResult alloc] init:stringToNSString(result.text())
+                              format:ZXIFormatFromBarcodeFormat(result.format())
+                               bytes:[[NSData alloc] initWithBytes:result.bytes().data() length:result.bytes().size()]
+                            position:[[ZXIPosition alloc]initWithPosition: result.position()]
+                         orientation:result.orientation()
+                             ecLevel:stringToNSString(result.ecLevel())
+                 symbologyIdentifier:stringToNSString(result.symbologyIdentifier())
+                        sequenceSize:result.sequenceSize()
+                       sequenceIndex:result.sequenceIndex()
+                          sequenceId:stringToNSString(result.sequenceId())
+                          readerInit:result.readerInit()
+                           lineCount:result.lineCount()
+                                gtin:getGTIN(result)]
+             ];
+        }
+        return zxiResults;
+    } catch(std::exception &e) {
+        SetNSError(error, ZXIReaderError, e.what());
+        return nil;
     }
-    return zxiResults;
 }
 
 @end

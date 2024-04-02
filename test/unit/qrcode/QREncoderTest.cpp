@@ -118,7 +118,7 @@ TEST(QREncoderTest, Encode)
 	ASSERT_NE(qrCode.version, nullptr);
 	EXPECT_EQ(qrCode.version->versionNumber(), 1);
 	EXPECT_EQ(qrCode.maskPattern, 4);
-	EXPECT_EQ(ToString(qrCode.matrix),
+	EXPECT_EQ(ToString(qrCode.matrix, 'X', ' ', true),
 		"X X X X X X X     X   X     X X X X X X X \n"
 		"X           X   X   X   X   X           X \n"
 		"X   X X X   X               X   X X X   X \n"
@@ -164,7 +164,7 @@ TEST(QREncoderTest, SimpleUTF8ECI)
 	ASSERT_NE(qrCode.version, nullptr);
 	EXPECT_EQ(qrCode.version->versionNumber(), 1);
 	EXPECT_EQ(qrCode.maskPattern, 6);
-	EXPECT_EQ(ToString(qrCode.matrix), // break the line comment
+	EXPECT_EQ(ToString(qrCode.matrix, 'X', ' ', true),
 		"X X X X X X X       X X     X X X X X X X \n"
 		"X           X       X X     X           X \n"
 		"X   X X X   X   X     X X   X   X X X   X \n"
@@ -196,7 +196,7 @@ TEST(QREncoderTest, SimpleBINARYECI)
 	ASSERT_NE(qrCode.version, nullptr);
 	EXPECT_EQ(qrCode.version->versionNumber(), 1);
 	EXPECT_EQ(qrCode.maskPattern, 6);
-	EXPECT_EQ(ToString(qrCode.matrix),
+	EXPECT_EQ(ToString(qrCode.matrix, 'X', ' ', true),
 		"X X X X X X X     X X X X   X X X X X X X \n"
 		"X           X           X   X           X \n"
 		"X   X X X   X   X X   X     X   X X X   X \n"
@@ -228,7 +228,7 @@ TEST(QREncoderTest, EncodeKanjiMode)
 	ASSERT_NE(qrCode.version, nullptr);
 	EXPECT_EQ(qrCode.version->versionNumber(), 1);
 	EXPECT_EQ(qrCode.maskPattern, 0);
-	EXPECT_EQ(ToString(qrCode.matrix),
+	EXPECT_EQ(ToString(qrCode.matrix, 'X', ' ', true),
 		"X X X X X X X     X   X     X X X X X X X \n"
 		"X           X   X X         X           X \n"
 		"X   X X X   X     X X X X   X   X X X   X \n"
@@ -260,7 +260,7 @@ TEST(QREncoderTest, EncodeShiftjisNumeric)
 	ASSERT_NE(qrCode.version, nullptr);
 	EXPECT_EQ(qrCode.version->versionNumber(), 1);
 	EXPECT_EQ(qrCode.maskPattern, 2);
-	EXPECT_EQ(ToString(qrCode.matrix),
+	EXPECT_EQ(ToString(qrCode.matrix, 'X', ' ', true),
 		"X X X X X X X     X X   X   X X X X X X X \n"
 		"X           X     X     X   X           X \n"
 		"X   X X X   X   X           X   X X X   X \n"
@@ -292,7 +292,7 @@ TEST(QREncoderTest, EncodeGS1)
 	ASSERT_NE(qrCode.version, nullptr);
 	EXPECT_EQ(qrCode.version->versionNumber(), 2);
 	EXPECT_EQ(qrCode.maskPattern, 4);
-	EXPECT_EQ(ToString(qrCode.matrix),
+	EXPECT_EQ(ToString(qrCode.matrix, 'X', ' ', true),
 		"X X X X X X X     X X X X   X   X   X X X X X X X \n"
 		"X           X   X X           X X   X           X \n"
 		"X   X X X   X           X X X   X   X   X X X   X \n"
@@ -328,7 +328,7 @@ TEST(QREncoderTest, EncodeGS1ModeHeaderWithECI)
 	ASSERT_NE(qrCode.version, nullptr);
 	EXPECT_EQ(qrCode.version->versionNumber(), 1);
 	EXPECT_EQ(qrCode.maskPattern, 5);
-	EXPECT_EQ(ToString(qrCode.matrix),
+	EXPECT_EQ(ToString(qrCode.matrix, 'X', ' ', true),
 		"X X X X X X X   X   X X     X X X X X X X \n"
 		"X           X     X X       X           X \n"
 		"X   X X X   X   X X X       X   X X X   X \n"
@@ -363,22 +363,22 @@ TEST(QREncoderTest, AppendLengthInfo)
 {
 	BitArray bits;
 	AppendLengthInfo(1, // 1 letter (1/1).
-					 *Version::FromNumber(1), CodecMode::NUMERIC, bits);
+					 *Version::Model2(1), CodecMode::NUMERIC, bits);
 	EXPECT_EQ(ToString(bits), RemoveSpace("........ .X")); // 10 bits.
 
 	bits = BitArray();
 	AppendLengthInfo(2, // 2 letters (2/1).
-					 *Version::FromNumber(10), CodecMode::ALPHANUMERIC, bits);
+					 *Version::Model2(10), CodecMode::ALPHANUMERIC, bits);
 	EXPECT_EQ(ToString(bits), RemoveSpace("........ .X.")); // 11 bits.
 
 	bits = BitArray();
 	AppendLengthInfo(255, // 255 letter (255/1).
-					 *Version::FromNumber(27), CodecMode::BYTE, bits);
+					 *Version::Model2(27), CodecMode::BYTE, bits);
 	EXPECT_EQ(ToString(bits), RemoveSpace("........ XXXXXXXX")); // 16 bits.
 
 	bits = BitArray();
 	AppendLengthInfo(512, // 512 letters (1024/2).
-					 *Version::FromNumber(40), CodecMode::KANJI, bits);
+					 *Version::Model2(40), CodecMode::KANJI, bits);
 	EXPECT_EQ(ToString(bits), RemoveSpace("..X..... ....")); // 12 bits.
 }
 

@@ -6,7 +6,7 @@
 
 #include "oned/ODCodabarWriter.h"
 #include "BitMatrixIO.h"
-#include "DecodeHints.h"
+#include "ReaderOptions.h"
 #include "Result.h"
 #include "oned/ODCodabarReader.h"
 
@@ -27,18 +27,18 @@ namespace {
 TEST(ODCodaBarWriterTest, Encode)
 {
 	EXPECT_EQ(Encode("B515-3/B"),
-           "00000"
-           "1001001011" "0110101001" "0101011001" "0110101001" "0101001101"
-           "0110010101" "01101101011" "01001001011"
-           "00000");
+				  "00000"
+				  "1001001011" "0110101001" "0101011001" "0110101001" "0101001101"
+				  "0110010101" "01101101011" "01001001011"
+				  "00000");
 }
 
 TEST(ODCodaBarWriterTest, Encode2)
 {
 	EXPECT_EQ(Encode("T123T"),
-           "00000"
-           "1011001001" "0101011001" "0101001011" "0110010101" "01011001001"
-           "00000");
+			  "00000"
+			  "1011001001" "0101011001" "0101001011" "0110010101" "01011001001"
+			  "00000");
 }
 
 TEST(ODCodaBarWriterTest, AltStartEnd)
@@ -50,9 +50,9 @@ TEST(ODCodaBarWriterTest, FullCircle)
 {
 	std::string text = "A0123456789-$:/.+A";
 	auto matrix = CodabarWriter().encode(text, 0, 0);
-	auto hints = DecodeHints().setReturnCodabarStartEnd(true);
+	auto opts = ReaderOptions().setReturnCodabarStartEnd(true);
 
-	Result res = OneD::DecodeSingleRow(CodabarReader(hints), matrix.row(0));
+	Result res = OneD::DecodeSingleRow(CodabarReader(opts), matrix.row(0));
 	EXPECT_EQ(text, res.text());
 }
 
