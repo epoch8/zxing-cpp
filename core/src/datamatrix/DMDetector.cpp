@@ -1340,10 +1340,7 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 
 	} //i 
 
-
-
-
-	
+	if (!res.isValid()) return DetectorResult{};
 
 	return res;
 }
