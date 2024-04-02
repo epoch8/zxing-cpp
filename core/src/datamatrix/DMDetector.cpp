@@ -1416,4 +1416,6 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 	return result;
 #endif
 
+}
+
 } // namespace ZXing::DataMatrix
