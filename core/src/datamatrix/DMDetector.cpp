@@ -1208,14 +1208,14 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 				
 
 		//������������
-		ResultPoint p1(transitions[n1].from->x(), transitions[n1].from->y());
-		ResultPoint p2(transitions[n1].to->x(), transitions[n1].to->y());
-		ResultPoint p3(transitions[n2].from->x(), transitions[n2].from->y());
-		ResultPoint p4(transitions[n2].to->x(), transitions[n2].to->y());
+		//ResultPoint p1(transitions[n1].from->x(), transitions[n1].from->y());
+		//ResultPoint p2(transitions[n1].to->x(), transitions[n1].to->y());
+		//ResultPoint p3(transitions[n2].from->x(), transitions[n2].from->y());
+		//ResultPoint p4(transitions[n2].to->x(), transitions[n2].to->y());
 
 		//drawL4(img2, p1, p2, p3, p4);
 
-		createBitmapFromBitMatrix(img2, p1, p2, p3, p4);
+		//createBitmapFromBitMatrix(img2, p1, p2, p3, p4);
 		//����� ������������*/
 
 
