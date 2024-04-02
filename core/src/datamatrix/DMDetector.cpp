@@ -31,7 +31,6 @@
 #include <utility>
 #include <vector>
 
-#include "DataMatrix.h"
 #undef min
 #undef max
 
