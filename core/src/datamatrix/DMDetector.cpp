@@ -1340,7 +1340,6 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 
 	} //i 
 
-	if (!res.isValid()) return DetectorResult{};
 
 	return res;
 }
@@ -1406,15 +1405,15 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 		}
 	}
 #else
-	auto result = DetectPure(image);
-	if (!result.isValid() && !isPure)
-		result = DetectNew(image, tryHarder, tryRotate);
-	//if (!result.isValid() && tryHarder && !isPure)
-	//	result = DetectOld(image);
-	if (!result.isValid() && tryHarder && !isPure)
-		result = DetectCRPT(image);
+	if (isPure)
+		return DetectPure(image);
 
+	auto result = DetectNew(image, tryHarder, tryRotate);
+	//if (!result.isValid() && tryHarder)
+	//	result = DetectPure(image);
+	if (!result.isValid() && tryHarder)
+		result = DetectCRPT(image);
+	return result;
 #endif
-}
 
 } // namespace ZXing::DataMatrix
