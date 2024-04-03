@@ -1043,8 +1043,12 @@ void line2(BitMatrix& img, int x1, int y1, int x2, int y2) {
 	img.set(x2, y2, true);
 	while (x1 != x2 || y1 != y2)
 	{
-		img.set(x1, y1, true);
-		img.set(x1+1, y1+1, true);
+
+		if (!((x1 < 0) || (y1 < 0) || ((x1+1) >= img.width()) || ((y1+1) >= img.height()))) {
+			img.set(x1, y1, true);
+			img.set(x1 + 1, y1 + 1, true);
+		}
+		
 		int error2 = error * 2;
 		
 		if (error2 > -deltaY)
@@ -1062,95 +1066,82 @@ void line2(BitMatrix& img, int x1, int y1, int x2, int y2) {
 }
 
 //������ l � ����� ������ ���������� ����, ����� �� ������ ��������, �� ����� ����
-void drawL4 (BitMatrix& img, ResultPoint& p1, ResultPoint& p2, ResultPoint& p3, ResultPoint& p4)
-{
-	bool onehoriz = (abs(p1.x() - p2.x()) > abs(p1.y() - p2.y()));
-	bool twohoriz = (abs(p3.x() - p4.x()) > abs(p3.y() - p4.y()));
+// void drawL4 (BitMatrix& img, ResultPoint& p1, ResultPoint& p2, ResultPoint& p3, ResultPoint& p4)
+// {
+// 	bool onehoriz = (abs(p1.x() - p2.x()) > abs(p1.y() - p2.y()));
+// 	bool twohoriz = (abs(p3.x() - p4.x()) > abs(p3.y() - p4.y()));
 
-	int half=0;
-	if (onehoriz) {
-		half = (int)((float)abs(p1.x() - p2.x()) / 2.0);
-	}
-	else {
-		half = (int)((float)abs(p1.y() - p2.y()) / 2.0);
-	}
-	int half2 = 0;
+// 	int half=0;
+// 	if (onehoriz) {
+// 		half = (int)((float)abs(p1.x() - p2.x()) / 2.0);
+// 	}
+// 	else {
+// 		half = (int)((float)abs(p1.y() - p2.y()) / 2.0);
+// 	}
+// 	int half2 = 0;
 	
-	if (twohoriz) {
-		half2 = (int)((float)abs(p3.x() - p4.x()) / 2.0);
-	}
-	else {
-		half2 = (int)((float)abs(p3.y() - p4.y()) / 2.0);
-	}
+// 	if (twohoriz) {
+// 		half2 = (int)((float)abs(p3.x() - p4.x()) / 2.0);
+// 	}
+// 	else {
+// 		half2 = (int)((float)abs(p3.y() - p4.y()) / 2.0);
+// 	}
 	
-	half += 4;
-	half2 += 4;
+// 	half += 4;
+// 	half2 += 4;
 
-	//half = int((half + half2) / 2.0);
+// 	//half = int((half + half2) / 2.0);
 
-	line2(img, p1.x(), p1.y(), p2.x(), p2.y());
+// 	line2(img, p1.x(), p1.y(), p2.x(), p2.y());
 
-	if (onehoriz) {
+// 	if (onehoriz) {
 
-		if (p1.y() > half) {
-			line2(img, p1.x(), p1.y() - half, p2.x(), p2.y() - half);
-		}
-		else {
-			line2(img, p1.x(), p1.y() + half, p2.x(), p2.y() + half);
-		}
+// 		if (p1.y() > half) {
+// 			line2(img, p1.x(), p1.y() - half, p2.x(), p2.y() - half);
+// 		}
+// 		else {
+// 			line2(img, p1.x(), p1.y() + half, p2.x(), p2.y() + half);
+// 		}
 
-	}
-	else {
+// 	}
+// 	else {
 
-		if (p1.x() > half) {
-			line2(img, p1.x()-half, p1.y(), p2.x()-half, p2.y());
-		}
-		else {
-			line2(img, p1.x() + half, p1.y(), p2.x() + half, p2.y());
-		}
+// 		if (p1.x() > half) {
+// 			line2(img, p1.x()-half, p1.y(), p2.x()-half, p2.y());
+// 		}
+// 		else {
+// 			line2(img, p1.x() + half, p1.y(), p2.x() + half, p2.y());
+// 		}
 
-	}
-
-
-	line2(img, p3.x(), p3.y(), p4.x(), p4.y());
-
-	if (twohoriz) {
-
-		if (p3.y() > half2) {
-			line2(img, p3.x(), p3.y() - half2, p4.x(), p4.y() - half2);
-		}
-		else {
-			line2(img, p3.x(), p3.y() + half2, p4.x(), p4.y() + half2);
-		}
-
-	}
-	else {
-
-		if (p3.x() > half2) {
-			line2(img, p3.x() - half2, p3.y(), p4.x() - half2, p4.y());
-		}
-		else {
-			line2(img, p3.x() + half2, p3.y(), p4.x() + half2, p4.y());
-		}
+// 	}
 
 
-	}
-	
+// 	line2(img, p3.x(), p3.y(), p4.x(), p4.y());
 
+// 	if (twohoriz) {
 
-	
+// 		if (p3.y() > half2) {
+// 			line2(img, p3.x(), p3.y() - half2, p4.x(), p4.y() - half2);
+// 		}
+// 		else {
+// 			line2(img, p3.x(), p3.y() + half2, p4.x(), p4.y() + half2);
+// 		}
 
-	
+// 	}
+// 	else {
 
-}
-
+// 		if (p3.x() > half2) {
+// 			line2(img, p3.x() - half2, p3.y(), p4.x() - half2, p4.y());
+// 		}
+// 		else {
+// 			line2(img, p3.x() + half2, p3.y(), p4.x() + half2, p4.y());
+// 		}
+// 	}
+// }
 
 static DetectorResult DetectCRPT(const BitMatrix& image)
 {
-
 	//MessageBoxA(0, "Detect CRPT", NULL, MB_OK | MB_ICONINFORMATION);
-
-
 	ResultPoint pointA, pointB, pointC, pointD;
 	if (!DetectWhiteRect(image, pointA, pointB, pointC, pointD))
 		return {};
@@ -1167,47 +1158,25 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 		[](const auto& a, const auto& b) { return a.transitions < b.transitions; });
 
 
-
 	DetectorResult res;
 
 	int n1, n2;
 
 	for (int i = 0; i < 2; i++) {
-
 		if (i == 0) { n1 = 0; n2 = 1; }
 		if (i == 1) { n1 = 0; n2 = 2; }
-		if (i == 2) { n1 = 0; n2 = 3; }
-		if (i == 3) { n1 = 1; n2 = 2; }
-		if (i == 4) { n1 = 1; n2 = 3; }
-		if (i == 5) { n1 = 2; n2 = 1; }
-		if (i == 6) { n1 = 2; n2 = 3; }
 
 		const auto& lSideOne = transitions[n1];
 		const auto& lSideTwo = transitions[n2];
 
-
-		/*BitMatrix img2 = image.copy();
-		line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
-		line2(img2, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
-		*/
-		
-		BitMatrix img2 = image.copy();	
-		
-		//correctBottle(img2, true, true);
-		//correctShift(img2, false, true);
-		
-	
-				
-
+					
 		//������������
-		//ResultPoint p1(transitions[n1].from->x(), transitions[n1].from->y());
-		//ResultPoint p2(transitions[n1].to->x(), transitions[n1].to->y());
-		//ResultPoint p3(transitions[n2].from->x(), transitions[n2].from->y());
-		//ResultPoint p4(transitions[n2].to->x(), transitions[n2].to->y());
+		/*ResultPoint p1(transitions[n1].from->x(), transitions[n1].from->y());
+		ResultPoint p2(transitions[n1].to->x(), transitions[n1].to->y());
+		ResultPoint p3(transitions[n2].from->x(), transitions[n2].from->y());
+		ResultPoint p4(transitions[n2].to->x(), transitions[n2].to->y());
 
-		//drawL4(img2, p1, p2, p3, p4);
-
-		//createBitmapFromBitMatrix(img2, p1, p2, p3, p4);
+		createBitmapFromBitMatrix(img2, p1, p2, p3, p4);
 		//����� ������������*/
 
 
@@ -1264,25 +1233,15 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 		ResultPoint correctedTopRight;
 		int dimensionTop; int dimensionRight;
 
-		for (int j = 0; j < 8; j++) {
-			if (j == 0) dimensionTop = dimensionRight = 20;
-			if (j == 1) dimensionTop = dimensionRight = 22;
-			if (j == 2) dimensionTop = dimensionRight = 24;
-			if (j == 3) dimensionTop = dimensionRight = 26;
-			if (j == 4) dimensionTop = dimensionRight = 32;
-			if (j == 5) dimensionTop = dimensionRight = 36;
-			if (j == 6) dimensionTop = dimensionRight = 40;
-			if (j == 7) dimensionTop = dimensionRight = 44;
+		for (int j = 0; j < 3; j++) {
+			if (j == 0) dimensionTop = dimensionRight = 36;
+			if (j == 1) dimensionTop = dimensionRight = 40;
+			if (j == 2) dimensionTop = dimensionRight = 44;
 
-			//std::string s = "j: " + std::to_string(j);
-			//MessageBoxA(0, s.c_str(), NULL, MB_OK | MB_ICONINFORMATION);
-
-			//dimensionTop = dimensionRight = 40; //��� -40, ���� -22, ������ -20, ������ �� - 24,  20,22,24,26,32,36,40,44,48,52,64,72,80,88
 			correctedTopRight = CorrectTopRight(image, *bottomLeft, *bottomRight, *topLeft, *topRight, dimensionTop);
 			res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
 			if (!res.isValid()) continue;
 			if (Decode(res.bits()).isValid()) return res;
-
 		}
 
 
@@ -1292,20 +1251,14 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 
 
 	//���������� L �� ���� ��������� �� image � ������� DetectNew ��� ������� (��� � ������ L ���� ����������� � ���� �����)
-	for (int i = 0; i < 7; i++) {
+	for (int i = 0; i < 2; i++) {
 		if (i == 0) { n1 = 0; n2 = 1; }
 		if (i == 1) { n1 = 0; n2 = 2; }
-		if (i == 2) { n1 = 0; n2 = 3; }
-		if (i == 3) { n1 = 1; n2 = 2; }
-		if (i == 4) { n1 = 1; n2 = 3; }
-		if (i == 5) { n1 = 2; n2 = 1; }
-		if (i == 6) { n1 = 2; n2 = 3; }
 
 		BitMatrix img2 = image.copy();
 		line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
 		line2(img2, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
-
-
+			
 		res = DetectNew(img2, true, true);
 		if (!res.isValid()) continue;
 		if (Decode(res.bits()).isValid()) return res;
@@ -1315,34 +1268,31 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 
 	//������������ �������������� �������� �������, 4 ��������: �����������/���������+��������
 	//� ���� ����� ������������ ���3, L1, ������� � �.�, �������� ����������� �� � ��������
-	for (int i = 0; i < 12; i++) {
+	for (int i = 0; i < 4; i++) {
 		BitMatrix img2 = image.copy();
+		n1 = 0; n2 = 1;
 
-		if (i == 0) { correctBottle(img2, false, false); correctShift(img2, false, true);}
-		if (i == 1) { correctBottle(img2, false, true); correctShift(img2, false, true);}
-		if (i == 2) { correctBottle(img2, true, false); correctShift(img2, true, false);}
-		if (i == 3) { correctBottle(img2, true, true); correctShift(img2, true, true);}
+		if (i == 0) { correctBottle(img2, false, false);}
+		if (i == 1) { correctBottle(img2, false, true);}
+		if (i == 2) { correctBottle(img2, true, false);}
+		if (i == 3) { correctBottle(img2, true, true);}
+						
+		/*ResultPoint p1(transitions[n1].from->x(), transitions[n1].from->y());
+		ResultPoint p2(transitions[n1].to->x(), transitions[n1].to->y());
+		ResultPoint p3(transitions[n2].from->x(), transitions[n2].from->y());
+		ResultPoint p4(transitions[n2].to->x(), transitions[n2].to->y());
+		createBitmapFromBitMatrix(img2, p1, p2, p3, p4);*/
 
-		if (i == 4) { correctBottle(img2, false, false); correctShift(img2, false, false); }
-		if (i == 5) { correctBottle(img2, false, true); correctShift(img2, false, false); }
-		if (i == 6) { correctBottle(img2, true, false); correctShift(img2, true, true); }
-		if (i == 7) { correctBottle(img2, true, true); correctShift(img2, true, false); }
-
-
-		if (i == 8) { correctBottle(img2, false, false); correctShift(img2, true, false); }
-		if (i == 9) { correctBottle(img2, false, true); correctShift(img2, true, false); }
-		if (i == 10) { correctBottle(img2, true, false); correctShift(img2, false, true); }
-		if (i == 11) { correctBottle(img2, true, true); correctShift(img2, false, false); }
 
 		res = DetectNew(img2, true, true);
 		if (!res.isValid()) continue;
 		if (Decode(res.bits()).isValid()) return res;	
 
 	} //i 
-
-
+	
 	return res;
 }
+
 
 
 /**
