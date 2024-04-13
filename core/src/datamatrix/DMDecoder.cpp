@@ -26,6 +26,8 @@
 #include <vector>
 #include <iostream>
 
+#include <android/log.h>
+#include <sstream>
 namespace ZXing::DataMatrix {
 
 /**
@@ -160,7 +162,7 @@ static void DecodeC40OrTextSegment(BitSource& bits, Content& result, Mode mode)
 				else if (cValue < 40) // Size(BASIC_SET_CHARS)
 					result.push_back(upperShift(BASIC_SET_CHARS[cValue]));
 				else
-					throw FormatError("invalid value in C40 or Text segment");
+					//throw FormatError("invalid value in C40 or Text segment");
 				break;
 			case 1: result.push_back(upperShift(cValue)); break;
 			case 2:
@@ -178,7 +180,7 @@ static void DecodeC40OrTextSegment(BitSource& bits, Content& result, Mode mode)
 				else if (cValue == 30) // Upper Shift
 					upperShift.set = true;
 				else
-					throw FormatError("invalid value in C40 or Text segment");
+					//throw FormatError("invalid value in C40 or Text segment");
 				break;
 			case 3:
 				if (mode == Mode::C40)
@@ -186,9 +188,9 @@ static void DecodeC40OrTextSegment(BitSource& bits, Content& result, Mode mode)
 				else if (cValue < Size(TEXT_SHIFT3_SET_CHARS))
 					result.push_back(upperShift(TEXT_SHIFT3_SET_CHARS[cValue]));
 				else
-					throw FormatError("invalid value in C40 or Text segment");
+					//throw FormatError("invalid value in C40 or Text segment");
 				break;
-			default: throw FormatError("invalid value in C40 or Text segment"); ;
+			default: break;//throw FormatError("invalid value in C40 or Text segment"); ;
 			}
 		}
 	}
@@ -204,7 +206,8 @@ static void DecodeAnsiX12Segment(BitSource& bits, Content& result)
 			// X12 segment terminator <CR>, separator *, sub-element separator >, space
 			static const char segChars[4] = {'\r', '*', '>', ' '};
 			if (cValue < 0)
-				throw FormatError("invalid value in AnsiX12 segment");
+				break;
+				//throw FormatError("invalid value in AnsiX12 segment");
 			else if (cValue < 4)
 				result.push_back(segChars[cValue]);
 			else if (cValue < 14) // 0 - 9
@@ -212,7 +215,8 @@ static void DecodeAnsiX12Segment(BitSource& bits, Content& result)
 			else if (cValue < 40) // A - Z
 				result.push_back((char)(cValue + 51));
 			else
-				throw FormatError("invalid value in AnsiX12 segment");
+				break;
+				// FormatError("invalid value in AnsiX12 segment");
 		}
 	}
 }
@@ -269,8 +273,9 @@ static void DecodeBase256Segment(BitSource& bits, Content& result)
 		count = 250 * (d1 - 249) + Unrandomize255State(bits.readBits(8), codewordPosition++);
 
 	// We're seeing NegativeArraySizeException errors from users.
-	if (count < 0)
-		throw FormatError("invalid count in Base256 segment");
+	if (count < 0) count=0;//????????????????????????????????????????????
+		//return result;
+		//throw FormatError("invalid count in Base256 segment");
 
 	result.reserve(count);
 	for (int i = 0; i < count; i++) {
@@ -299,9 +304,12 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 	// See ISO 16022:2006, 5.2.3 and Annex C, Table C.2
 	try {
 		while (!done && bits.available() >= 8) {
-      int oneByte = bits.readBits(8);
+
+	  int oneByte = bits.readBits(8);
+	  //__android_log_print(ANDROID_LOG_INFO, "ZXING", "Byte: %d", oneByte);
+
 			switch (oneByte) {
-			case 0: throw FormatError("invalid 0 code word");
+			case 0: done = true; break; //throw FormatError("invalid 0 code word");
 			case 129: done = true; break; // Pad -> we are done, ignore the rest of the bits
 			case 230: DecodeC40OrTextSegment(bits, result, Mode::C40); break;
 			case 231: DecodeBase256Segment(bits, result); break;
@@ -324,13 +332,14 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 				break;
 			case 233: // Structured Append
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.6.1
-					throw FormatError("structured append tag must be first code word");
+					done = true; break;
+					//throw FormatError("structured append tag must be first code word");
 				ParseStructuredAppend(bits, sai);
 				// firstFNC1Position = 5;
 				break;
 			case 234: // Reader Programming
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.2.4.9
-					throw FormatError("reader programming tag must be first code word");
+					done = true; break;// throw FormatError("reader programming tag must be first code word");
 				readerInit = true;
 				break;
 			case 235: upperShift.set = true; break; // Upper Shift (shift to Extended ASCII)
@@ -355,7 +364,8 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 					// work around encoders that use unlatch to ASCII as last code word (ask upstream)
 					if (oneByte == 254 && bits.available() == 0)
 						break;
-					throw FormatError("invalid code word");
+					done = true; break;
+					//throw FormatError("invalid code word");
 				}
 			}
 			firstCodeword = false;
@@ -384,15 +394,25 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 * @param numDataCodewords number of codewords that are data bytes
 * @return false if error correction fails
 */
+template<typename T>
+std::string VectorToString(const std::vector<T>& vector) {
+    std::ostringstream oss;
+    for (const auto& value : vector) {
+        oss << value << " ";
+    }
+    return oss.str();
+}
+
 static bool
 CorrectErrors(ByteArray& codewordBytes, int numDataCodewords)
 {
 	// First read into an array of ints
 	std::vector<int> codewordsInts(codewordBytes.begin(), codewordBytes.end());
 	int numECCodewords = Size(codewordBytes) - numDataCodewords;
-
+	//__android_log_print(ANDROID_LOG_INFO, "CORRECT_ERRORS", "Before correction: %s", VectorToString(codewordsInts).c_str());
 	if (!ReedSolomonDecode(GenericGF::DataMatrixField256(), codewordsInts, numECCodewords))
 		return false;
+	//__android_log_print(ANDROID_LOG_INFO, "CORRECT_ERRORS", "After correction: %s", VectorToString(codewordsInts).c_str());
 
 	// Copy back into array of bytes -- only need to worry about the bytes that were data
 	// We don't care about errors in the error-correction codewords
@@ -405,30 +425,42 @@ static DecoderResult DoDecode(const BitMatrix& bits)
 {
 	// Construct a parser and read version, error-correction level
 	const Version* version = VersionForDimensionsOf(bits);
-	if (version == nullptr)
-		return FormatError("Invalid matrix dimension");
-
+	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "1");
+	
+	if (version == nullptr){
+		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "2");
+		return FormatError("Invalid matrix dimension");}
+	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "Version %d", version->versionNumber);
 	// Read codewords
 	ByteArray codewords = CodewordsFromBitMatrix(bits, *version);
-	if (codewords.empty())
-		return FormatError("Invalid number of code words");
+	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "3");
+	if (codewords.empty()){
+		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "4");
+		return FormatError("Invalid number of code words");}
 
 	bool fix259 = false; // see https://github.com/zxing-cpp/zxing-cpp/issues/259
 retry:
 	// Separate into data blocks
 	std::vector<DataBlock> dataBlocks = GetDataBlocks(codewords, *version, fix259);
-	if (dataBlocks.empty())
-		return FormatError("Invalid number of data blocks");
+	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "5");
+	if (dataBlocks.empty()){
+		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "6");
+		return FormatError("Invalid number of data blocks");}
 
 	// Count total number of data bytes
 	ByteArray resultBytes(TransformReduce(dataBlocks, 0, [](const auto& db) { return db.numDataCodewords; }));
-
+	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "7");
 	// Error-correct and copy data blocks together into a stream of bytes
 	const int dataBlocksCount = Size(dataBlocks);
+	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "8");
 	for (int j = 0; j < dataBlocksCount; j++) {
+		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "9");
 		auto& [numDataCodewords, codewords] = dataBlocks[j];
+		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "10");
 		if (!CorrectErrors(codewords, numDataCodewords)) {
+			//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "11");
 			if(version->versionNumber == 24 && !fix259) {
+				//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "12");
 				fix259 = true;
 				goto retry;
 			}
@@ -440,12 +472,15 @@ retry:
 			resultBytes[i * dataBlocksCount + j] = codewords[i];
 		}
 	}
+	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "13");
 #ifdef PRINT_DEBUG
-	if (fix259)
-		printf("-> needed retry with fix259 for 144x144 symbol\n");
+	if (fix259){
+	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "14");
+		printf("-> needed retry with fix259 for 144x144 symbol\n");}
 #endif
 
 	// Decode the contents of that stream of bytes
+	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "15");
 	return DecodedBitStreamParser::Decode(std::move(resultBytes), version->isDMRE())
 		.setVersionNumber(version->versionNumber);
 }
@@ -461,19 +496,36 @@ static BitMatrix FlippedL(const BitMatrix& bits)
 
 DecoderResult Decode(const BitMatrix& bits)
 {
+
+	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "Start decode");
+	if (bits.width() == 0 || bits.height() == 0) return FormatError("Empty DM");
+
+	try{
+	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "BitMatrix width: %d, height: %d", bits.width(), bits.height());
+
 	auto res = DoDecode(bits);
-	if (res.isValid())
-		return res;
+	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "Made decode");
+	if (res.isValid()){
+		//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
+		return res;}
 
 	//TODO:
 	// * unify bit mirroring helper code with QRReader?
 	// * rectangular symbols with the a size of 8 x Y are not supported a.t.m.
 	if (auto mirroredRes = DoDecode(FlippedL(bits)); mirroredRes.isValid()) {
 		mirroredRes.setIsMirrored(true);
+		//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
 		return mirroredRes;
 	}
 
-	return res;
+	return res;}
+	catch (...) {
+		//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
+		return FormatError("Empty DM");
+	}
+
+	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
 }
 
 } // namespace ZXing::DataMatrix
+

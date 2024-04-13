@@ -5,6 +5,8 @@
 */
 // SPDX-License-Identifier: Apache-2.0
 
+
+
 #include "DMDetector.h"
 
 #include "DMDecoder.h"
@@ -28,11 +30,12 @@
 #include <cmath>
 #include <cstdlib>
 #include <map>
-#include <numeric>
 #include <utility>
 #include <vector>
+
 #undef min
 #undef max
+
 #ifndef PRINT_DEBUG
 #define printf(...){}
 #define printv(...){}
@@ -66,13 +69,12 @@ struct ResultPointsAndTransitions
 	int transitions;
 };
 
+
+
+
 /**
 * Counts the number of black/white transitions between two points, using something like Bresenham's algorithm.
 */
-
-static int tryLmarker=0;
-static int trySize=20;
-
 static ResultPointsAndTransitions TransitionsBetween(const BitMatrix& image, const ResultPoint& from,
 													 const ResultPoint& to)
 {
@@ -221,8 +223,6 @@ static float CrossProductZ(const ResultPoint& a, const ResultPoint& b, const Res
 /**
 * Orders an array of three ResultPoints in an order [A,B,C] such that AB is less than AC
 * and BC is less than AC, and the angle between BC and BA is less than 180 degrees.
-*
-* @param patterns array of three {@code ResultPoint} to order
 */
 static void OrderByBestPatterns(const ResultPoint*& p0, const ResultPoint*& p1, const ResultPoint*& p2)
 {
@@ -280,7 +280,7 @@ static DetectorResult DetectOld(const BitMatrix& image)
 		TransitionsBetween(image, pointC, pointD),
 	};
 	std::sort(transitions.begin(), transitions.end(),
-			  [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+		[](const auto& a, const auto& b) { return a.transitions < b.transitions; });
 
 	// Sort by number of transitions. First two will be the two solid sides; last two
 	// will be the two alternating black/white sides
@@ -351,6 +351,7 @@ static DetectorResult DetectOld(const BitMatrix& image)
 	int dimensionTop = TransitionsBetween(image, *topLeft, *topRight).transitions;
 	int dimensionRight = TransitionsBetween(image, *bottomRight, *topRight).transitions;
 
+
 	if ((dimensionTop & 0x01) == 1) {
 		// it can't be odd, so, round... up?
 		dimensionTop++;
@@ -410,8 +411,22 @@ static DetectorResult DetectOld(const BitMatrix& image)
 		dimensionTop = dimensionRight = dimensionCorrected;
 	}
 
+	
 	return SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /**
 * The following code is the 'new' one implemented by Axel Waggershauser and is working completely different.
@@ -501,6 +516,13 @@ class EdgeTracer : public BitMatrixCursorF
 {
 	enum class StepResult { FOUND, OPEN_END, CLOSED_END };
 
+	// force this function inline to allow the compiler optimize for the maxStepSize==1 case in traceLine()
+	// this can result in a 10% speedup of the falsepositive use case when build with c++20
+#if defined(__clang__) || defined(__GNUC__)
+	inline __attribute__((always_inline))
+#elif defined(_MSC_VER)
+	__forceinline
+#endif
 	StepResult traceStep(PointF dEdge, int maxStepSize, bool goodDirection)
 	{
 		dEdge = mainDirection(dEdge);
@@ -686,6 +708,7 @@ public:
 	}
 };
 
+
 static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines)
 {
 	while (startTracer.moveToNextWhiteAfterBlack()) {
@@ -824,6 +847,7 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 	return {};
 }
 
+
 static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tryRotate)
 {
 #ifdef PRINT_DEBUG
@@ -835,6 +859,9 @@ static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tr
 #ifndef __cpp_impl_coroutine
 	tryHarder = false;
 #endif
+
+	//ResultPoint p1;
+	//createBitmapFromBitMatrix(image,p1,p1,p1,p1);
 
 	// a history log to remember where the tracing already passed by to prevent a later trace from doing the same work twice
 	ByteMatrix history;
@@ -866,8 +893,9 @@ static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tr
 			while (res = Scan(tracer, lines), res.isValid())
 				co_yield std::move(res);
 #else
-			if (auto res = Scan(tracer, lines); res.isValid())
+			if (auto res = Scan(tracer, lines); res.isValid()) { 
 				return res;
+			}
 #endif
 
 			if (!tryHarder)
@@ -882,8 +910,6 @@ static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tr
 	return {};
 #endif
 }
-
-
 
 
 
@@ -962,68 +988,82 @@ void correctBottle(BitMatrix& img, bool horizontal, bool inverse) {
 
 
 
+void rotate45(BitMatrix& img) {
+	int  rows, cols,r,c,r1,c1,k,s;
+	float rad = 0.785398; //45grad
 
-void correctShift(BitMatrix& img, bool horizontal, bool inverse) {
+	rows = img.width();
+	cols = img.height();
 
-	BitMatrix img2 = img.copy();
-
-	int width, height;
-	bool point;
-	int newx, newy;
-	float factor = 7.0;
-
-	width = img.width();
-	height = img.height();
-	factor = (float)height / 30.0;
-
-	if (horizontal) {
-
-		for (int x = 0; x < width; x++) {
-			for (int y = 0; y < height; y++) {
-				point = img.get(x, y);
-				if (inverse) {
-					newy = y + ((float)factor * ((float)x / width));
-				}
-				else {
-					newy = y - ((float)factor * ((float)x / width));
-				}
-				if (newy >= height) newy = height - 1;
-				if (newy < 0) newy = 0;
-				newx = x;
-				img2.set(newx, newy, point);
-			}
-
-		}
-
+	int centRow = rows / 2;
+	int centCol = cols / 2;
 		
-	}
-	else {
+	//��������� ��� angle �� 0 �� 90
+	float maxRow = centRow + (rows - centRow) * cos(rad) - (0 - centCol) * sin(rad);
+	float maxCol = centCol + (cols - centCol) * cos(rad) + (rows - centRow) * sin(rad);
+	float minRow = centRow + (0 - centRow) * cos(rad) - (cols - centCol) * sin(rad);
+	float minCol = centCol + (0 - centCol) * cos(rad) + (0 - centRow) * sin(rad);
+	r = maxRow - minRow + 1;
+	c = maxCol - minCol + 1;
+	if (r < rows) r1 = rows; else r1 = r;
+	if (c < cols) c1 = cols; else c1 = c;
+	s = r1 / 40;
+	if (s < 20) s = 20;//�����������, �� ����� ��������
+	
+	BitMatrix img2 = BitMatrix(r1, c1);
 
-		
-		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
-				point = img.get(x, y);
-				if (inverse) {
-					newx =x+((float)factor*((float)y/height));
+		for (int i = 0; i < r1; i++)
+		{
+			for (int j = 0; j < c1; j++)
+			{
+				if ((i < rows) && (j < cols))
+				{
+					float x = centRow + (i - centRow) * cos(rad) - (j - centCol) * sin(rad);
+					float y = centCol + (j - centCol) * cos(rad) + (i - centRow) * sin(rad);
+					int newI = x - minRow;
+					int newJ = y - minCol;
+
+					if ((newI >= 0) && (newI < r1) && (newJ >= 0) && (newJ < c1)) {
+						img2.set(newI, newJ, img.get(i, j));
+
+
+						try {
+
+							if (newJ > 1 && img2.get(newI, newJ - 1) == false)
+							{
+								//���� ���������� �������� ������ �������(��� ���������), �� �������� ������� �������� � ���� ������ �������
+								if (i > 0 && j > 0) {   //��� �����, ����� ������� �� ���������� � ������
+									k = 0;
+									while ((img2.get(newI, newJ - 1) == false) && (newJ > 1) && (k < s))
+									{
+										newJ--; k++;
+										if (img2.get(newI + 1, newJ + 1)) 	break;
+									}
+								}
+
+								if ((newI >= 0) && (newI < r1) && (newJ >= 0) && (newJ < c1))
+									img2.set(newI, newJ, img.get(i, j));
+
+							}
+
+						}
+						catch (...) {}
+						
+
+
+					}
+
+
 				}
-				else {
-					newx = x - ((float)factor * ((float)y / height));
-				}
-				if (newx >= width) newx = width - 1;
-				if (newx < 0) newx = 0;
-				newy = y;
-				img2.set(newx, newy, point);
+
 			}
-
 		}
-
-
-	}
-
-
-	img = img2.copy();
+		
+	
+	img = img2.copy();	
 
 }
+
 
 
 
@@ -1065,93 +1105,36 @@ void line2(BitMatrix& img, int x1, int y1, int x2, int y2) {
 
 }
 
-//������ l � ����� ������ ���������� ����, ����� �� ������ ��������, �� ����� ����
-// void drawL4 (BitMatrix& img, ResultPoint& p1, ResultPoint& p2, ResultPoint& p3, ResultPoint& p4)
-// {
-// 	bool onehoriz = (abs(p1.x() - p2.x()) > abs(p1.y() - p2.y()));
-// 	bool twohoriz = (abs(p3.x() - p4.x()) > abs(p3.y() - p4.y()));
-
-// 	int half=0;
-// 	if (onehoriz) {
-// 		half = (int)((float)abs(p1.x() - p2.x()) / 2.0);
-// 	}
-// 	else {
-// 		half = (int)((float)abs(p1.y() - p2.y()) / 2.0);
-// 	}
-// 	int half2 = 0;
-	
-// 	if (twohoriz) {
-// 		half2 = (int)((float)abs(p3.x() - p4.x()) / 2.0);
-// 	}
-// 	else {
-// 		half2 = (int)((float)abs(p3.y() - p4.y()) / 2.0);
-// 	}
-	
-// 	half += 4;
-// 	half2 += 4;
-
-// 	//half = int((half + half2) / 2.0);
-
-// 	line2(img, p1.x(), p1.y(), p2.x(), p2.y());
-
-// 	if (onehoriz) {
-
-// 		if (p1.y() > half) {
-// 			line2(img, p1.x(), p1.y() - half, p2.x(), p2.y() - half);
-// 		}
-// 		else {
-// 			line2(img, p1.x(), p1.y() + half, p2.x(), p2.y() + half);
-// 		}
-
-// 	}
-// 	else {
-
-// 		if (p1.x() > half) {
-// 			line2(img, p1.x()-half, p1.y(), p2.x()-half, p2.y());
-// 		}
-// 		else {
-// 			line2(img, p1.x() + half, p1.y(), p2.x() + half, p2.y());
-// 		}
-
-// 	}
 
 
-// 	line2(img, p3.x(), p3.y(), p4.x(), p4.y());
 
-// 	if (twohoriz) {
-
-// 		if (p3.y() > half2) {
-// 			line2(img, p3.x(), p3.y() - half2, p4.x(), p4.y() - half2);
-// 		}
-// 		else {
-// 			line2(img, p3.x(), p3.y() + half2, p4.x(), p4.y() + half2);
-// 		}
-
-// 	}
-// 	else {
-
-// 		if (p3.x() > half2) {
-// 			line2(img, p3.x() - half2, p3.y(), p4.x() - half2, p4.y());
-// 		}
-// 		else {
-// 			line2(img, p3.x() + half2, p3.y(), p4.x() + half2, p4.y());
-// 		}
-// 	}
-// }
 
 static DetectorResult DetectCRPT(const BitMatrix& image)
 {
-	//MessageBoxA(0, "Detect CRPT", NULL, MB_OK | MB_ICONINFORMATION);
-	ResultPoint pointA, pointB, pointC, pointD;
-	if (!DetectWhiteRect(image, pointA, pointB, pointC, pointD))
-		return {};
 
+	/*ResultPoint p1(0, 0);
+	ResultPoint p2(0, 0);
+	ResultPoint p3(0, 0);
+	ResultPoint p4(0, 0);
+	createBitmapFromBitMatrix(image, p1, p2, p3, p4);*/
+
+	BitMatrix newimage = image.copy();
+	ResultPoint pointA, pointB, pointC, pointD;
+
+
+	if (!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {		
+		rotate45(newimage);
+		//createBitmapFromBitMatrix(newimage, p1, p2, p3, p4);
+		if (!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) return {};
+	
+	}
+		
 
 	std::array transitions = {
-		TransitionsBetween(image, pointA, pointB),
-		TransitionsBetween(image, pointA, pointC),
-		TransitionsBetween(image, pointB, pointD),
-		TransitionsBetween(image, pointC, pointD),
+		TransitionsBetween(newimage, pointA, pointB),
+		TransitionsBetween(newimage, pointA, pointC),
+		TransitionsBetween(newimage, pointB, pointD),
+		TransitionsBetween(newimage, pointC, pointD),
 	};
 
 	std::sort(transitions.begin(), transitions.end(),
@@ -1159,103 +1142,14 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 
 
 	DetectorResult res;
-
 	int n1, n2;
-
-	for (int i = 0; i < 2; i++) {
-		if (i == 0) { n1 = 0; n2 = 1; }
-		if (i == 1) { n1 = 0; n2 = 2; }
-
-		const auto& lSideOne = transitions[n1];
-		const auto& lSideTwo = transitions[n2];
-
-					
-		//������������
-		/*ResultPoint p1(transitions[n1].from->x(), transitions[n1].from->y());
-		ResultPoint p2(transitions[n1].to->x(), transitions[n1].to->y());
-		ResultPoint p3(transitions[n2].from->x(), transitions[n2].from->y());
-		ResultPoint p4(transitions[n2].to->x(), transitions[n2].to->y());
-
-		createBitmapFromBitMatrix(img2, p1, p2, p3, p4);
-		//����� ������������*/
-
-
-
-
-		// Figure out which point is their intersection by tallying up the number of times we see the
-		// endpoints in the four endpoints. One will show up twice.
-		std::map<const ResultPoint*, int> pointCount;
-		pointCount[lSideOne.from] += 1;
-		pointCount[lSideOne.to] += 1;
-		pointCount[lSideTwo.from] += 1;
-		pointCount[lSideTwo.to] += 1;
-
-		const ResultPoint* bottomRight = nullptr;
-		const ResultPoint* bottomLeft = nullptr;
-		const ResultPoint* topLeft = nullptr;
-		for (const auto& [point, count] : pointCount) {
-			if (count == 2) {
-				bottomLeft = point; // this is definitely the bottom left, then -- end of two L sides
-			}
-			else {
-				// Otherwise it's either top left or bottom right -- just assign the two arbitrarily now
-				if (bottomRight == nullptr) {
-					bottomRight = point;
-				}
-				else {
-					topLeft = point;
-				}
-			}
-		}
-
-		if (bottomRight == nullptr || bottomLeft == nullptr || topLeft == nullptr) 	continue;
-
-		// Bottom left is correct but top left and bottom right might be switched
-		// Use the dot product trick to sort them out
-		OrderByBestPatterns(bottomRight, bottomLeft, topLeft);
-
-		// Which point didn't we find in relation to the "L" sides? that's the top right corner
-		const ResultPoint* topRight;
-		if (pointCount.find(&pointA) == pointCount.end()) {
-			topRight = &pointA;
-		}
-		else if (pointCount.find(&pointB) == pointCount.end()) {
-			topRight = &pointB;
-		}
-		else if (pointCount.find(&pointC) == pointCount.end()) {
-			topRight = &pointC;
-		}
-		else {
-			topRight = &pointD;
-		}
-
-
-		ResultPoint correctedTopRight;
-		int dimensionTop; int dimensionRight;
-
-		for (int j = 0; j < 3; j++) {
-			if (j == 0) dimensionTop = dimensionRight = 36;
-			if (j == 1) dimensionTop = dimensionRight = 40;
-			if (j == 2) dimensionTop = dimensionRight = 44;
-
-			correctedTopRight = CorrectTopRight(image, *bottomLeft, *bottomRight, *topLeft, *topRight, dimensionTop);
-			res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
-			if (!res.isValid()) continue;
-			if (Decode(res.bits()).isValid()) return res;
-		}
-
-
-
-	} //i
-
-
 
 	//���������� L �� ���� ��������� �� image � ������� DetectNew ��� ������� (��� � ������ L ���� ����������� � ���� �����)
 	for (int i = 0; i < 2; i++) {
 		if (i == 0) { n1 = 0; n2 = 1; }
 		if (i == 1) { n1 = 0; n2 = 2; }
 
-		BitMatrix img2 = image.copy();
+		BitMatrix img2 = newimage.copy();
 		line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
 		line2(img2, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
 			
@@ -1269,7 +1163,7 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 	//������������ �������������� �������� �������, 4 ��������: �����������/���������+��������
 	//� ���� ����� ������������ ���3, L1, ������� � �.�, �������� ����������� �� � ��������
 	for (int i = 0; i < 4; i++) {
-		BitMatrix img2 = image.copy();
+		BitMatrix img2 = newimage.copy();
 		n1 = 0; n2 = 1;
 
 		if (i == 0) { correctBottle(img2, false, false);}
@@ -1277,35 +1171,56 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 		if (i == 2) { correctBottle(img2, true, false);}
 		if (i == 3) { correctBottle(img2, true, true);}
 						
-		/*ResultPoint p1(transitions[n1].from->x(), transitions[n1].from->y());
-		ResultPoint p2(transitions[n1].to->x(), transitions[n1].to->y());
-		ResultPoint p3(transitions[n2].from->x(), transitions[n2].from->y());
-		ResultPoint p4(transitions[n2].to->x(), transitions[n2].to->y());
-		createBitmapFromBitMatrix(img2, p1, p2, p3, p4);*/
-
-
 		res = DetectNew(img2, true, true);
 		if (!res.isValid()) continue;
 		if (Decode(res.bits()).isValid()) return res;	
 
 	} //i 
+
+
+
 	
+
 	return res;
 }
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
 * This method detects a code in a "pure" image -- that is, pure monochrome image
-* which contains only an unrotated, unskewed, image of a code, with some white border
+* which contains only an unrotated, unskewed, image of a code, with some optional white border
 * around it. This is a specialized method that works exceptionally fast in this special
 * case.
 */
 static DetectorResult DetectPure(const BitMatrix& image)
 {
+	return {};
+
+	//createBitmapFromBitMatrix(image);
+
+	//MessageBoxA(0, "Pure1", NULL, MB_OK | MB_ICONINFORMATION);
+
 	int left, top, width, height;
 	if (!image.findBoundingBox(left, top, width, height, 8))
 		return {};
+
+
+
+	//MessageBoxA(0, "Pure2", NULL, MB_OK | MB_ICONINFORMATION);
+
 
 	BitMatrixCursorI cur(image, {left, top}, {0, 1});
 	if (cur.countEdges(height - 1) != 0)
@@ -1338,19 +1253,18 @@ static DetectorResult DetectPure(const BitMatrix& image)
 DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure)
 {
 #ifdef __cpp_impl_coroutine
-	if (isPure) {
-		co_yield DetectPure(image);
-	} else {
+	// First try the very fast DetectPure() path. Also because DetectNew() generally fails with pure module size 1 symbols
+	// TODO: implement a tryRotate version of DetectPure, see #590.
+	if (auto r = DetectPure(image); r.isValid())
+		co_yield std::move(r);
+	else if (!isPure) { // If r.isValid() then there is no point in looking for more (no-pure) symbols
 		bool found = false;
 		for (auto&& r : DetectNew(image, tryHarder, tryRotate)) {
 			found = true;
 			co_yield std::move(r);
 		}
 		if (!found && tryHarder) {
-			//if (auto r = DetectPure(image); r.isValid())
-			//	co_yield std::move(r);
-			//else 
-			if(auto r = DetectCRPT(image); r.isValid())
+			if (auto r = DetectOld(image); r.isValid())
 				co_yield std::move(r);
 		}
 	}
@@ -1364,8 +1278,9 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 	if (!result.isValid() && tryHarder)
 		result = DetectCRPT(image);
 	return result;
-#endif
 
+#endif
 }
 
 } // namespace ZXing::DataMatrix
+
