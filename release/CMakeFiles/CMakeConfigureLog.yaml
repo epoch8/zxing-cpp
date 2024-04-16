@@ -1,0 +1,532 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineSystem.cmake:199 (message)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      The target system is: Android - 1 - x86_64
+      The host system is: Linux - 5.15.0-101-generic - x86_64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang 
+      Build flags: -g;-DANDROID;-fdata-sections;-ffunction-sections;-funwind-tables;-fstack-protector-strong;-no-canonical-prefixes;-D_FORTIFY_SOURCE=2;-Wformat;-Werror=format-security;
+      Id flags: -c;--target=x86_64-none-linux-android21 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.o"
+      
+      The C compiler identification is Clang, found in:
+        /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/3.26.3/CompilerIdC/CMakeCCompilerId.o
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ 
+      Build flags: -g;-DANDROID;-fdata-sections;-ffunction-sections;-funwind-tables;-fstack-protector-strong;-no-canonical-prefixes;-D_FORTIFY_SOURCE=2;-Wformat;-Werror=format-security;;
+      Id flags: -c;--target=x86_64-none-linux-android21 
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.o"
+      
+      The CXX compiler identification is Clang, found in:
+        /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/3.26.3/CompilerIdCXX/CMakeCXXCompilerId.o
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:3 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl"
+      binary: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl"
+    cmakeVariables:
+      ANDROID_ABI: "x86_64"
+      ANDROID_ARM_MODE: "thumb"
+      ANDROID_PIE: "TRUE"
+      ANDROID_PLATFORM: "android-21"
+      ANDROID_STL: "c++_static"
+      ANDROID_TOOLCHAIN: "clang"
+      CMAKE_CXX_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_C_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_C_FLAGS: "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat "
+      CMAKE_C_FLAGS_DEBUG: "-fno-limit-debug-info "
+      CMAKE_EXE_LINKER_FLAGS: "-static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  "
+      CMAKE_POSITION_INDEPENDENT_CODE: "TRUE"
+      CMAKE_SYSROOT: "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl
+        
+        Run Build Command(s):/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_6c578/fast && /usr/bin/make  -f CMakeFiles/cmTC_6c578.dir/build.make CMakeFiles/cmTC_6c578.dir/build
+        make[1]: Entering directory '/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl'
+        Building C object CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot   -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat   -fPIE   -v -MD -MT CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -MF CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -c /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeCCompilerABI.c
+        Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)
+        Target: x86_64-none-linux-android21
+        Thread model: posix
+        InstalledDir: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin
+        Found CUDA installation: /usr/local/cuda-12.1, version 
+         (in-process)
+         "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" -cc1 -triple x86_64-none-linux-android21 -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=all -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu x86-64 -target-feature +sse4.2 -target-feature +popcnt -target-feature +cx16 -tune-cpu generic -mllvm -treat-scalable-fixed-error-as-warning -debug-info-kind=constructor -dwarf-version=4 -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl -resource-dir /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17 -dependency-file CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o.d -MT CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -sys-header-deps -D ANDROID -D _FORTIFY_SOURCE=2 -isysroot /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/local/include -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/include -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include -Wformat -fdebug-compilation-dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl -ferror-limit 19 -stack-protector 2 -fgnuc-version=4.2.1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -x c /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeCCompilerABI.c
+        clang -cc1 version 17.0.2 based upon LLVM 17.0.2 default target x86_64-unknown-linux-gnu
+        ignoring nonexistent directory "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/local/include"
+        ignoring nonexistent directory "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include
+         /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android
+         /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include
+        End of search list.
+        Linking C executable cmTC_6c578
+        /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_6c578.dir/link.txt --verbose=1
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat   -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments   -v CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -o cmTC_6c578 
+        Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)
+        Target: x86_64-none-linux-android21
+        Thread model: posix
+        InstalledDir: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin
+        Found CUDA installation: /usr/local/cuda-12.1, version 
+         "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld" --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -pie -z now -z relro --hash-style=both --eh-frame-hdr -m elf_x86_64 -dynamic-linker /system/bin/linker64 -o cmTC_6c578 /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64 -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21 -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib --build-id=sha1 --no-rosegment --no-undefined-version --fatal-warnings --no-undefined CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a -l:libunwind.a -ldl -lc /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a -l:libunwind.a -ldl /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o
+        make[1]: Leaving directory '/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include]
+          add: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android]
+          add: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include]
+        end of search list found
+        collapse include dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include]
+        collapse include dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android]
+        collapse include dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include]
+        implicit include dirs: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerABI.cmake:152 (message)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld\\.lld|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl]
+        ignore line: []
+        ignore line: [Run Build Command(s):/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_6c578/fast && /usr/bin/make  -f CMakeFiles/cmTC_6c578.dir/build.make CMakeFiles/cmTC_6c578.dir/build]
+        ignore line: [make[1]: Entering directory '/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl']
+        ignore line: [Building C object CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o]
+        ignore line: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot   -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat   -fPIE   -v -MD -MT CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -MF CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -c /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeCCompilerABI.c]
+        ignore line: [Android (10087095  +pgo  +bolt  +lto  -mlgo  based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)]
+        ignore line: [Target: x86_64-none-linux-android21]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin]
+        ignore line: [Found CUDA installation: /usr/local/cuda-12.1  version ]
+        ignore line: [ (in-process)]
+        ignore line: [ "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang" -cc1 -triple x86_64-none-linux-android21 -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=all -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu x86-64 -target-feature +sse4.2 -target-feature +popcnt -target-feature +cx16 -tune-cpu generic -mllvm -treat-scalable-fixed-error-as-warning -debug-info-kind=constructor -dwarf-version=4 -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl -resource-dir /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17 -dependency-file CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o.d -MT CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -sys-header-deps -D ANDROID -D _FORTIFY_SOURCE=2 -isysroot /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/local/include -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/include -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include -Wformat -fdebug-compilation-dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-tGWTDl -ferror-limit 19 -stack-protector 2 -fgnuc-version=4.2.1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -x c /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeCCompilerABI.c]
+        ignore line: [clang -cc1 version 17.0.2 based upon LLVM 17.0.2 default target x86_64-unknown-linux-gnu]
+        ignore line: [ignoring nonexistent directory "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/local/include"]
+        ignore line: [ignoring nonexistent directory "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include]
+        ignore line: [ /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android]
+        ignore line: [ /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include]
+        ignore line: [End of search list.]
+        ignore line: [Linking C executable cmTC_6c578]
+        ignore line: [/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_6c578.dir/link.txt --verbose=1]
+        ignore line: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat   -static-libstdc++ -Wl --build-id=sha1 -Wl --no-rosegment -Wl --no-undefined-version -Wl --fatal-warnings -Wl --no-undefined -Qunused-arguments   -v CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o -o cmTC_6c578 ]
+        ignore line: [Android (10087095  +pgo  +bolt  +lto  -mlgo  based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)]
+        ignore line: [Target: x86_64-none-linux-android21]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin]
+        ignore line: [Found CUDA installation: /usr/local/cuda-12.1  version ]
+        link line: [ "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld" --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -pie -z now -z relro --hash-style=both --eh-frame-hdr -m elf_x86_64 -dynamic-linker /system/bin/linker64 -o cmTC_6c578 /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64 -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21 -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib --build-id=sha1 --no-rosegment --no-undefined-version --fatal-warnings --no-undefined CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a -l:libunwind.a -ldl -lc /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a -l:libunwind.a -ldl /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o]
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld] ==> ignore
+          arg [--sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-znow] ==> ignore
+          arg [-zrelro] ==> ignore
+          arg [--hash-style=both] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [-m] ==> ignore
+          arg [elf_x86_64] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/system/bin/linker64] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_6c578] ==> ignore
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o] ==> obj [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o]
+          arg [-L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64] ==> dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64]
+          arg [-L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21] ==> dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21]
+          arg [-L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android] ==> dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android]
+          arg [-L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib] ==> dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib]
+          arg [--build-id=sha1] ==> ignore
+          arg [--no-rosegment] ==> ignore
+          arg [--no-undefined-version] ==> ignore
+          arg [--fatal-warnings] ==> ignore
+          arg [--no-undefined] ==> ignore
+          arg [CMakeFiles/cmTC_6c578.dir/CMakeCCompilerABI.c.o] ==> ignore
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a] ==> lib [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-ldl] ==> lib [dl]
+          arg [-lc] ==> lib [c]
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a] ==> lib [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-ldl] ==> lib [dl]
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o] ==> obj [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o]
+        remove lib [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a]
+        remove lib [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a]
+        collapse library dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64]
+        collapse library dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21]
+        collapse library dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android]
+        collapse library dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib]
+        implicit libs: [-l:libunwind.a;dl;c;-l:libunwind.a;dl]
+        implicit objs: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o]
+        implicit dirs: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:3 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm"
+      binary: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm"
+    cmakeVariables:
+      ANDROID_ABI: "x86_64"
+      ANDROID_ARM_MODE: "thumb"
+      ANDROID_PIE: "TRUE"
+      ANDROID_PLATFORM: "android-21"
+      ANDROID_STL: "c++_static"
+      ANDROID_TOOLCHAIN: "clang"
+      CMAKE_CXX_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_CXX_FLAGS: "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat  "
+      CMAKE_CXX_FLAGS_DEBUG: "-fno-limit-debug-info "
+      CMAKE_C_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_EXE_LINKER_FLAGS: "-static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  "
+      CMAKE_POSITION_INDEPENDENT_CODE: "TRUE"
+      CMAKE_SYSROOT: "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm
+        
+        Run Build Command(s):/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_5bc1c/fast && /usr/bin/make  -f CMakeFiles/cmTC_5bc1c.dir/build.make CMakeFiles/cmTC_5bc1c.dir/build
+        make[1]: Entering directory '/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm'
+        Building CXX object CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot   -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat    -fPIE   -v -MD -MT CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -c /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeCXXCompilerABI.cpp
+        Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)
+        Target: x86_64-none-linux-android21
+        Thread model: posix
+        InstalledDir: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin
+        Found CUDA installation: /usr/local/cuda-12.1, version 
+         (in-process)
+         "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" -cc1 -triple x86_64-none-linux-android21 -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=all -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu x86-64 -target-feature +sse4.2 -target-feature +popcnt -target-feature +cx16 -tune-cpu generic -mllvm -treat-scalable-fixed-error-as-warning -debug-info-kind=constructor -dwarf-version=4 -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm -resource-dir /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17 -dependency-file CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D ANDROID -D _FORTIFY_SOURCE=2 -isysroot /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/c++/v1 -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/local/include -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/include -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include -Wformat -fdeprecated-macro -fdebug-compilation-dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm -ferror-limit 19 -stack-protector 2 -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -x c++ /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeCXXCompilerABI.cpp
+        clang -cc1 version 17.0.2 based upon LLVM 17.0.2 default target x86_64-unknown-linux-gnu
+        ignoring nonexistent directory "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/local/include"
+        ignoring nonexistent directory "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/c++/v1
+         /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include
+         /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android
+         /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include
+        End of search list.
+        Linking CXX executable cmTC_5bc1c
+        /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_5bc1c.dir/link.txt --verbose=1
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat    -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments   -v CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_5bc1c 
+        Android (10087095, +pgo, +bolt, +lto, -mlgo, based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)
+        Target: x86_64-none-linux-android21
+        Thread model: posix
+        InstalledDir: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin
+        Found CUDA installation: /usr/local/cuda-12.1, version 
+         "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld" --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -pie -z now -z relro --hash-style=both --eh-frame-hdr -m elf_x86_64 -dynamic-linker /system/bin/linker64 -o cmTC_5bc1c /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64 -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21 -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib --build-id=sha1 --no-rosegment --no-undefined-version --fatal-warnings --no-undefined CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -Bstatic -lc++ -Bdynamic -lm /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a -l:libunwind.a -ldl -lc /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a -l:libunwind.a -ldl /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o
+        make[1]: Leaving directory '/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/c++/v1]
+          add: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include]
+          add: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android]
+          add: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include]
+        end of search list found
+        collapse include dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/c++/v1] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/c++/v1]
+        collapse include dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include]
+        collapse include dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android]
+        collapse include dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include]
+        implicit include dirs: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/c++/v1;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeDetermineCompilerABI.cmake:152 (message)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld\\.lld|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm]
+        ignore line: []
+        ignore line: [Run Build Command(s):/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_5bc1c/fast && /usr/bin/make  -f CMakeFiles/cmTC_5bc1c.dir/build.make CMakeFiles/cmTC_5bc1c.dir/build]
+        ignore line: [make[1]: Entering directory '/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm']
+        ignore line: [Building CXX object CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o]
+        ignore line: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot   -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat    -fPIE   -v -MD -MT CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -c /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Android (10087095  +pgo  +bolt  +lto  -mlgo  based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)]
+        ignore line: [Target: x86_64-none-linux-android21]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin]
+        ignore line: [Found CUDA installation: /usr/local/cuda-12.1  version ]
+        ignore line: [ (in-process)]
+        ignore line: [ "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" -cc1 -triple x86_64-none-linux-android21 -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model pic -pic-level 2 -pic-is-pie -mframe-pointer=all -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu x86-64 -target-feature +sse4.2 -target-feature +popcnt -target-feature +cx16 -tune-cpu generic -mllvm -treat-scalable-fixed-error-as-warning -debug-info-kind=constructor -dwarf-version=4 -debugger-tuning=gdb -v -ffunction-sections -fdata-sections -fcoverage-compilation-dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm -resource-dir /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17 -dependency-file CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D ANDROID -D _FORTIFY_SOURCE=2 -isysroot /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/c++/v1 -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include -internal-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/local/include -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/include -internal-externc-isystem /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include -Wformat -fdeprecated-macro -fdebug-compilation-dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-Ka1Znm -ferror-limit 19 -stack-protector 2 -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -x c++ /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [clang -cc1 version 17.0.2 based upon LLVM 17.0.2 default target x86_64-unknown-linux-gnu]
+        ignore line: [ignoring nonexistent directory "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/local/include"]
+        ignore line: [ignoring nonexistent directory "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/c++/v1]
+        ignore line: [ /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/include]
+        ignore line: [ /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/x86_64-linux-android]
+        ignore line: [ /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include]
+        ignore line: [End of search list.]
+        ignore line: [Linking CXX executable cmTC_5bc1c]
+        ignore line: [/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_5bc1c.dir/link.txt --verbose=1]
+        ignore line: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat    -static-libstdc++ -Wl --build-id=sha1 -Wl --no-rosegment -Wl --no-undefined-version -Wl --fatal-warnings -Wl --no-undefined -Qunused-arguments   -v CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_5bc1c ]
+        ignore line: [Android (10087095  +pgo  +bolt  +lto  -mlgo  based on r487747c) clang version 17.0.2 (https://android.googlesource.com/toolchain/llvm-project d9f89f4d16663d5012e5c09495f3b30ece3d2362)]
+        ignore line: [Target: x86_64-none-linux-android21]
+        ignore line: [Thread model: posix]
+        ignore line: [InstalledDir: /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin]
+        ignore line: [Found CUDA installation: /usr/local/cuda-12.1  version ]
+        link line: [ "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld" --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -pie -z now -z relro --hash-style=both --eh-frame-hdr -m elf_x86_64 -dynamic-linker /system/bin/linker64 -o cmTC_5bc1c /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64 -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21 -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android -L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib --build-id=sha1 --no-rosegment --no-undefined-version --fatal-warnings --no-undefined CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o -Bstatic -lc++ -Bdynamic -lm /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a -l:libunwind.a -ldl -lc /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a -l:libunwind.a -ldl /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o]
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/ld.lld] ==> ignore
+          arg [--sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot] ==> ignore
+          arg [-pie] ==> ignore
+          arg [-znow] ==> ignore
+          arg [-zrelro] ==> ignore
+          arg [--hash-style=both] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [-m] ==> ignore
+          arg [elf_x86_64] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/system/bin/linker64] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_5bc1c] ==> ignore
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o] ==> obj [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o]
+          arg [-L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64] ==> dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64]
+          arg [-L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21] ==> dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21]
+          arg [-L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android] ==> dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android]
+          arg [-L/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib] ==> dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib]
+          arg [--build-id=sha1] ==> ignore
+          arg [--no-rosegment] ==> ignore
+          arg [--no-undefined-version] ==> ignore
+          arg [--fatal-warnings] ==> ignore
+          arg [--no-undefined] ==> ignore
+          arg [CMakeFiles/cmTC_5bc1c.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [-Bstatic] ==> search static
+          arg [-lc++] ==> lib [c++]
+          arg [-Bdynamic] ==> search dynamic
+          arg [-lm] ==> lib [m]
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a] ==> lib [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-ldl] ==> lib [dl]
+          arg [-lc] ==> lib [c]
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a] ==> lib [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a]
+          arg [-l:libunwind.a] ==> lib [-l:libunwind.a]
+          arg [-ldl] ==> lib [dl]
+          arg [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o] ==> obj [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o]
+        remove lib [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a]
+        remove lib [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/libclang_rt.builtins-x86_64-android.a]
+        collapse library dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64]
+        collapse library dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21]
+        collapse library dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android]
+        collapse library dir [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib] ==> [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib]
+        implicit libs: [c++;m;-l:libunwind.a;dl;c;-l:libunwind.a;dl]
+        implicit objs: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtbegin_dynamic.o;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21/crtend_android.o]
+        implicit dirs: [/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/17/lib/linux/x86_64;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android/21;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/x86_64-linux-android;/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CheckCSourceCompiles.cmake:76 (cmake_check_source_compiles)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/FindThreads.cmake:97 (CHECK_C_SOURCE_COMPILES)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/FindThreads.cmake:163 (_threads_check_libc)"
+      - "core/CMakeLists.txt:429 (find_package)"
+    checks:
+      - "Performing Test CMAKE_HAVE_LIBC_PTHREAD"
+    directories:
+      source: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-BSw0Yi"
+      binary: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-BSw0Yi"
+    cmakeVariables:
+      ANDROID_ABI: "x86_64"
+      ANDROID_ARM_MODE: "thumb"
+      ANDROID_PIE: "TRUE"
+      ANDROID_PLATFORM: "android-21"
+      ANDROID_STL: "c++_static"
+      ANDROID_TOOLCHAIN: "clang"
+      CMAKE_CXX_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_C_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_C_FLAGS: "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security "
+      CMAKE_C_FLAGS_DEBUG: "-fno-limit-debug-info "
+      CMAKE_EXE_LINKER_FLAGS: "-static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  "
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+      CMAKE_SYSROOT: "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+    buildResult:
+      variable: "CMAKE_HAVE_LIBC_PTHREAD"
+      cached: true
+      stdout: |
+        Change Dir: /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-BSw0Yi
+        
+        Run Build Command(s):/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_89706/fast && /usr/bin/make  -f CMakeFiles/cmTC_89706.dir/build.make CMakeFiles/cmTC_89706.dir/build
+        make[1]: вход в каталог «/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-BSw0Yi»
+        Building C object CMakeFiles/cmTC_89706.dir/src.c.o
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -DCMAKE_HAVE_LIBC_PTHREAD  -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fPIE -MD -MT CMakeFiles/cmTC_89706.dir/src.c.o -MF CMakeFiles/cmTC_89706.dir/src.c.o.d -o CMakeFiles/cmTC_89706.dir/src.c.o -c /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-BSw0Yi/src.c
+        /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-BSw0Yi/src.c:13:3: error: call to undeclared function 'pthread_cancel'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+          pthread_cancel(thread);
+          ^
+        /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-BSw0Yi/src.c:13:3: note: did you mean 'pthread_once'?
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/pthread.h:258:5: note: 'pthread_once' declared here
+        int pthread_once(pthread_once_t* _Nonnull __once, void (* _Nonnull __init_routine)(void));
+            ^
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_89706.dir/build.make:79: CMakeFiles/cmTC_89706.dir/src.c.o] Ошибка 1
+        make[1]: выход из каталога «/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-BSw0Yi»
+        make: *** [Makefile:127: cmTC_89706/fast] Ошибка 2
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/FindThreads.cmake:136 (try_compile)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/FindThreads.cmake:169 (_threads_check_flag_pthread)"
+      - "core/CMakeLists.txt:429 (find_package)"
+    checks:
+      - "Check if compiler accepts -pthread"
+    directories:
+      source: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-HTvJZk"
+      binary: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-HTvJZk"
+    cmakeVariables:
+      ANDROID_ABI: "x86_64"
+      ANDROID_ARM_MODE: "thumb"
+      ANDROID_PIE: "TRUE"
+      ANDROID_PLATFORM: "android-21"
+      ANDROID_STL: "c++_static"
+      ANDROID_TOOLCHAIN: "clang"
+      CMAKE_CXX_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_C_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_C_FLAGS: "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security "
+      CMAKE_C_FLAGS_DEBUG: "-fno-limit-debug-info "
+      CMAKE_EXE_LINKER_FLAGS: "-static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  "
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+      CMAKE_SYSROOT: "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+    buildResult:
+      variable: "THREADS_HAVE_PTHREAD_ARG"
+      cached: true
+      stdout: |
+        Change Dir: /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-HTvJZk
+        
+        Run Build Command(s):/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_f5004/fast && /usr/bin/make  -f CMakeFiles/cmTC_f5004.dir/build.make CMakeFiles/cmTC_f5004.dir/build
+        make[1]: вход в каталог «/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-HTvJZk»
+        Building C object CMakeFiles/cmTC_f5004.dir/CheckForPthreads.c.o
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot   -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fPIE -MD -MT CMakeFiles/cmTC_f5004.dir/CheckForPthreads.c.o -MF CMakeFiles/cmTC_f5004.dir/CheckForPthreads.c.o.d -o CMakeFiles/cmTC_f5004.dir/CheckForPthreads.c.o -c /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-HTvJZk/CheckForPthreads.c
+        Linking C executable cmTC_f5004
+        /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_f5004.dir/link.txt --verbose=1
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments    CMakeFiles/cmTC_f5004.dir/CheckForPthreads.c.o -o cmTC_f5004  -pthread -latomic -lm 
+        make[1]: выход из каталога «/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-HTvJZk»
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/Internal/CheckSourceCompiles.cmake:101 (try_compile)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/share/cmake-3.26/Modules/CheckCXXCompilerFlag.cmake:40 (cmake_check_compiler_flag)"
+      - "core/CMakeLists.txt:454 (CHECK_CXX_COMPILER_FLAG)"
+    checks:
+      - "Performing Test COMPILER_NEEDS_FLOAT_STORE"
+    directories:
+      source: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-pXpbBi"
+      binary: "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-pXpbBi"
+    cmakeVariables:
+      ANDROID_ABI: "x86_64"
+      ANDROID_ARM_MODE: "thumb"
+      ANDROID_PIE: "TRUE"
+      ANDROID_PLATFORM: "android-21"
+      ANDROID_STL: "c++_static"
+      ANDROID_TOOLCHAIN: "clang"
+      CMAKE_CXX_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_CXX_FLAGS: "-g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  "
+      CMAKE_CXX_FLAGS_DEBUG: "-fno-limit-debug-info "
+      CMAKE_C_COMPILER_TARGET: "x86_64-none-linux-android21"
+      CMAKE_EXE_LINKER_FLAGS: "-static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments  "
+      CMAKE_POSITION_INDEPENDENT_CODE: "ON"
+      CMAKE_SYSROOT: "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+    buildResult:
+      variable: "COMPILER_NEEDS_FLOAT_STORE"
+      cached: true
+      stdout: |
+        Change Dir: /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-pXpbBi
+        
+        Run Build Command(s):/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_fb99b/fast && /usr/bin/make  -f CMakeFiles/cmTC_fb99b.dir/build.make CMakeFiles/cmTC_fb99b.dir/build
+        make[1]: Entering directory '/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-pXpbBi'
+        Building CXX object CMakeFiles/cmTC_fb99b.dir/src.cxx.o
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -DCOMPILER_NEEDS_FLOAT_STORE  -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security    -std=c++17 -fPIE   -ffloat-store -MD -MT CMakeFiles/cmTC_fb99b.dir/src.cxx.o -MF CMakeFiles/cmTC_fb99b.dir/src.cxx.o.d -o CMakeFiles/cmTC_fb99b.dir/src.cxx.o -c /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-pXpbBi/src.cxx
+        clang++: warning: optimization flag '-ffloat-store' is not supported [-Wignored-optimization-argument]
+        Linking CXX executable cmTC_fb99b
+        /home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake -E cmake_link_script CMakeFiles/cmTC_fb99b.dir/link.txt --verbose=1
+        /home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=x86_64-none-linux-android21 --sysroot=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/sysroot -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security    -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments    CMakeFiles/cmTC_fb99b.dir/src.cxx.o -o cmTC_fb99b  -latomic -lm 
+        make[1]: Leaving directory '/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/CMakeFiles/CMakeScratch/TryCompile-pXpbBi'
+        
+      exitCode: 0
+...

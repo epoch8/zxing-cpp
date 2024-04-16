@@ -162,7 +162,7 @@ static void DecodeC40OrTextSegment(BitSource& bits, Content& result, Mode mode)
 				else if (cValue < 40) // Size(BASIC_SET_CHARS)
 					result.push_back(upperShift(BASIC_SET_CHARS[cValue]));
 				else
-					//throw FormatError("invalid value in C40 or Text segment");
+					throw FormatError("invalid value in C40 or Text segment");
 				break;
 			case 1: result.push_back(upperShift(cValue)); break;
 			case 2:
@@ -180,7 +180,7 @@ static void DecodeC40OrTextSegment(BitSource& bits, Content& result, Mode mode)
 				else if (cValue == 30) // Upper Shift
 					upperShift.set = true;
 				else
-					//throw FormatError("invalid value in C40 or Text segment");
+					throw FormatError("invalid value in C40 or Text segment");
 				break;
 			case 3:
 				if (mode == Mode::C40)
@@ -188,9 +188,9 @@ static void DecodeC40OrTextSegment(BitSource& bits, Content& result, Mode mode)
 				else if (cValue < Size(TEXT_SHIFT3_SET_CHARS))
 					result.push_back(upperShift(TEXT_SHIFT3_SET_CHARS[cValue]));
 				else
-					//throw FormatError("invalid value in C40 or Text segment");
+					throw FormatError("invalid value in C40 or Text segment");
 				break;
-			default: break;//throw FormatError("invalid value in C40 or Text segment"); ;
+			default: throw FormatError("invalid value in C40 or Text segment"); ;
 			}
 		}
 	}
@@ -206,8 +206,7 @@ static void DecodeAnsiX12Segment(BitSource& bits, Content& result)
 			// X12 segment terminator <CR>, separator *, sub-element separator >, space
 			static const char segChars[4] = {'\r', '*', '>', ' '};
 			if (cValue < 0)
-				break;
-				//throw FormatError("invalid value in AnsiX12 segment");
+				throw FormatError("invalid value in AnsiX12 segment");
 			else if (cValue < 4)
 				result.push_back(segChars[cValue]);
 			else if (cValue < 14) // 0 - 9
@@ -215,8 +214,7 @@ static void DecodeAnsiX12Segment(BitSource& bits, Content& result)
 			else if (cValue < 40) // A - Z
 				result.push_back((char)(cValue + 51));
 			else
-				break;
-				// FormatError("invalid value in AnsiX12 segment");
+				throw FormatError("invalid value in AnsiX12 segment");
 		}
 	}
 }
@@ -273,9 +271,8 @@ static void DecodeBase256Segment(BitSource& bits, Content& result)
 		count = 250 * (d1 - 249) + Unrandomize255State(bits.readBits(8), codewordPosition++);
 
 	// We're seeing NegativeArraySizeException errors from users.
-	if (count < 0) count=0;//????????????????????????????????????????????
-		//return result;
-		//throw FormatError("invalid count in Base256 segment");
+	if (count < 0)
+		throw FormatError("invalid count in Base256 segment");
 
 	result.reserve(count);
 	for (int i = 0; i < count; i++) {
@@ -309,7 +306,7 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 	  //__android_log_print(ANDROID_LOG_INFO, "ZXING", "Byte: %d", oneByte);
 
 			switch (oneByte) {
-			case 0: done = true; break; //throw FormatError("invalid 0 code word");
+			case 0: done = true; break;//throw FormatError("invalid 0 code word");
 			case 129: done = true; break; // Pad -> we are done, ignore the rest of the bits
 			case 230: DecodeC40OrTextSegment(bits, result, Mode::C40); break;
 			case 231: DecodeBase256Segment(bits, result); break;
@@ -332,14 +329,13 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 				break;
 			case 233: // Structured Append
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.6.1
-					done = true; break;
-					//throw FormatError("structured append tag must be first code word");
+					throw FormatError("structured append tag must be first code word");
 				ParseStructuredAppend(bits, sai);
 				// firstFNC1Position = 5;
 				break;
 			case 234: // Reader Programming
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.2.4.9
-					done = true; break;// throw FormatError("reader programming tag must be first code word");
+					throw FormatError("reader programming tag must be first code word");
 				readerInit = true;
 				break;
 			case 235: upperShift.set = true; break; // Upper Shift (shift to Extended ASCII)
@@ -364,8 +360,7 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 					// work around encoders that use unlatch to ASCII as last code word (ask upstream)
 					if (oneByte == 254 && bits.available() == 0)
 						break;
-					done = true; break;
-					//throw FormatError("invalid code word");
+					throw FormatError("invalid code word");
 				}
 			}
 			firstCodeword = false;
@@ -426,11 +421,12 @@ static DecoderResult DoDecode(const BitMatrix& bits)
 	// Construct a parser and read version, error-correction level
 	const Version* version = VersionForDimensionsOf(bits);
 	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "1");
-	
 	if (version == nullptr){
 		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "2");
 		return FormatError("Invalid matrix dimension");}
-	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "Version %d", version->versionNumber);
+	
+	//__android_log_print(ANDROID_LOG_INFO, "Version", "Version %d", version->versionNumber);
+
 	// Read codewords
 	ByteArray codewords = CodewordsFromBitMatrix(bits, *version);
 	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "3");
