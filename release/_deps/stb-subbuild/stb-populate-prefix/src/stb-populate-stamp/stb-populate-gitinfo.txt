@@ -3,9 +3,9 @@
 # No other meaning or use of this file is supported.
 
 method=git
-command=/home/pixml/anaconda3/lib/python3.9/site-packages/cmake/data/bin/cmake;-P;/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/_deps/stb-subbuild/stb-populate-prefix/tmp/stb-populate-gitclone.cmake
-source_dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/_deps/stb-src
-work_dir=/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/_deps
+command=/usr/local/bin/cmake;-P;/home/lev/StudioProjects/zxing-cpp/release/_deps/stb-subbuild/stb-populate-prefix/tmp/stb-populate-gitclone.cmake
+source_dir=/home/lev/StudioProjects/zxing-cpp/release/_deps/stb-src
+work_dir=/home/lev/StudioProjects/zxing-cpp/release/_deps
 repository=https://github.com/nothings/stb.git
 remote=origin
 init_submodules=TRUE

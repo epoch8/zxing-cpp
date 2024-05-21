@@ -14,7 +14,7 @@ mkdir release/
 
 cd release/
 
-cmake .. -DCMAKE_TOOLCHAIN_FILE=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_NATIVE_API_LEVEL=21 -DCMAKE_SHARED_LINKER_FLAGS="-llog"
+cmake .. -DCMAKE_TOOLCHAIN_FILE=/home/lev/Android/Sdk/ndk-bundle/android-ndk-r21/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_NATIVE_API_LEVEL=21 -DCMAKE_SHARED_LINKER_FLAGS="-llog"
 make -j 16
 sudo make install
 
@@ -22,13 +22,13 @@ sudo cp /usr/local/lib/libZXing.so ../v8/
 
 sudo rm -r *
 
-cmake .. -DCMAKE_TOOLCHAIN_FILE=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/build/cmake/android.toolchain.cmake -DANDROID_ABI=armeabi-v7a -DANDROID_NATIVE_API_LEVEL=21 -DCMAKE_SHARED_LINKER_FLAGS="-llog"
+cmake .. -DCMAKE_TOOLCHAIN_FILE=/home/lev/Android/Sdk/ndk-bundle/android-ndk-r21/build/cmake/android.toolchain.cmake -DANDROID_ABI=armeabi-v7a -DANDROID_NATIVE_API_LEVEL=21 -DCMAKE_SHARED_LINKER_FLAGS="-llog"
 make -j 16
 sudo make install
 
 sudo cp /usr/local/lib/libZXing.so ../v7/
 
-cmake .. -DCMAKE_TOOLCHAIN_FILE=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/build/cmake/android.toolchain.cmake -DANDROID_ABI=x86 -DANDROID_NATIVE_API_LEVEL=21 -DCMAKE_SHARED_LINKER_FLAGS="-llog"
+cmake .. -DCMAKE_TOOLCHAIN_FILE=/home/lev/Android/Sdk/ndk-bundle/android-ndk-r21/build/cmake/android.toolchain.cmake -DANDROID_ABI=x86 -DANDROID_NATIVE_API_LEVEL=21 -DCMAKE_SHARED_LINKER_FLAGS="-llog"
 make -j 16
 sudo make install
 
@@ -36,7 +36,7 @@ sudo cp /usr/local/lib/libZXing.so ../x86/
 
 sudo rm -r *
 
-cmake .. -DCMAKE_TOOLCHAIN_FILE=/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/build/cmake/android.toolchain.cmake -DANDROID_ABI=x86_64 -DANDROID_NATIVE_API_LEVEL=21 -DCMAKE_SHARED_LINKER_FLAGS="-llog"
+cmake .. -DCMAKE_TOOLCHAIN_FILE=/home/lev/Android/Sdk/ndk-bundle/android-ndk-r21/build/cmake/android.toolchain.cmake -DANDROID_ABI=x86_64 -DANDROID_NATIVE_API_LEVEL=21 -DCMAKE_SHARED_LINKER_FLAGS="-llog"
 make -j 16
 sudo make install
 

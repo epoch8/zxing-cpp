@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 project(ZXing)
 
+
 option (BUILD_WRITERS "Build with writer support (encoders)" ON)
 option (BUILD_READERS "Build with reader support (decoders)" ON)
 option (BUILD_EXAMPLES "Build the example barcode reader/writer applications" ON)
@@ -76,3 +77,7 @@ endif()
 if (BUILD_PYTHON_MODULE)
     add_subdirectory (wrappers/python)
 endif()
+
+# log-lib for aarm64 build
+find_library(log-lib log)
+target_link_libraries(ZXing INTERFACE ${log-lib})

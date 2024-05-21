@@ -1,4 +1,4 @@
-# Install script for directory: /home/pixml/git_parallel/forked_mediapipe/zxing-cpp
+# Install script for directory: /home/lev/StudioProjects/zxing-cpp
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -39,17 +39,17 @@ endif()
 
 # Set default install directory permissions.
 if(NOT DEFINED CMAKE_OBJDUMP)
-  set(CMAKE_OBJDUMP "/home/pixml/Android/Sdk/ndk-bundle/android-ndk-r26/android-ndk-r26/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump")
+  set(CMAKE_OBJDUMP "/home/lev/Android/Sdk/ndk-bundle/android-ndk-r21/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-objdump")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/core/cmake_install.cmake")
+  include("/home/lev/StudioProjects/zxing-cpp/release/core/cmake_install.cmake")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/example/cmake_install.cmake")
+  include("/home/lev/StudioProjects/zxing-cpp/release/example/cmake_install.cmake")
 endif()
 
 if(CMAKE_INSTALL_COMPONENT)
@@ -60,5 +60,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/lev/StudioProjects/zxing-cpp/release/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

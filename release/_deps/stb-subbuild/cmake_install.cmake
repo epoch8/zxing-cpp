@@ -1,4 +1,4 @@
-# Install script for directory: /home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/_deps/stb-subbuild
+# Install script for directory: /home/lev/StudioProjects/zxing-cpp/release/_deps/stb-subbuild
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -45,5 +45,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/pixml/git_parallel/forked_mediapipe/zxing-cpp/release/_deps/stb-subbuild/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/lev/StudioProjects/zxing-cpp/release/_deps/stb-subbuild/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
