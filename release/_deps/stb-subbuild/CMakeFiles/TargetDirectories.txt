@@ -1,3 +1,0 @@
-/home/lev/StudioProjects/zxing-cpp/release/_deps/stb-subbuild/CMakeFiles/stb-populate.dir
-/home/lev/StudioProjects/zxing-cpp/release/_deps/stb-subbuild/CMakeFiles/edit_cache.dir
-/home/lev/StudioProjects/zxing-cpp/release/_deps/stb-subbuild/CMakeFiles/rebuild_cache.dir
