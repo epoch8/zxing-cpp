@@ -25,6 +25,9 @@
 #include "Scope.h"
 #include "WhiteRectDetector.h"
 
+// #include "DebugDrawStuff.h"
+
+#include <string>
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -717,7 +720,7 @@ public:
 };
 
 
-static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines)
+static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, bool scanWarped = false, bool correctCorners = false)
 {
 	while (startTracer.moveToNextWhiteAfterBlack()) {
 		log(startTracer.p);
@@ -845,7 +848,19 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 			movedTowardsBy(bl, tl, br, 0.5f),
 		};
 
-		auto res = SampleGrid(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
+		DetectorResult res;
+		if(scanWarped) {
+			if(correctCorners) {
+				auto TL = tl, BL = bl, BR = br, TR = tr;
+				CorrectCorners(*startTracer.img, TL, BL, BR, TR, dimT);
+				res = SampleGridWarped(*startTracer.img, TL, BL, BR, TR, dimT, dimR );
+			} else {
+				auto& P = sourcePoints;
+				res = SampleGridWarped(*startTracer.img, P[0], P[3], P[2], P[1], dimT, dimR );
+			}
+		} else {
+			res = SampleGrid(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
+		}
 
 		CHECK(res.isValid());
 
@@ -856,7 +871,7 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 }
 
 
-static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tryRotate)
+static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tryRotate, bool scanWarped = false, bool correctCorners = false)
 {
 #ifdef PRINT_DEBUG
 	LogMatrixWriter lmw(log, image, 1, "dm-log.pnm");
@@ -901,7 +916,7 @@ static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tr
 			while (res = Scan(tracer, lines), res.isValid())
 				co_yield std::move(res);
 #else
-			if (auto res = Scan(tracer, lines); res.isValid()) {
+			if (auto res = Scan(tracer, lines, scanWarped, correctCorners); res.isValid()) {
 				return res;
 			}
 #endif
@@ -1153,11 +1168,12 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 	int n1, n2;
 
 	//���������� L �� ���� ��������� �� image � ������� DetectNew ��� ������� (��� � ������ L ���� ����������� � ���� �����)
+	BitMatrix img2;
 	for (int i = 0; i < 2; i++) {
 		if (i == 0) { n1 = 0; n2 = 1; }
 		if (i == 1) { n1 = 0; n2 = 2; }
 
-		BitMatrix img2 = newimage.copy();
+		img2 = newimage.copy();
 		line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
 		line2(img2, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
 
@@ -1170,8 +1186,9 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 
 	//������������ �������������� �������� �������, 4 ��������: �����������/���������+��������
 	//� ���� ����� ������������ ���3, L1, ������� � �.�, �������� ����������� �� � ��������
+	// BitMatrix img2;
 	for (int i = 0; i < 4; i++) {
-		BitMatrix img2 = newimage.copy();
+		img2 = newimage.copy();
 		n1 = 0; n2 = 1;
 
 		if (i == 0) { correctBottle(img2, false, false);}
@@ -1290,21 +1307,87 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 #endif
 }
 
+const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
+
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult)
 {
+	// drawDebugImage(image, {});
+	DetectorResult detRes;
 
-	for (auto dim : { int(20), 22, 24, 26, 32, 36, 40, 44 }) {
-		PointF TL = P0, BL = P1, BR = P2, TR = P3;
-		CorrectCorners(image, TL, BL, BR, TR, dim);
-		auto detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim);
+	detRes = DetectNew(image, tryHarder, tryRotate);
+	if (!detRes.isValid())
+		detRes = DetectCRPT(image.copy());
+
+	if (detRes.isValid()) {
+		outDecoderResult = Decode(detRes.bits());
+		if(outDecoderResult.isValid()) {
+			return detRes;
+		}
+	}
+
+	std::vector<double> cornersAsVector;
+
+	detRes = DetectNew(image, tryHarder, tryRotate, true, false);
+	outDecoderResult = Decode(detRes.bits());
+	if (outDecoderResult.isValid()) {
+		return detRes;
+	}
+
+	detRes = DetectNew(image, tryHarder, tryRotate, true, true);
+	outDecoderResult = Decode(detRes.bits());
+	if (outDecoderResult.isValid()) {
+		return detRes;
+	}
+
+	// for (int dim = 8; dim <= 44; dim+=2) {
+
+	for (int dim : CommonMatrixDimensions) {
+
+		PointF P[] = {P0, P1, P2, P3};
+		CorrectCorners(image, P[0], P[1], P[2], P[3], dim);
+		int rotateSteps = FindRotation(image, P[0], P[1], P[2], P[3], dim);
+		if(rotateSteps > 0) {
+			PointF PP[4];
+			std::copy(P, &P[4], PP);
+			for(int i = 4; i--;) {
+				P[(i+rotateSteps) % 4] = PP[i];
+			}
+		}
+		//DEBUG DRAW
+
+		auto postfix = std::to_string(dim);
+
+		// cornersAsVector = {P[0].x, P[0].y, P[1].x, P[1].y, P[2].x, P[2].y, P[3].x, P[3].y};
+		// drawDebugImageWithLines(image, filename, cornersAsVector);
+
+		//END DEBUG DRAW
+
+		auto&& [TL, BL, BR, TR] = P;
+
+		detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim);
 		if (detRes.isValid()) {
 			outDecoderResult = Decode(detRes.bits());
 			if (outDecoderResult.isValid()) {
+				// cornersAsVector = {P[0].y, P[0].x, P[1].y, P[1].x, P[2].y, P[2].x, P[3].y, P[3].x};
+				// drawDebugImageWithLines(image, postfix, cornersAsVector);
+				// drawDebugImage(detRes.bits(), postfix);
 				return detRes;
 			}
 		}
 	}
+
 	return {};
 }
 } // namespace ZXing::DataMatrix
 
+//DEBUG DRAW
+
+// auto postfix = std::to_string(dim);
+// auto filename = std::to_string(fileCntr);
+// filename = std::string(4 - filename.length(), '0') + filename;
+// filename += "_" + postfix + ".png";
+
+// cornersAsVector = {TL.x, TL.y, BL.x, BL.y, BR.x, BR.y, TR.x, TR.y};
+// drawDebugImageWithLines(image, filename, cornersAsVector);
+
+//END DEBUG DRAW
