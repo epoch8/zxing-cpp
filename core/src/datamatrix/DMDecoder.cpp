@@ -26,8 +26,8 @@
 #include <vector>
 #include <iostream>
 
-#include <android/log.h>
-#include <sstream>
+//#include <android/log.h>
+//#include <sstream>
 namespace ZXing::DataMatrix {
 
 /**
@@ -389,14 +389,14 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 * @param numDataCodewords number of codewords that are data bytes
 * @return false if error correction fails
 */
-template<typename T>
-std::string VectorToString(const std::vector<T>& vector) {
-    std::ostringstream oss;
-    for (const auto& value : vector) {
-        oss << value << " ";
-    }
-    return oss.str();
-}
+// template<typename T>
+// std::string VectorToString(const std::vector<T>& vector) {
+//     std::ostringstream oss;
+//     for (const auto& value : vector) {
+//         oss << value << " ";
+//     }
+//     return oss.str();
+// }
 
 static bool
 CorrectErrors(ByteArray& codewordBytes, int numDataCodewords)
