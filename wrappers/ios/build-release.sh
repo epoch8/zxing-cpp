@@ -35,4 +35,4 @@ echo ========= Create the xcframework
 xcodebuild -create-xcframework \
     -framework ./_builds/core/Release-iphonesimulator/ZXing.framework \
     -framework ./_builds/core/Release-iphoneos/ZXing.framework \
-    -output ZXingCpp.xcframework
+    -output ZXing.xcframework
