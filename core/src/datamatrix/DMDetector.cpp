@@ -1132,7 +1132,7 @@ void line2(BitMatrix& img, int x1, int y1, int x2, int y2) {
 
 
 
-static DetectorResult DetectCRPT(const BitMatrix& image)
+static DetectorResult DetectCRPT(const BitMatrix& image, bool scanWarped = false, bool correctCorners = false)
 {
 
 	/*ResultPoint p1(0, 0);
@@ -1177,7 +1177,7 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 		line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
 		line2(img2, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
 
-		res = DetectNew(img2, true, true);
+		res = DetectNew(img2, scanWarped, correctCorners);
 		if (!res.isValid()) continue;
 		if (Decode(res.bits()).isValid()) return res;
 
@@ -1196,7 +1196,7 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 		if (i == 2) { correctBottle(img2, true, false);}
 		if (i == 3) { correctBottle(img2, true, true);}
 
-		res = DetectNew(img2, true, true);
+		res = DetectNew(img2, scanWarped, correctCorners);
 		if (!res.isValid()) continue;
 		if (Decode(res.bits()).isValid()) return res;
 
@@ -1311,9 +1311,9 @@ const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
 
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult)
 {
-	// drawDebugImage(image, {});
 	DetectorResult detRes;
 
+	//OLD DETECTORS
 	detRes = DetectNew(image, tryHarder, tryRotate);
 	if (!detRes.isValid())
 		detRes = DetectCRPT(image.copy());
@@ -1324,7 +1324,28 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
 			return detRes;
 		}
 	}
+	//#OLD DETECTORS
 
+	//OLD DETECTORS WITH MY SAMPLE GRID
+	detRes = DetectNew(image, tryHarder, tryRotate, true, true);
+	if (detRes.isValid()) {
+		outDecoderResult = Decode(detRes.bits());
+		if(outDecoderResult.isValid()) {
+			return detRes;
+		}
+	}
+	detRes = DetectCRPT(image.copy(), true, true);
+
+	if (detRes.isValid()) {
+		outDecoderResult = Decode(detRes.bits());
+		if(outDecoderResult.isValid()) {
+			return detRes;
+		}
+	}
+	//#OLD DETECTORS WITH MY SAMPLE GRID
+
+
+	//MY DETECTOR
 	std::vector<double> cornersAsVector;
 
 	detRes = DetectNew(image, tryHarder, tryRotate, true, false);
@@ -1340,7 +1361,6 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
 	}
 
 	// for (int dim = 8; dim <= 44; dim+=2) {
-
 	for (int dim : CommonMatrixDimensions) {
 
 		PointF P[] = {P0, P1, P2, P3};
@@ -1375,6 +1395,7 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
 			}
 		}
 	}
+	//#MY DETECTOR
 
 	return {};
 }
