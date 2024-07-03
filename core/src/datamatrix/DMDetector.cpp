@@ -1145,9 +1145,10 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 	int n1, n2;
 
 	//���������� L �� ���� ��������� �� image � ������� DetectNew ��� ������� (��� � ������ L ���� ����������� � ���� �����)
-	for (int i = 0; i < 2; i++) {
+	for (int i = 0; i < 3; i++) {
 		if (i == 0) { n1 = 0; n2 = 1; }
 		if (i == 1) { n1 = 0; n2 = 2; }
+		if (i == 2) { n1 = 1; n2 = 2; }
 
 		BitMatrix img2 = newimage.copy();
 		line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
