@@ -27,6 +27,7 @@
 #include <iostream>
 
 //#include <android/log.h>
+#include "logger.h"
 //#include <sstream>
 namespace ZXing::DataMatrix {
 
@@ -329,12 +330,14 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 				break;
 			case 233: // Structured Append
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.6.1
+					////logMessage("err1");
 					throw FormatError("structured append tag must be first code word");
 				ParseStructuredAppend(bits, sai);
 				// firstFNC1Position = 5;
 				break;
 			case 234: // Reader Programming
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.2.4.9
+					//logMessage("err2");
 					throw FormatError("reader programming tag must be first code word");
 				readerInit = true;
 				break;
@@ -360,6 +363,7 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 					// work around encoders that use unlatch to ASCII as last code word (ask upstream)
 					if (oneByte == 254 && bits.available() == 0)
 						break;
+					//logMessage("err3");
 					throw FormatError("invalid code word");
 				}
 			}
@@ -421,17 +425,23 @@ static DecoderResult DoDecode(const BitMatrix& bits)
 	// Construct a parser and read version, error-correction level
 	const Version* version = VersionForDimensionsOf(bits);
 	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "1");
+	//logMessage("DODECODE1");
 	if (version == nullptr){
 		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "2");
+		//logMessage("DODECODE2");
 		return FormatError("Invalid matrix dimension");}
 	
 	//__android_log_print(ANDROID_LOG_INFO, "Version", "Version %d", version->versionNumber);
+	
+	////logMessage(version->versionNumber);
 
 	// Read codewords
 	ByteArray codewords = CodewordsFromBitMatrix(bits, *version);
 	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "3");
+	//logMessage("DODECODE3");
 	if (codewords.empty()){
 		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "4");
+		//logMessage("DODECODE4");
 		return FormatError("Invalid number of code words");}
 
 	bool fix259 = false; // see https://github.com/zxing-cpp/zxing-cpp/issues/259
@@ -439,12 +449,15 @@ retry:
 	// Separate into data blocks
 	std::vector<DataBlock> dataBlocks = GetDataBlocks(codewords, *version, fix259);
 	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "5");
+	//logMessage("DODECODE5");
 	if (dataBlocks.empty()){
 		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "6");
+		//logMessage("DODECODE6");
 		return FormatError("Invalid number of data blocks");}
 
 	// Count total number of data bytes
 	ByteArray resultBytes(TransformReduce(dataBlocks, 0, [](const auto& db) { return db.numDataCodewords; }));
+	//logMessage("DODECODE7");
 	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "7");
 	// Error-correct and copy data blocks together into a stream of bytes
 	const int dataBlocksCount = Size(dataBlocks);
@@ -493,12 +506,19 @@ static BitMatrix FlippedL(const BitMatrix& bits)
 DecoderResult Decode(const BitMatrix& bits)
 {
 
+
+	//logMessage("try decode");
 	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "Start decode");
-	if (bits.width() == 0 || bits.height() == 0) return FormatError("Empty DM");
+	if (bits.width() == 0 || bits.height() == 0) {
+
+		//logMessage("Empty DM");
+		return FormatError("Empty DM");}
+
 
 	try{
 	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "BitMatrix width: %d, height: %d", bits.width(), bits.height());
 
+	//logMessage("try 1");
 	auto res = DoDecode(bits);
 	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "Made decode");
 	if (res.isValid()){
@@ -509,6 +529,7 @@ DecoderResult Decode(const BitMatrix& bits)
 	// * unify bit mirroring helper code with QRReader?
 	// * rectangular symbols with the a size of 8 x Y are not supported a.t.m.
 	if (auto mirroredRes = DoDecode(FlippedL(bits)); mirroredRes.isValid()) {
+		//logMessage("try 2");
 		mirroredRes.setIsMirrored(true);
 		//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
 		return mirroredRes;
@@ -516,6 +537,7 @@ DecoderResult Decode(const BitMatrix& bits)
 
 	return res;}
 	catch (...) {
+		//logMessage("catch 1");
 		//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
 		return FormatError("Empty DM");
 	}

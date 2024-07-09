@@ -33,6 +33,8 @@
 #include <utility>
 #include <vector>
 
+#include "logger.h"
+
 #undef min
 #undef max
 
@@ -711,25 +713,34 @@ public:
 
 static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines)
 {
+	
 	while (startTracer.moveToNextWhiteAfterBlack()) {
+		
 		log(startTracer.p);
 
+		logMessage("Scan2");
 		PointF tl, bl, br, tr;
 		auto& [lineL, lineB, lineR, lineT] = lines;
 
-		for (auto& l : lines)
+		logMessage("Scan3");
+		for (auto& l : lines) {
 			l.reset();
+		}
+			
 
+		logMessage("Scan4");
 #ifdef PRINT_DEBUG
+
 		SCOPE_EXIT([&] {
 			for (auto& l : lines)
 				log(l.points());
 		});
-# define CHECK(A) if (!(A)) { printf("broke at %d\n", __LINE__); continue; }
+# define CHECK(A) if (!(A)) { logMessage("Scan41"); printf("broke at %d\n", __LINE__); continue; }
 #else
-# define CHECK(A) if(!(A)) continue
+# define CHECK(A) if(!(A)) {logMessage("Scan42"); continue;}
 #endif
 
+		logMessage("Scan5");
 		auto t = startTracer;
 
 		// follow left leg upwards
@@ -739,16 +750,20 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		CHECK(t.traceCorner(t.right(), tl));
 		lineL.reverse();
 		auto tlTracer = t;
-
+		
 		// follow left leg downwards
 		t = startTracer;
 		t.state = 1;
 		t.setDirection(tlTracer.right());
 		CHECK(t.traceLine(t.left(), lineL));
+		
 		if (!lineL.isValid())
 			t.updateDirectionFromOrigin(tl);
+
+
 		auto up = t.back();
 		CHECK(t.traceCorner(t.left(), bl));
+
 
 		// follow bottom leg right
 		t.state = 2;
@@ -756,11 +771,14 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		if (!lineB.isValid())
 			t.updateDirectionFromOrigin(bl);
 		auto right = t.front();
+
+
 		CHECK(t.traceCorner(t.left(), br));
 
 		auto lenL = distance(tl, bl) - 1;
 		auto lenB = distance(bl, br) - 1;
 		CHECK(lenL >= 8 && lenB >= 10 && lenB >= lenL / 4 && lenB <= lenL * 18);
+
 
 		auto maxStepSize = static_cast<int>(lenB / 5 + 1); // datamatrix bottom dim is at least 10
 
@@ -769,6 +787,7 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		tlTracer.setDirection(right);
 		CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize));
 
+
 		maxStepSize = std::min(lineT.length() / 3, static_cast<int>(lenL / 5)) * 2;
 
 		// follow up until we reach the top line
@@ -776,6 +795,7 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		t.state = 3;
 		CHECK(t.traceGaps(t.left(), lineR, maxStepSize, lineT));
 		CHECK(t.traceCorner(t.left(), tr));
+
 
 		auto lenT = distance(tl, tr) - 1;
 		auto lenR = distance(tr, br) - 1;
@@ -786,12 +806,14 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		// continue top row right until we cross the right line
 		CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize, lineR));
 
+
 		printf("L: %.1f, %.1f ^ %.1f, %.1f > %.1f, %.1f (%d : %d : %d : %d)\n", bl.x, bl.y,
 			   tl.x - bl.x, tl.y - bl.y, br.x - bl.x, br.y - bl.y, (int)lenL, (int)lenB, (int)lenT, (int)lenR);
 
 		for (auto* l : {&lineL, &lineB, &lineT, &lineR})
 			l->evaluate(1.0);
-
+		
+		
 		// find the bounding box corners of the code with sub-pixel precision by intersecting the 4 border lines
 		bl = intersect(lineB, lineL);
 		tl = intersect(lineT, lineL);
@@ -806,6 +828,7 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		};
 		splitDouble(lineT.modules(tl, tr), &dimT, &fracT);
 		splitDouble(lineR.modules(br, tr), &dimR, &fracR);
+
 
 		// the dimension is 2x the number of black/white transitions
 		dimT *= 2;
@@ -823,6 +846,8 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 
 		CHECK(dimT >= 10 && dimT <= 144 && dimR >= 8 && dimR <= 144);
 
+
+
 		auto movedTowardsBy = [](PointF a, PointF b1, PointF b2, auto d) {
 			return a + d * normalized(normalized(b1 - a) + normalized(b2 - a));
 		};
@@ -837,7 +862,9 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 			movedTowardsBy(bl, tl, br, 0.5f),
 		};
 
+
 		auto res = SampleGrid(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
+
 
 		CHECK(res.isValid());
 
@@ -851,12 +878,15 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tryRotate)
 {
 #ifdef PRINT_DEBUG
+ 	//logMessage("DetectNew1");
 	LogMatrixWriter lmw(log, image, 1, "dm-log.pnm");
+
 //	tryRotate = tryHarder = false;
 #endif
 
 	// disable expensive multi-line scan to detect off-center symbols for now
 #ifndef __cpp_impl_coroutine
+ 	//logMessage("DetectNew2");
 	tryHarder = false;
 #endif
 
@@ -865,38 +895,45 @@ static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tr
 
 	// a history log to remember where the tracing already passed by to prevent a later trace from doing the same work twice
 	ByteMatrix history;
+	//logMessage("DetectNew3");
 	if (tryHarder)
 		history = ByteMatrix(image.width(), image.height());
-
+	//logMessage("DetectNew4");
 	// instantiate RegressionLine objects outside of Scan function to prevent repetitive std::vector allocations
 	std::array<DMRegressionLine, 4> lines;
 
 	constexpr int minSymbolSize = 8 * 2; // minimum realistic size in pixel: 8 modules x 2 pixels per module
-
+	//logMessage("DetectNew5");
 	for (auto dir : {PointF{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) {
 		auto center = PointI(image.width() / 2, image.height() / 2);
 		auto startPos = centered(center - center * dir + minSymbolSize / 2 * dir);
-
+		//logMessage("DetectNew6");
 		history.clear();
 
 		for (int i = 1;; ++i) {
 			EdgeTracer tracer(image, startPos, dir);
 			tracer.p += i / 2 * minSymbolSize * (i & 1 ? -1 : 1) * tracer.right();
+			//logMessage("DetectNew7");
 			if (tryHarder)
 				tracer.history = &history;
 
 			if (!tracer.isIn())
 				break;
-
+		 	//logMessage("DetectNew8");
 #ifdef __cpp_impl_coroutine
+//logMessage("DetectNew81");
 			DetectorResult res;
 			while (res = Scan(tracer, lines), res.isValid())
+				//logMessage("DetectNew9");
 				co_yield std::move(res);
 #else
+//logMessage("DetectNew82");
 			if (auto res = Scan(tracer, lines); res.isValid()) { 
+				//logMessage("DetectNew10");
 				return res;
 			}
 #endif
+			 	//logMessage("DetectNew11");
 
 			if (!tryHarder)
 				break; // only test center lines
@@ -913,196 +950,152 @@ static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tr
 
 
 
+
 void correctBottle(BitMatrix& img, bool horizontal, bool inverse) {
 
-	BitMatrix img2 = img.copy();
 
-	int width, height;
-	bool point;
-	int newx, newy;
-	int center,dy;
-	float factor=15;
-
-	width = img.width();
-	height = img.height();
+	//logMessage("Entering correctBottle");
 	
 	
-	if (horizontal) {
+    BitMatrix img2 = img.copy();
+    int width = img.width();
+    int height = img.height();
+    int center, dy, newx, newy;
+    float factor = 15.0;
 
-		center = (int)(height / 2.0);
-		factor = (float)center / 7.6;
-
-
-		for (int x = 0; x < width; x++) {
-			for (int y = 0; y < height; y++) {
-				point = img.get(x, y);
-				dy = abs(y - center);
-				if (inverse) {
-					newx = (x - cos((float)dy / center) * factor) + (factor * 0.75f);
-				}
-				else {
-					newx = (x + cos((float)dy / center) * factor) - (factor * 0.75f);
-				}
-				if (newx >= width) newx = width - 1;
-				if (newx < 0) newx = 0;
-				newy = y;
-				img2.set(newx, newy, point);
-			}
-
-		}
-	}
-	else {
-
-
-		center = (int)(width / 2.0);
-		factor = (float)center / 7.6;
-
-
-		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
-				point = img.get(x, y);
-				dy = abs(x - center);
-				if (inverse) {
-					newy = (y - cos((float)dy / center) * factor) + (factor * 0.75f);
-				}
-				else {
-					newy = (y + cos((float)dy / center) * factor) - (factor * 0.75f);
-				}
-				if (newy >= height) newy = height - 1;
-				if (newy < 0) newy = 0;
-				newx = x;
-				img2.set(newx, newy, point);
-			}
-
-		}
+    if (horizontal) {
+        center = height / 2;
+        factor = static_cast<float>(center) / 7.6;
+        for (int x = 0; x < width; ++x) {
+            for (int y = 0; y < height; ++y) {
+                bool point = img.get(x, y);
+                dy = abs(y - center);
+                if (inverse) {
+                    newx = static_cast<int>((x - cos(static_cast<float>(dy) / center) * factor) + (factor * 0.75f));
+                } else {
+                    newx = static_cast<int>((x + cos(static_cast<float>(dy) / center) * factor) - (factor * 0.75f));
+                }
+                newx = std::clamp(newx, 0, width - 1);
+                newy = y;
+                img2.set(newx, newy, point);
+            }
+        }
+    } else {
+        center = width / 2;
+        factor = static_cast<float>(center) / 7.6;
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                bool point = img.get(x, y);
+                dy = abs(x - center);
+                if (inverse) {
+                    newy = static_cast<int>((y - cos(static_cast<float>(dy) / center) * factor) + (factor * 0.75f));
+                } else {
+                    newy = static_cast<int>((y + cos(static_cast<float>(dy) / center) * factor) - (factor * 0.75f));
+                }
+                newy = std::clamp(newy, 0, height - 1);
+                newx = x;
+                img2.set(newx, newy, point);
+            }
+        }
+    }
+    img = img2.copy();
 
 
-	}
-
-
-	img = img2.copy();
-
+	//logMessage("Exiting correctBottle");
 }
-
 
 
 
 
 void rotate45(BitMatrix& img) {
-	int  rows, cols,r,c,r1,c1,k,s;
-	float rad = 0.785398; //45grad
 
-	rows = img.width();
-	cols = img.height();
+	//logMessage("Rotate 45");
+    int rows = img.width();
+    int cols = img.height();
+    float rad = 0.785398; // 45 градусов
 
-	int centRow = rows / 2;
-	int centCol = cols / 2;
-		
-	//��������� ��� angle �� 0 �� 90
-	float maxRow = centRow + (rows - centRow) * cos(rad) - (0 - centCol) * sin(rad);
-	float maxCol = centCol + (cols - centCol) * cos(rad) + (rows - centRow) * sin(rad);
-	float minRow = centRow + (0 - centRow) * cos(rad) - (cols - centCol) * sin(rad);
-	float minCol = centCol + (0 - centCol) * cos(rad) + (0 - centRow) * sin(rad);
-	r = maxRow - minRow + 1;
-	c = maxCol - minCol + 1;
-	if (r < rows) r1 = rows; else r1 = r;
-	if (c < cols) c1 = cols; else c1 = c;
-	s = r1 / 40;
-	if (s < 20) s = 20;//�����������, �� ����� ��������
-	
-	BitMatrix img2 = BitMatrix(r1, c1);
+    int centRow = rows / 2;
+    int centCol = cols / 2;
 
-		for (int i = 0; i < r1; i++)
-		{
-			for (int j = 0; j < c1; j++)
-			{
-				if ((i < rows) && (j < cols))
-				{
-					float x = centRow + (i - centRow) * cos(rad) - (j - centCol) * sin(rad);
-					float y = centCol + (j - centCol) * cos(rad) + (i - centRow) * sin(rad);
-					int newI = x - minRow;
-					int newJ = y - minCol;
+    float maxRow = centRow + (rows - centRow) * cos(rad) - (0 - centCol) * sin(rad);
+    float maxCol = centCol + (cols - centCol) * cos(rad) + (rows - centRow) * sin(rad);
+    float minRow = centRow + (0 - centRow) * cos(rad) - (cols - centCol) * sin(rad);
+    float minCol = centCol + (0 - centCol) * cos(rad) + (0 - centRow) * sin(rad);
 
-					if ((newI >= 0) && (newI < r1) && (newJ >= 0) && (newJ < c1)) {
-						img2.set(newI, newJ, img.get(i, j));
+    int r = static_cast<int>(maxRow - minRow + 1);
+    int c = static_cast<int>(maxCol - minCol + 1);
+    int r1 = std::max(r, rows);
+    int c1 = std::max(c, cols);
+    int s = std::max(r1 / 40, 20);
 
+    BitMatrix img2(r1, c1);
 
-						try {
+    for (int i = 0; i < r1; ++i) {
+        for (int j = 0; j < c1; ++j) {
+            if (i < rows && j < cols) {
+                float x = centRow + (i - centRow) * cos(rad) - (j - centCol) * sin(rad);
+                float y = centCol + (j - centCol) * cos(rad) + (i - centRow) * sin(rad);
+                int newI = static_cast<int>(x - minRow);
+                int newJ = static_cast<int>(y - minCol);
 
-							if (newJ > 1 && img2.get(newI, newJ - 1) == false)
-							{
-								//���� ���������� �������� ������ �������(��� ���������), �� �������� ������� �������� � ���� ������ �������
-								if (i > 0 && j > 0) {   //��� �����, ����� ������� �� ���������� � ������
-									k = 0;
-									while ((img2.get(newI, newJ - 1) == false) && (newJ > 1) && (k < s))
-									{
-										newJ--; k++;
-										if (img2.get(newI + 1, newJ + 1)) 	break;
-									}
-								}
+                if (newI >= 0 && newI < r1 && newJ >= 0 && newJ < c1) {
+                    img2.set(newI, newJ, img.get(i, j));
 
-								if ((newI >= 0) && (newI < r1) && (newJ >= 0) && (newJ < c1))
-									img2.set(newI, newJ, img.get(i, j));
+                    if (newJ > 1 && !img2.get(newI, newJ - 1)) {
+                        if (i > 0 && j > 0) {
+                            int k = 0;
+                            while (!img2.get(newI, newJ - 1) && newJ > 1 && k < s) {
+                                newJ--; 
+                                k++;
+                                if (img2.get(newI + 1, newJ + 1)) break;
+                            }
+                        }
+                        if (newI >= 0 && newI < r1 && newJ >= 0 && newJ < c1) {
+                            img2.set(newI, newJ, img.get(i, j));
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-							}
-
-						}
-						catch (...) {}
-						
-
-
-					}
-
-
-				}
-
-			}
-		}
-		
-	
-	img = img2.copy();	
-
+    img = img2.copy();
+	//logMessage("Rotate 45 end");
 }
 
 
 
-
-
-
-
 void line2(BitMatrix& img, int x1, int y1, int x2, int y2) {
+	//logMessage("Enter line2");
+    int deltaX = abs(x2 - x1);
+    int deltaY = abs(y2 - y1);
+    int signX = x1 < x2 ? 1 : -1;
+    int signY = y1 < y2 ? 1 : -1;
+    int error = deltaX - deltaY;
 
-	int deltaX = abs(x2 - x1);
-	int deltaY = abs(y2 - y1);
-	int signX = x1 < x2 ? 1 : -1;
-	int signY = y1 < y2 ? 1 : -1;
-	int error = deltaX - deltaY;
-
-	if ((x1 < 0) || (y1 < 0) || (x2 < 0) || (y2 < 0) || (x1 >= img.width()) || (x2 >= img.width()) || (y1 >= img.height()) || (y2 >= img.height())) return;
-	
-	img.set(x2, y2, true);
-	while (x1 != x2 || y1 != y2)
-	{
-
-		if (!((x1 < 0) || (y1 < 0) || ((x1+1) >= img.width()) || ((y1+1) >= img.height()))) {
-			img.set(x1, y1, true);
-			img.set(x1 + 1, y1 + 1, true);
-		}
-		
-		int error2 = error * 2;
-		
-		if (error2 > -deltaY)
-		{
-			error -= deltaY;
-			x1 += signX;
-		}
-		if (error2 < deltaX)
-		{
-			error += deltaX;
-			y1 += signY;
-		}
-	}
-
+    if ((x1 < 0) || (y1 < 0) || (x2 < 0) || (y2 < 0) || (x1 >= img.width()) || (x2 >= img.width()) || (y1 >= img.height()) || (y2 >= img.height())) {
+        return;
+    }
+    
+    img.set(x2, y2, true);
+    while (x1 != x2 || y1 != y2) {
+        if (x1 >= 0 && y1 >= 0 && (x1 + 1) < img.width() && (y1 + 1) < img.height()) {
+            img.set(x1, y1, true);
+            img.set(x1 + 1, y1 + 1, true);
+        }
+        
+        int error2 = error * 2;
+        
+        if (error2 > -deltaY) {
+            error -= deltaY;
+            x1 += signX;
+        }
+        if (error2 < deltaX) {
+            error += deltaX;
+            y1 += signY;
+        }
+    }
+	//logMessage("Exit line2");
 }
 
 
@@ -1110,7 +1103,10 @@ void line2(BitMatrix& img, int x1, int y1, int x2, int y2) {
 
 
 static DetectorResult DetectCRPT(const BitMatrix& image)
+
 {
+
+	//logMessage("DetectCRPT1");
 
 	/*ResultPoint p1(0, 0);
 	ResultPoint p2(0, 0);
@@ -1140,7 +1136,7 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 	std::sort(transitions.begin(), transitions.end(),
 		[](const auto& a, const auto& b) { return a.transitions < b.transitions; });
 
-
+	//logMessage("DetectCRPT2");
 	DetectorResult res;
 	int n1, n2;
 
@@ -1160,17 +1156,20 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 
 	} //i 
 
-
+	//logMessage("DetectCRPT3");
 	//������������ �������������� �������� �������, 4 ��������: �����������/���������+��������
 	//� ���� ����� ������������ ���3, L1, ������� � �.�, �������� ����������� �� � ��������
 	for (int i = 0; i < 4; i++) {
 		BitMatrix img2 = newimage.copy();
 		n1 = 0; n2 = 1;
 
-		if (i == 0) { correctBottle(img2, false, false);}
-		if (i == 1) { correctBottle(img2, false, true);}
-		if (i == 2) { correctBottle(img2, true, false);}
-		if (i == 3) { correctBottle(img2, true, true);}
+		if (i == 0) { logMessage("correctBottle 0"); correctBottle(img2, false, false);}
+		if (i == 1) { logMessage("correctBottle 1"); correctBottle(img2, false, true);}
+		if (i == 2) { logMessage("correctBottle 2"); correctBottle(img2, true, false);}
+		if (i == 3) { logMessage("correctBottle 3"); correctBottle(img2, true, true);}
+						
+                        
+        //logMessage("DetectNew");
 						
 		res = DetectNew(img2, true, true);
 		if (!res.isValid()) continue;
@@ -1180,7 +1179,7 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 
 
 
-	
+	//logMessage("DetectCRPT4");
 
 	return res;
 }

@@ -1,6 +1,6 @@
 echo ========= Remove previous builds
 rm -rf _builds
-rm -rf ZXingCpp.xcframework
+rm -rf ZXing.xcframework
 
 echo ========= Create project structure
 cmake -S../../ -B_builds -GXcode \
@@ -12,8 +12,9 @@ cmake -S../../ -B_builds -GXcode \
     -DBUILD_UNIT_TESTS=NO \
     -DBUILD_BLACKBOX_TESTS=NO \
     -DBUILD_EXAMPLES=NO \
-    -DBUILD_APPLE_FRAMEWORK=YES
-    
+    -DBUILD_APPLE_FRAMEWORK=YES \
+    -DCMAKE_XCODE_ATTRIBUTE_CLANG_ENABLE_MODULES=YES \
+    -DCMAKE_VERBOSE_MAKEFILE=ON
 
 echo ========= Build the sdk for simulators
 xcodebuild -project _builds/ZXing.xcodeproj build \
@@ -21,7 +22,8 @@ xcodebuild -project _builds/ZXing.xcodeproj build \
     -parallelizeTargets \
     -configuration Release \
     -hideShellScriptEnvironment \
-    -sdk iphonesimulator -arch x86_64 -arch arm64
+    -sdk iphonesimulator -arch x86_64 -arch arm64 \
+    2>&1 | tee build-simulator.log
 
 echo ========= Build the sdk for iOS
 xcodebuild -project _builds/ZXing.xcodeproj build \
@@ -29,7 +31,8 @@ xcodebuild -project _builds/ZXing.xcodeproj build \
     -parallelizeTargets \
     -configuration Release \
     -hideShellScriptEnvironment \
-    -sdk iphoneos
+    -sdk iphoneos \
+    2>&1 | tee build-ios.log
 
 echo ========= Create the xcframework
 xcodebuild -create-xcframework \
