@@ -8,6 +8,22 @@
 #include "BitMatrix.h"
 
 #include <mutex>
+//#include <android/log.h>
+
+#include <iostream>
+//#define LOG_TAG "Bitmap"
+//#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+//#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+#define LOG_TAG "Bitmap"
+#define LOGI(...) std::cout << LOG_TAG << ": " << __VA_ARGS__ << std::endl
+#define LOGE(...) std::cerr << LOG_TAG << ": " << __VA_ARGS__ << std::endl
+
+// mute logs
+//#undef LOGI
+//#undef LOGE
+//#define LOGI(...) (void)0
+//#define LOGE(...) (void)0
 
 namespace ZXing {
 
@@ -53,7 +69,18 @@ BinaryBitmap::~BinaryBitmap() = default;
 
 const BitMatrix* BinaryBitmap::getBitMatrix() const
 {
+    LOGI("DataMatrix::Bitmap - Entered Bitmap.");
+
 	std::call_once(_cache->once, [&](){_cache->matrix = getBlackMatrix();});
+    if (_cache->matrix) { // Check if the shared pointer is not null
+        int width = _cache->matrix->width();
+        int height = _cache->matrix->height();
+        LOGI("Matrix size: " << width << "x" << height);
+    } else {
+        LOGI("Failed to get the matrix or matrix is null.");
+    }
+
+    LOGI("DataMatrix::Bitmap - Before return func.");
 	return _cache->matrix.get();
 }
 

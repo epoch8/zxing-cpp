@@ -17,48 +17,76 @@
 
 #include <memory>
 #include <utility>
+#include <iostream>
+//#include <android/log.h>
+
+//#define LOG_TAG "AZreader"
+//#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+//#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+#define LOG_TAG "AZreader"
+#define LOGI(...) std::cout << LOG_TAG << ": " << __VA_ARGS__ << std::endl
+#define LOGE(...) std::cerr << LOG_TAG << ": " << __VA_ARGS__ << std::endl
+
+// mute logs
+#undef LOGI
+#undef LOGE
+#define LOGI(...) (void)0
+#define LOGE(...) (void)0
 
 namespace ZXing::Aztec {
 
-Result
-Reader::decode(const BinaryBitmap& image) const
-{
-	auto binImg = image.getBitMatrix();
-	if (binImg == nullptr)
-		return {};
+    Result Reader::decode(const BinaryBitmap& image) const {
+        LOGI("Aztec::Reader::decode - Attempting to decode a single Aztec code.");
+        auto binImg = image.getBitMatrix();
+        if (binImg == nullptr) {
+            LOGI("Aztec::Reader::decode - No binary image available, returning empty result.");
+            return {};
+        }
 
-	DetectorResult detectorResult = Detect(*binImg, _hints.isPure(), _hints.tryHarder());
-	if (!detectorResult.isValid())
-		return {};
+        DetectorResult detectorResult = Detect(*binImg, _hints.isPure(), _hints.tryHarder());
+        if (!detectorResult.isValid()) {
+            LOGI("Aztec::Reader::decode - Detection failed, returning empty result.");
+            return {};
+        }
 
-	auto decodeResult = Decode(detectorResult)
-							.setReaderInit(detectorResult.readerInit())
-							.setIsMirrored(detectorResult.isMirrored())
-							.setVersionNumber(detectorResult.nbLayers());
+        auto decodeResult = Decode(detectorResult)
+                .setReaderInit(detectorResult.readerInit())
+                .setIsMirrored(detectorResult.isMirrored())
+                .setVersionNumber(detectorResult.nbLayers());
 
-	return Result(std::move(decodeResult), std::move(detectorResult).position(), BarcodeFormat::Aztec);
-}
+        LOGI("Aztec::Reader::decode - Decoding successful, returning result.");
+        return Result(std::move(decodeResult), std::move(detectorResult).position(), BarcodeFormat::Aztec);
+    }
 
-Results Reader::decode(const BinaryBitmap& image, int maxSymbols) const
-{
-	auto binImg = image.getBitMatrix();
-	if (binImg == nullptr)
-		return {};
+    Results Reader::decode(const BinaryBitmap& image, int maxSymbols) const {
+        LOGI("Aztec::Reader::decode - Attempting to decode multiple Aztec codes.");
+        auto binImg = image.getBitMatrix();
+        if (binImg == nullptr) {
+            LOGI("Aztec::Reader::decode - No binary image available, returning empty results.");
+            return {};
+        }
 
-	auto detRess = Detect(*binImg, _hints.isPure(), _hints.tryHarder(), maxSymbols);
+        auto detRess = Detect(*binImg, _hints.isPure(), _hints.tryHarder(), maxSymbols);
 
-	Results results;
-	for (auto&& detRes : detRess) {
-		auto decRes =
-			Decode(detRes).setReaderInit(detRes.readerInit()).setIsMirrored(detRes.isMirrored()).setVersionNumber(detRes.nbLayers());
-		if (decRes.isValid(_hints.returnErrors())) {
-			results.emplace_back(std::move(decRes), std::move(detRes).position(), BarcodeFormat::Aztec);
-			if (maxSymbols > 0 && Size(results) >= maxSymbols)
-				break;
-		}
-	}
+        Results results;
+        for (auto&& detRes : detRess) {
+            auto decRes =
+                    Decode(detRes).setReaderInit(detRes.readerInit()).setIsMirrored(detRes.isMirrored()).setVersionNumber(detRes.nbLayers());
+            if (decRes.isValid(_hints.returnErrors())) {
+                results.emplace_back(std::move(decRes), std::move(detRes).position(), BarcodeFormat::Aztec);
+                LOGI("Aztec::Reader::decode - Aztec code decoded and added to results.");
+                if (maxSymbols > 0 && Size(results) >= maxSymbols) {
+                    LOGI("Aztec::Reader::decode - Maximum number of symbols reached, stopping decoding.");
+                    break;
+                }
+            } else {
+                LOGI("Aztec::Reader::decode - Decoded result is not valid, skipping.");
+            }
+        }
 
-	return results;
-}
+        LOGI("Aztec::Reader::decode - Finished decoding multiple Aztec codes.");
+        return results;
+    }
 
-} // namespace ZXing::Aztec
+} // namespace ZXing::Aztec // namespace ZXing::Aztec

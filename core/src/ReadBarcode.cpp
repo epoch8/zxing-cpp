@@ -16,6 +16,41 @@
 #include <memory>
 #include <stdexcept>
 
+//#include <android/log.h>
+#include <iostream>
+
+#include <utility>
+//#define LOG_TAG "ReadBarcode"
+//#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+//#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+template <typename... Args>
+void LogInfo(const char* tag, Args... args) {
+    (std::cout << ... << args) << std::endl;
+}
+
+// Helper function to print error messages.
+template <typename... Args>
+void LogError(const char* tag, Args... args) {
+    (std::cerr << ... << args) << std::endl;
+}
+
+
+
+//#define LOG_TAG "ReadBarcode"
+//#define LOGI(...) std::cout << LOG_TAG << ": " << __VA_ARGS__ << std::endl
+//#define LOGE(...) std::cerr << LOG_TAG << ": " << __VA_ARGS__ << std::endl
+
+#define LOG_TAG "ReadBarcode"
+#define LOGI(...) LogInfo(LOG_TAG, __VA_ARGS__)
+#define LOGE(...) LogError(LOG_TAG, __VA_ARGS__)
+
+// mute logs
+//#undef LOGI
+//#undef LOGE
+//#define LOGI(...) (void)0
+//#define LOGE(...) (void)0
+
 namespace ZXing {
 
 class LumImage : public ImageView
@@ -133,58 +168,74 @@ Result ReadBarcode(const ImageView& _iv, const DecodeHints& hints)
 	return FirstOrDefault(ReadBarcodes(_iv, DecodeHints(hints).setMaxNumberOfSymbols(1)));
 }
 
-Results ReadBarcodes(const ImageView& _iv, const DecodeHints& hints)
-{
-	if (sizeof(PatternType) < 4 && hints.hasFormat(BarcodeFormat::LinearCodes) && (_iv.width() > 0xffff || _iv.height() > 0xffff))
-		throw std::invalid_argument("maximum image width/height is 65535");
+Results ReadBarcodes(const ImageView& _iv, const DecodeHints& hints) {
+    LOGI("ReadBarcodes called with image width: %d, height: %d", _iv.width(), _iv.height());
+    if (sizeof(PatternType) < 4 && hints.hasFormat(BarcodeFormat::LinearCodes) && (_iv.width() > 0xffff || _iv.height() > 0xffff)) {
+        LOGE("Invalid argument: maximum image width/height is 65535");
+        throw std::invalid_argument("maximum image width/height is 65535");
+    }
 
-	LumImage lum;
-	ImageView iv = SetupLumImageView(_iv, lum, hints);
-	MultiFormatReader reader(hints);
+    LumImage lum;
+    ImageView iv = SetupLumImageView(_iv, lum, hints);
+    MultiFormatReader reader(hints);
 
-	if (hints.isPure())
-		return {reader.read(*CreateBitmap(hints.binarizer(), iv))};
+    if (hints.isPure()) {
+        LOGI("Pure barcode decoding mode enabled.");
+        return {reader.read(*CreateBitmap(hints.binarizer(), iv))};
+    }
 
-	auto formatsBenefittingFromClosing = BarcodeFormat::Aztec | BarcodeFormat::DataMatrix | BarcodeFormat::QRCode | BarcodeFormat::MicroQRCode;
-	DecodeHints closedHints = hints;
-	std::unique_ptr<MultiFormatReader> closedReader;
-	if (hints.tryDenoise() && hints.hasFormat(formatsBenefittingFromClosing)) {
-		closedHints.setFormats((hints.formats().empty() ? BarcodeFormat::Any : hints.formats()) & formatsBenefittingFromClosing);
-		closedReader = std::make_unique<MultiFormatReader>(closedHints);
-	}
+    auto formatsBenefittingFromClosing = BarcodeFormat::Aztec | BarcodeFormat::DataMatrix | BarcodeFormat::QRCode | BarcodeFormat::MicroQRCode;
+    DecodeHints closedHints = hints;
+    std::unique_ptr<MultiFormatReader> closedReader;
+    if (hints.tryDenoise() && hints.hasFormat(formatsBenefittingFromClosing)) {
+        closedHints.setFormats((hints.formats().empty() ? BarcodeFormat::Any : hints.formats()) & formatsBenefittingFromClosing);
+        closedReader = std::make_unique<MultiFormatReader>(closedHints);
+        LOGI("Denoising enabled for specific barcode formats.");
+    }
 
-	LumImagePyramid pyramid(iv, hints.downscaleThreshold() * hints.tryDownscale(), hints.downscaleFactor());
+    LumImagePyramid pyramid(iv, hints.downscaleThreshold() * hints.tryDownscale(), hints.downscaleFactor());
+    LOGI("LumImagePyramid constructed for downscaling.");
 
-	Results results;
-	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
-	for (auto&& iv : pyramid.layers) {
-		auto bitmap = CreateBitmap(hints.binarizer(), iv);
-		for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
-			if (close)
-				bitmap->close();
+    Results results;
+    int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
+    for (auto&& iv : pyramid.layers) {
+        auto bitmap = CreateBitmap(hints.binarizer(), iv);
+        for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
+            if (close) {
+                LOGI("Closing bitmap for better edge detection.");
+                bitmap->close();
+            }
 
-			// TODO: check if closing after invert would be beneficial
-			for (int invert = 0; invert <= static_cast<int>(hints.tryInvert() && !close); ++invert) {
-				if (invert)
-					bitmap->invert();
-				auto rs = (close ? *closedReader : reader).readMultiple(*bitmap, maxSymbols);
-				for (auto& r : rs) {
-					if (iv.width() != _iv.width())
-						r.setPosition(Scale(r.position(), _iv.width() / iv.width()));
-					if (!Contains(results, r)) {
-						r.setDecodeHints(hints);
-						r.setIsInverted(bitmap->inverted());
-						results.push_back(std::move(r));
-						--maxSymbols;
-					}
-				}
-				if (maxSymbols <= 0)
-					return results;
-			}
-		}
-	}
+            // TODO: check if closing after invert would be beneficial
+            for (int invert = 0; invert <= static_cast<int>(hints.tryInvert() && !close); ++invert) {
+                if (invert) {
+                    LOGI("Inverting bitmap for detecting inverted barcodes.");
+                    bitmap->invert();
+                }
+                auto rs = (close ? *closedReader : reader).readMultiple(*bitmap, maxSymbols);
+                for (auto& r : rs) {
+                    if (iv.width() != _iv.width()) {
+                        LOGI("Scaling result position due to downscaling.");
+                        r.setPosition(Scale(r.position(), _iv.width() / iv.width()));
+                    }
+                    if (!Contains(results, r)) {
+                        r.setDecodeHints(hints);
+                        r.setIsInverted(bitmap->inverted());
+                        results.push_back(std::move(r));
+                        --maxSymbols;
+                        LOGI("Barcode detected and added to results.");
+                    }
+                }
+                if (maxSymbols <= 0) {
+                    LOGI("Maximum number of symbols reached.");
+                    return results;
+                }
+            }
+        }
+    }
 
-	return results;
+    LOGI("ReadBarcodes completed.");
+    return results;
 }
 
 } // ZXing

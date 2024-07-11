@@ -32,6 +32,9 @@
 #include <map>
 #include <utility>
 #include <vector>
+#include <memory>
+#include <iostream>
+
 
 #undef min
 #undef max
@@ -45,6 +48,27 @@ for (auto v : vec) \
 	printf(fmt, v); \
 printf("\n");
 #endif
+
+
+
+
+template <typename... Args>
+void LogInfo(const char* tag, Args... args) {
+    (std::cout << ... << args) << std::endl;
+}
+
+// Helper function to print error messages.
+template <typename... Args>
+void LogError(const char* tag, Args... args) {
+    (std::cerr << ... << args) << std::endl;
+}
+
+#define LOG_TAG "Detect"
+#define LOGI(...) std::cout << LOG_TAG << ": " << __VA_ARGS__ << std::endl
+
+// mute logs
+//#undef LOGI
+//#define LOGI(...) (void)0
 
 namespace ZXing::DataMatrix {
 
@@ -411,7 +435,7 @@ static DetectorResult DetectOld(const BitMatrix& image)
 		dimensionTop = dimensionRight = dimensionCorrected;
 	}
 
-	
+
 	return SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
 }
 
@@ -450,6 +474,18 @@ class DMRegressionLine : public RegressionLine
 			}
 		return sum / num;
 	}
+public:
+    void print() const {
+        std::cout << "DMRegressionLine: " << std::endl;
+        std::cout << "Points: ";
+        for (const auto& point : _points) {
+            std::cout << "(" << point.x << ", " << point.y << ") ";
+        }
+        std::cout << std::endl;
+        std::cout << "Direction Inward: (" << _directionInward.x << ", " << _directionInward.y << ")" << std::endl;
+        std::cout << "Coefficients: a=" << a << ", b=" << b << ", c=" << c << std::endl;
+    }
+    // Rest of the DMRegressionLine class...
 
 public:
 	void reverse() { std::reverse(_points.begin(), _points.end()); }
@@ -512,213 +548,227 @@ public:
 	}
 };
 
-class EdgeTracer : public BitMatrixCursorF
-{
-	enum class StepResult { FOUND, OPEN_END, CLOSED_END };
+    class EdgeTracer : public BitMatrixCursorF
+    {
+        enum class StepResult { FOUND, OPEN_END, CLOSED_END };
 
-	// force this function inline to allow the compiler optimize for the maxStepSize==1 case in traceLine()
-	// this can result in a 10% speedup of the falsepositive use case when build with c++20
+        // force this function inline to allow the compiler optimize for the maxStepSize==1 case in traceLine()
+        // this can result in a 10% speedup of the falsepositive use case when build with c++20
 #if defined(__clang__) || defined(__GNUC__)
-	inline __attribute__((always_inline))
+        inline __attribute__((always_inline))
 #elif defined(_MSC_VER)
-	__forceinline
+        __forceinline
 #endif
-	StepResult traceStep(PointF dEdge, int maxStepSize, bool goodDirection)
-	{
-		dEdge = mainDirection(dEdge);
-		for (int breadth = 1; breadth <= (maxStepSize == 1 ? 2 : (goodDirection ? 1 : 3)); ++breadth)
-			for (int step = 1; step <= maxStepSize; ++step)
-				for (int i = 0; i <= 2*(step/4+1) * breadth; ++i) {
-					auto pEdge = p + step * d + (i&1 ? (i+1)/2 : -i/2) * dEdge;
-					log(pEdge);
+        StepResult traceStep(PointF dEdge, int maxStepSize, bool goodDirection)
+        {
+            dEdge = mainDirection(dEdge);
+            for (int breadth = 1; breadth <= (maxStepSize == 1 ? 2 : (goodDirection ? 1 : 3)); ++breadth)
+                for (int step = 1; step <= maxStepSize; ++step)
+                    for (int i = 0; i <= 2*(step/4+1) * breadth; ++i) {
+                        auto pEdge = p + step * d + (i&1 ? (i+1)/2 : -i/2) * dEdge;
+                        log(pEdge);
 
-					if (!blackAt(pEdge + dEdge))
-						continue;
+                        if (!blackAt(pEdge + dEdge))
+                            continue;
 
-					// found black pixel -> go 'outward' until we hit the b/w border
-					for (int j = 0; j < std::max(maxStepSize, 3) && isIn(pEdge); ++j) {
-						if (whiteAt(pEdge)) {
-							// if we are not making any progress, we still have another endless loop bug
-							assert(p != centered(pEdge));
-							p = centered(pEdge);
+                        // found black pixel -> go 'outward' until we hit the b/w border
+                        for (int j = 0; j < std::max(maxStepSize, 3) && isIn(pEdge); ++j) {
+                            if (whiteAt(pEdge)) {
+                                // if we are not making any progress, we still have another endless loop bug
+                                assert(p != centered(pEdge));
+                                p = centered(pEdge);
 
-							if (history && maxStepSize == 1) {
-								if (history->get(PointI(p)) == state)
-									return StepResult::CLOSED_END;
-								history->set(PointI(p), state);
-							}
+                                if (history && maxStepSize == 1) {
+                                    if (history->get(PointI(p)) == state)
+                                        return StepResult::CLOSED_END;
+                                    history->set(PointI(p), state);
+                                }
 
-							return StepResult::FOUND;
-						}
-						pEdge = pEdge - dEdge;
-						if (blackAt(pEdge - d))
-							pEdge = pEdge - d;
-						log(pEdge);
-					}
-					// no valid b/w border found within reasonable range
-					return StepResult::CLOSED_END;
-				}
-		return StepResult::OPEN_END;
-	}
+                                return StepResult::FOUND;
+                            }
+                            pEdge = pEdge - dEdge;
+                            if (blackAt(pEdge - d))
+                                pEdge = pEdge - d;
+                            log(pEdge);
+                        }
+                        // no valid b/w border found within reasonable range
+                        return StepResult::CLOSED_END;
+                    }
+            return StepResult::OPEN_END;
+        }
 
-public:
-	ByteMatrix* history = nullptr;
-	int state = 0;
+    public:
+        ByteMatrix* history = nullptr;
+        int state = 0;
 
-	using BitMatrixCursorF::BitMatrixCursor;
+        using BitMatrixCursorF::BitMatrixCursor;
 
-	bool updateDirectionFromOrigin(PointF origin)
-	{
-		auto old_d = d;
-		setDirection(p - origin);
-		// if the new direction is pointing "backward", i.e. angle(new, old) > 90 deg -> break
-		if (dot(d, old_d) < 0)
-			return false;
-		// make sure d stays in the same quadrant to prevent an infinite loop
-		if (std::abs(d.x) == std::abs(d.y))
-			d = mainDirection(old_d) + 0.99f * (d - mainDirection(old_d));
-		else if (mainDirection(d) != mainDirection(old_d))
-			d = mainDirection(old_d) + 0.99f * mainDirection(d);
-		return true;
-	}
+        bool updateDirectionFromOrigin(PointF origin)
+        {
+            auto old_d = d;
+            setDirection(p - origin);
+            // if the new direction is pointing "backward", i.e. angle(new, old) > 90 deg -> break
+            if (dot(d, old_d) < 0)
+                return false;
+            // make sure d stays in the same quadrant to prevent an infinite loop
+            if (std::abs(d.x) == std::abs(d.y))
+                d = mainDirection(old_d) + 0.99f * (d - mainDirection(old_d));
+            else if (mainDirection(d) != mainDirection(old_d))
+                d = mainDirection(old_d) + 0.99f * mainDirection(d);
+            return true;
+        }
 
-	bool traceLine(PointF dEdge, RegressionLine& line)
-	{
-		line.setDirectionInward(dEdge);
-		do {
-			log(p);
-			line.add(p);
-			if (line.points().size() % 50 == 10) {
-				if (!line.evaluate())
-					return false;
-				if (!updateDirectionFromOrigin(p - line.project(p) + line.points().front()))
-					return false;
-			}
-			auto stepResult = traceStep(dEdge, 1, line.isValid());
-			if (stepResult != StepResult::FOUND)
-				return stepResult == StepResult::OPEN_END && line.points().size() > 1;
-		} while (true);
-	}
+        bool updateDirectionFromLine(RegressionLine& line)
+        {
+            return line.evaluate(1.5) && updateDirectionFromOrigin(p - line.project(p) + line.points().front());
+        }
 
-	bool traceGaps(PointF dEdge, RegressionLine& line, int maxStepSize, const RegressionLine& finishLine = {})
-	{
-		line.setDirectionInward(dEdge);
-		int gaps = 0;
-		do {
-			// detect an endless loop (lack of progress). if encountered, please report.
-			assert(line.points().empty() || p != line.points().back());
-			if (!line.points().empty() && p == line.points().back())
-				return false;
-			log(p);
+        bool updateDirectionFromLineCentroid(RegressionLine& line)
+        {
+            // Basically a faster, less accurate version of the above without the line evaluation
+            return updateDirectionFromOrigin(line.centroid());
+        }
 
-			// if we drifted too far outside of the code, break
-			if (line.isValid() && line.signedDistance(p) < -5 && (!line.evaluate() || line.signedDistance(p) < -5))
-				return false;
+        bool traceLine(PointF dEdge, RegressionLine& line)
+        {
+            line.setDirectionInward(dEdge);
+            do {
+                log(p);
+                line.add(p);
+                if (line.points().size() % 50 == 10 && !updateDirectionFromLineCentroid(line))
+                    return false;
+                auto stepResult = traceStep(dEdge, 1, line.isValid());
+                if (stepResult != StepResult::FOUND)
+                    return stepResult == StepResult::OPEN_END && line.points().size() > 1 && updateDirectionFromLineCentroid(line);
+            } while (true);
+        }
 
-			// if we are drifting towards the inside of the code, pull the current position back out onto the line
-			if (line.isValid() && line.signedDistance(p) > 3) {
-				// The current direction d and the line we are tracing are supposed to be roughly parallel.
-				// In case the 'go outward' step in traceStep lead us astray, we might end up with a line
-				// that is almost perpendicular to d. Then the back-projection below can result in an
-				// endless loop. Break if the angle between d and line is greater than 45 deg.
-				if (std::abs(dot(normalized(d), line.normal())) > 0.7) // thresh is approx. sin(45 deg)
-					return false;
+        bool traceGaps(PointF dEdge, RegressionLine& line, int maxStepSize, const RegressionLine& finishLine = {}, double minDist = 0)
+        {
+            line.setDirectionInward(dEdge);
+            int gaps = 0, steps = 0, maxStepsPerGap = maxStepSize;
+            PointF lastP;
+            do {
+                // detect an endless loop (lack of progress). if encountered, please report.
+                // this fixes a deadlock in falsepositives-1/#570.png and the regression in #574
+                if (p == std::exchange(lastP, p) || steps++ > (gaps == 0 ? 2 : gaps + 1) * maxStepsPerGap)
+                    return false;
+                log(p);
 
-				// re-evaluate line with all the points up to here before projecting
-				if (!line.evaluate(1.5))
-					return false;
+                // if we drifted too far outside of the code, break
+                if (line.isValid() && line.signedDistance(p) < -5 && (!line.evaluate() || line.signedDistance(p) < -5))
+                    return false;
 
-				auto np = line.project(p);
-				// make sure we are making progress even when back-projecting:
-				// consider a 90deg corner, rotated 45deg. we step away perpendicular from the line and get
-				// back projected where we left off the line.
-				// The 'while' instead of 'if' was introduced to fix the issue with #245. It turns out that
-				// np can actually be behind the projection of the last line point and we need 2 steps in d
-				// to prevent a dead lock. see #245.png
-				while (distance(np, line.project(line.points().back())) < 1)
-					np = np + d;
-				p = centered(np);
-			}
-			else {
-				auto stepLengthInMainDir = line.points().empty() ? 0.0 : dot(mainDirection(d), (p - line.points().back()));
-				line.add(p);
+                // if we are drifting towards the inside of the code, pull the current position back out onto the line
+                if (line.isValid() && line.signedDistance(p) > 3) {
+                    // The current direction d and the line we are tracing are supposed to be roughly parallel.
+                    // In case the 'go outward' step in traceStep lead us astray, we might end up with a line
+                    // that is almost perpendicular to d. Then the back-projection below can result in an
+                    // endless loop. Break if the angle between d and line is greater than 45 deg.
+                    if (std::abs(dot(normalized(d), line.normal())) > 0.7) // thresh is approx. sin(45 deg)
+                        return false;
 
-				if (stepLengthInMainDir > 1) {
-					++gaps;
-					if (gaps >= 2 || line.points().size() > 5) {
-						if (!line.evaluate(1.5))
-							return false;
-						if (!updateDirectionFromOrigin(p - line.project(p) + line.points().front()))
-							return false;
-						// check if the first half of the top-line trace is complete.
-						// the minimum code size is 10x10 -> every code has at least 4 gaps
-						//TODO: maybe switch to termination condition based on bottom line length to get a better
-						// finishLine for the right line trace
-						if (!finishLine.isValid() && gaps == 4) {
-							// undo the last insert, it will be inserted again after the restart
-							line.pop_back();
-							--gaps;
-							return true;
-						}
-					}
-				} else if (gaps == 0 && line.points().size() >= static_cast<size_t>(2 * maxStepSize))
-					return false; // no point in following a line that has no gaps
-			}
+                    // re-evaluate line with all the points up to here before projecting
+                    if (!line.evaluate(1.5))
+                        return false;
 
-			if (finishLine.isValid())
-				UpdateMin(maxStepSize, static_cast<int>(finishLine.signedDistance(p)));
+                    auto np = line.project(p);
+                    // make sure we are making progress even when back-projecting:
+                    // consider a 90deg corner, rotated 45deg. we step away perpendicular from the line and get
+                    // back projected where we left off the line.
+                    // The 'while' instead of 'if' was introduced to fix the issue with #245. It turns out that
+                    // np can actually be behind the projection of the last line point and we need 2 steps in d
+                    // to prevent a dead lock. see #245.png
+                    while (distance(np, line.project(line.points().back())) < 1)
+                        np = np + d;
+                    p = centered(np);
+                }
+                else {
+                    auto curStep = line.points().empty() ? PointF() : p - line.points().back();
+                    auto stepLengthInMainDir = line.points().empty() ? 0.0 : dot(mainDirection(d), curStep);
+                    line.add(p);
 
-			auto stepResult = traceStep(dEdge, maxStepSize, line.isValid());
+                    if (stepLengthInMainDir > 1 || maxAbsComponent(curStep) >= 2) {
+                        ++gaps;
+                        if (gaps >= 2 || line.points().size() > 5) {
+                            if (!updateDirectionFromLine(line))
+                                return false;
+                            // check if the first half of the top-line trace is complete.
+                            // the minimum code size is 10x10 -> every code has at least 4 gaps
+                            if (minDist && gaps >= 4 && distance(p, line.points().front()) > minDist) {
+                                // undo the last insert, it will be inserted again after the restart
+                                line.pop_back();
+                                --gaps;
+                                return true;
+                            }
+                        }
+                    } else if (gaps == 0 && Size(line.points()) >= 2 * maxStepSize) {
+                        return false; // no point in following a line that has no gaps
+                    }
+                }
 
-			if (stepResult != StepResult::FOUND)
-				// we are successful iff we found an open end across a valid finishLine
-				return stepResult == StepResult::OPEN_END && finishLine.isValid() &&
-					   static_cast<int>(finishLine.signedDistance(p)) <= maxStepSize + 1;
-		} while (true);
-	}
+                if (finishLine.isValid())
+                    UpdateMin(maxStepSize, static_cast<int>(finishLine.signedDistance(p)));
 
-	bool traceCorner(PointF dir, PointF& corner)
-	{
-		step();
-		log(p);
-		corner = p;
-		std::swap(d, dir);
-		traceStep(-1 * dir, 2, false);
-		printf("turn: %.0f x %.0f -> %.2f, %.2f\n", p.x, p.y, d.x, d.y);
+                auto stepResult = traceStep(dEdge, maxStepSize, line.isValid());
 
-		return isIn(corner) && isIn(p);
-	}
+                if (stepResult != StepResult::FOUND)
+                    // we are successful iff we found an open end across a valid finishLine
+                    return stepResult == StepResult::OPEN_END && finishLine.isValid() &&
+                           static_cast<int>(finishLine.signedDistance(p)) <= maxStepSize + 1;
+            } while (true);
+        }
 
-	bool moveToNextWhiteAfterBlack()
-	{
-		assert(std::abs(d.x + d.y) == 1);
+        bool traceCorner(PointF dir, PointF& corner)
+        {
+            step();
+            log(p);
+            corner = p;
+            std::swap(d, dir);
+            traceStep(-1 * dir, 2, false);
+            printf("turn: %.0f x %.0f -> %.2f, %.2f\n", p.x, p.y, d.x, d.y);
 
-		FastEdgeToEdgeCounter e2e(BitMatrixCursorI(*img, PointI(p), PointI(d)));
-		int steps = e2e.stepToNextEdge(INT_MAX);
-		if (!steps)
-			return false;
-		step(steps);
-		if(isWhite())
-			return true;
+            return isIn(corner) && isIn(p);
+        }
 
-		steps = e2e.stepToNextEdge(INT_MAX);
-		if (!steps)
-			return false;
-		return step(steps);
-	}
-};
+        bool moveToNextWhiteAfterBlack()
+        {
+            assert(std::abs(d.x + d.y) == 1);
+
+            FastEdgeToEdgeCounter e2e(BitMatrixCursorI(*img, PointI(p), PointI(d)));
+            int steps = e2e.stepToNextEdge(INT_MAX);
+            if (!steps)
+                return false;
+            step(steps);
+            if(isWhite())
+                return true;
+
+            steps = e2e.stepToNextEdge(INT_MAX);
+            if (!steps)
+                return false;
+            return step(steps);
+        }
+    };
 
 
 static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines)
 {
-	while (startTracer.moveToNextWhiteAfterBlack()) {
-		log(startTracer.p);
+//    std::array<DMRegressionLine, 4> lines;
+    while (startTracer.moveToNextWhiteAfterBlack()) {
 
-		PointF tl, bl, br, tr;
-		auto& [lineL, lineB, lineR, lineT] = lines;
-
-		for (auto& l : lines)
-			l.reset();
+        PointF tl, bl, br, tr;
+            auto& [lineL, lineB, lineR, lineT] = lines;
+        LOGI("Enter line reset loop");
+        for (auto& l : lines) {
+//            if (l.length() == 0) { // Check if the line is empty
+//                continue; // Skip to the next iteration if the line is empty
+//            }
+//            l.print();
+//            LOGI("Before line reset");
+            l.reset(); // Reset regression lines before processing
+//            LOGI("after line reset");
+        }
+        LOGI("Exit line reset loop");
 
 #ifdef PRINT_DEBUG
 		SCOPE_EXIT([&] {
@@ -729,7 +779,7 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 #else
 # define CHECK(A) if(!(A)) continue
 #endif
-
+        LOGI("Begin turnRight");
 		auto t = startTracer;
 
 		// follow left leg upwards
@@ -739,38 +789,51 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		CHECK(t.traceCorner(t.right(), tl));
 		lineL.reverse();
 		auto tlTracer = t;
-
+        LOGI("Begin state = 1");
 		// follow left leg downwards
 		t = startTracer;
 		t.state = 1;
+        LOGI("Begin state = 1, setDirection");
 		t.setDirection(tlTracer.right());
+        LOGI("Begin state = 1, CHECK1");
 		CHECK(t.traceLine(t.left(), lineL));
+        LOGI("Begin state = 1, updateDirectionFromOrigin");
 		if (!lineL.isValid())
 			t.updateDirectionFromOrigin(tl);
+        LOGI("Begin state = 1, up");
 		auto up = t.back();
+        LOGI("Begin state = 1, CHECK2");
 		CHECK(t.traceCorner(t.left(), bl));
-
+        LOGI("Begin state = 2");
 		// follow bottom leg right
 		t.state = 2;
+        LOGI("Begin state = 2, CHECK1");
 		CHECK(t.traceLine(t.left(), lineB));
+        LOGI("Begin state = 2, updateDirectionFromOrigin");
 		if (!lineB.isValid())
 			t.updateDirectionFromOrigin(bl);
+        LOGI("Begin state = 2, front");
 		auto right = t.front();
+        LOGI("Begin state = 2, CHECK2");
 		CHECK(t.traceCorner(t.left(), br));
-
+        LOGI("Begin state = 2, lenL");
 		auto lenL = distance(tl, bl) - 1;
+        LOGI("Begin state = 2, lenB");
 		auto lenB = distance(bl, br) - 1;
+        LOGI("Begin state = 2, CHECK3");
 		CHECK(lenL >= 8 && lenB >= 10 && lenB >= lenL / 4 && lenB <= lenL * 18);
-
+        LOGI("Begin state = 2, maxStepSize");
 		auto maxStepSize = static_cast<int>(lenB / 5 + 1); // datamatrix bottom dim is at least 10
 
+        LOGI("Begin state = 2, setDirection");
 		// at this point we found a plausible L-shape and are now looking for the b/w pattern at the top and right:
 		// follow top row right 'half way' (4 gaps), see traceGaps break condition with 'invalid' line
 		tlTracer.setDirection(right);
-		CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize));
-
+        LOGI("Begin state = 2, traceGaps");
+        CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize, {}, lenB / 2));
+        LOGI("Begin state = 2, std::min");
 		maxStepSize = std::min(lineT.length() / 3, static_cast<int>(lenL / 5)) * 2;
-
+        LOGI("Begin state = 3");
 		// follow up until we reach the top line
 		t.setDirection(up);
 		t.state = 3;
@@ -788,16 +851,16 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 
 		printf("L: %.1f, %.1f ^ %.1f, %.1f > %.1f, %.1f (%d : %d : %d : %d)\n", bl.x, bl.y,
 			   tl.x - bl.x, tl.y - bl.y, br.x - bl.x, br.y - bl.y, (int)lenL, (int)lenB, (int)lenT, (int)lenR);
-
+        LOGI("Begin evaluate");
 		for (auto* l : {&lineL, &lineB, &lineT, &lineR})
 			l->evaluate(1.0);
-
+        LOGI("Begin intersect");
 		// find the bounding box corners of the code with sub-pixel precision by intersecting the 4 border lines
 		bl = intersect(lineB, lineL);
 		tl = intersect(lineT, lineL);
 		tr = intersect(lineT, lineR);
 		br = intersect(lineB, lineR);
-
+        LOGI("Begin splitDouble");
 		int dimT, dimR;
 		double fracT, fracR;
 		auto splitDouble = [](double d, int* i, double* f) {
@@ -815,6 +878,7 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 			   tl.x - bl.x, tl.y - bl.y, br.x - bl.x, br.y - bl.y, tr.x, tr.y);
 		printf("dim: %d x %d\n", dimT, dimR);
 
+        LOGI("Begin movedTowardsBy");
 		// if we have an almost square (invalid rectangular) data matrix dimension, we try to parse it by assuming a
 		// square. we use the dimension that is closer to an integral value. all valid rectangular symbols differ in
 		// their dimension by at least 10. Note: this is currently not required for the black-box tests to complete.
@@ -836,153 +900,166 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 			movedTowardsBy(br, bl, tr, 0.5f),
 			movedTowardsBy(bl, tl, br, 0.5f),
 		};
-
+        LOGI("Begin SampleGrid");
 		auto res = SampleGrid(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
 
 		CHECK(res.isValid());
 
 		return res;
 	}
-
+    LOGI("End scan");
 	return {};
 }
 
 
 static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tryRotate)
-{
+    {
+        LOGI("DetectNew - Starting detection. tryHarder: " << tryHarder << ", tryRotate: " << tryRotate);
+
 #ifdef PRINT_DEBUG
-	LogMatrixWriter lmw(log, image, 1, "dm-log.pnm");
-//	tryRotate = tryHarder = false;
+        LogMatrixWriter lmw(log, image, 1, "dm-log.pnm");
+    // tryRotate = tryHarder = false;
 #endif
 
-	// disable expensive multi-line scan to detect off-center symbols for now
+        // disable expensive multi-line scan to detect off-center symbols for now
 #ifndef __cpp_impl_coroutine
-	tryHarder = false;
+        LOGI("DetectNew - Disabling tryHarder due to lack of coroutine support.");
+        tryHarder = false;
 #endif
 
-	//ResultPoint p1;
-	//createBitmapFromBitMatrix(image,p1,p1,p1,p1);
+        ByteMatrix history;
+        if (tryHarder) {
+            LOGI("DetectNew - Initializing history matrix for tryHarder mode.");
+            history = ByteMatrix(image.width(), image.height());
+        }
 
-	// a history log to remember where the tracing already passed by to prevent a later trace from doing the same work twice
-	ByteMatrix history;
-	if (tryHarder)
-		history = ByteMatrix(image.width(), image.height());
+        std::array<DMRegressionLine, 4> lines;
+        constexpr int minSymbolSize = 8 * 2; // minimum realistic size in pixel: 8 modules x 2 pixels per module
 
-	// instantiate RegressionLine objects outside of Scan function to prevent repetitive std::vector allocations
-	std::array<DMRegressionLine, 4> lines;
 
-	constexpr int minSymbolSize = 8 * 2; // minimum realistic size in pixel: 8 modules x 2 pixels per module
 
-	for (auto dir : {PointF{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) {
-		auto center = PointI(image.width() / 2, image.height() / 2);
-		auto startPos = centered(center - center * dir + minSymbolSize / 2 * dir);
+    for (auto dir : {PointF{-1, 0}, {1, 0}, {0, -1}, {0, 1}}) {
+        LOGI("DetectNew - Scanning in direction: (" << dir.x << ", " << dir.y << ")");
+        auto center = PointI(image.width() / 2, image.height() / 2);
+        auto startPos = centered(center - center * dir + minSymbolSize / 2 * dir);
 
-		history.clear();
+        history.clear();
+        LOGI("DetectNew - History matrix cleared for new scan direction.");
 
-		for (int i = 1;; ++i) {
-			EdgeTracer tracer(image, startPos, dir);
-			tracer.p += i / 2 * minSymbolSize * (i & 1 ? -1 : 1) * tracer.right();
-			if (tryHarder)
-				tracer.history = &history;
+        for (int i = 1;; ++i) {
+            LOGI("DetectNew - Starting iteration " << i << " in current scan direction.");
+            EdgeTracer tracer(image, startPos, dir);
+            tracer.p += i / 2 * minSymbolSize * (i & 1 ? -1 : 1) * tracer.right();
+            LOGI("DetectNew - Tracer position updated: (" << tracer.p.x << ", " << tracer.p.y << ")");
 
-			if (!tracer.isIn())
-				break;
+            if (tryHarder) {
+                LOGI("DetectNew - TryHarder mode is enabled, using history matrix.");
+                tracer.history = &history;
+            }
+
+            if (!tracer.isIn()) {
+                LOGI("DetectNew - EdgeTracer is out of bounds at position: (" << tracer.p.x << ", " << tracer.p.y << "). Stopping scan in current direction.");
+                break;
+            }
+
+            // Additional logging could be placed here to log the results of the Scan function or other significant events.
 
 #ifdef __cpp_impl_coroutine
-			DetectorResult res;
-			while (res = Scan(tracer, lines), res.isValid())
-				co_yield std::move(res);
+                LOGI("DetectNew - Begin weird code inside __cpp_impl_coroutine.");
+                DetectorResult res;
+            while (res = Scan(tracer, lines), res.isValid())
+                co_yield std::move(res);
+            LOGI("DetectNew - End weird code inside __cpp_impl_coroutine.");
 #else
-			if (auto res = Scan(tracer, lines); res.isValid()) { 
-				return res;
-			}
+                if (auto res = Scan(tracer, lines); res.isValid()) {
+                    LOGI("DetectNew - Valid result found. Returning result.");
+                    return res;
+                }
 #endif
 
-			if (!tryHarder)
-				break; // only test center lines
-		}
+                if (!tryHarder) {
+                    LOGI("DetectNew - Not trying harder. Only center lines are being tested.");
+                    break; // only test center lines
+                }
+            }
 
-		if (!tryRotate)
-			break; // only test left direction
-	}
+            if (!tryRotate) {
+                LOGI("DetectNew - Not trying rotation. Only left direction is being tested.");
+                break; // only test left direction
+            }
+        }
 
 #ifndef __cpp_impl_coroutine
-	return {};
+        LOGI("DetectNew - No valid result found. Returning empty DetectorResults.");
+        return {};
 #endif
-}
+    LOGI("DetectNew - Ended DetectNew.");
+    }
 
 
 
-void correctBottle(BitMatrix& img, bool horizontal, bool inverse) {
+    void correctBottle(BitMatrix& img, bool horizontal, bool inverse) {
+        LOGI("correctBottle - Starting correction process. Horizontal: " << horizontal << ", Inverse: " << inverse);
 
-	BitMatrix img2 = img.copy();
+        BitMatrix img2 = img.copy();
 
-	int width, height;
-	bool point;
-	int newx, newy;
-	int center,dy;
-	float factor=15;
+        int width, height;
+        bool point;
+        int newx, newy;
+        int center, dy;
+        float factor = 15;
 
-	width = img.width();
-	height = img.height();
-	
-	
-	if (horizontal) {
+        width = img.width();
+        height = img.height();
+        LOGI("correctBottle - Image dimensions: Width = " << width << ", Height = " << height);
 
-		center = (int)(height / 2.0);
-		factor = (float)center / 7.6;
+        if (horizontal) {
+            center = static_cast<int>(height / 2.0);
+            factor = static_cast<float>(center) / 7.6;
+            LOGI("correctBottle - Applying horizontal correction. Center: " << center << ", Factor: " << factor);
 
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                    point = img.get(x, y);
+                    dy = abs(y - center);
+                    if (inverse) {
+                        newx = static_cast<int>((x - cos(static_cast<float>(dy) / center) * factor) + (factor * 0.75f));
+                    } else {
+                        newx = static_cast<int>((x + cos(static_cast<float>(dy) / center) * factor) - (factor * 0.75f));
+                    }
+                    if (newx >= width) newx = width - 1;
+                    if (newx < 0) newx = 0;
+                    newy = y;
+                    img2.set(newx, newy, point);
+                }
+            }
+            LOGI("correctBottle - Finished first for under if.");
+        } else {
+            center = static_cast<int>(width / 2.0);
+            factor = static_cast<float>(center) / 7.6;
+            LOGI("correctBottle - Applying vertical correction. Center: " << center << ", Factor: " << factor);
 
-		for (int x = 0; x < width; x++) {
-			for (int y = 0; y < height; y++) {
-				point = img.get(x, y);
-				dy = abs(y - center);
-				if (inverse) {
-					newx = (x - cos((float)dy / center) * factor) + (factor * 0.75f);
-				}
-				else {
-					newx = (x + cos((float)dy / center) * factor) - (factor * 0.75f);
-				}
-				if (newx >= width) newx = width - 1;
-				if (newx < 0) newx = 0;
-				newy = y;
-				img2.set(newx, newy, point);
-			}
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    point = img.get(x, y);
+                    dy = abs(x - center);
+                    if (inverse) {
+                        newy = static_cast<int>((y - cos(static_cast<float>(dy) / center) * factor) + (factor * 0.75f));
+                    } else {
+                        newy = static_cast<int>((y + cos(static_cast<float>(dy) / center) * factor) - (factor * 0.75f));
+                    }
+                    if (newy >= height) newy = height - 1;
+                    if (newy < 0) newy = 0;
+                    newx = x;
+                    img2.set(newx, newy, point);
+                }
+            }
+        }
+        LOGI("correctBottle - Finished first for under else.");
 
-		}
-	}
-	else {
-
-
-		center = (int)(width / 2.0);
-		factor = (float)center / 7.6;
-
-
-		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
-				point = img.get(x, y);
-				dy = abs(x - center);
-				if (inverse) {
-					newy = (y - cos((float)dy / center) * factor) + (factor * 0.75f);
-				}
-				else {
-					newy = (y + cos((float)dy / center) * factor) - (factor * 0.75f);
-				}
-				if (newy >= height) newy = height - 1;
-				if (newy < 0) newy = 0;
-				newx = x;
-				img2.set(newx, newy, point);
-			}
-
-		}
-
-
-	}
-
-
-	img = img2.copy();
-
-}
+        img = img2.copy();
+        LOGI("correctBottle - Correction process completed.");
+    }
 
 
 
@@ -997,7 +1074,7 @@ void rotate45(BitMatrix& img) {
 
 	int centRow = rows / 2;
 	int centCol = cols / 2;
-		
+
 	//��������� ��� angle �� 0 �� 90
 	float maxRow = centRow + (rows - centRow) * cos(rad) - (0 - centCol) * sin(rad);
 	float maxCol = centCol + (cols - centCol) * cos(rad) + (rows - centRow) * sin(rad);
@@ -1009,7 +1086,7 @@ void rotate45(BitMatrix& img) {
 	if (c < cols) c1 = cols; else c1 = c;
 	s = r1 / 40;
 	if (s < 20) s = 20;//�����������, �� ����� ��������
-	
+
 	BitMatrix img2 = BitMatrix(r1, c1);
 
 		for (int i = 0; i < r1; i++)
@@ -1048,7 +1125,7 @@ void rotate45(BitMatrix& img) {
 
 						}
 						catch (...) {}
-						
+
 
 
 					}
@@ -1058,9 +1135,9 @@ void rotate45(BitMatrix& img) {
 
 			}
 		}
-		
-	
-	img = img2.copy();	
+
+
+	img = img2.copy();
 
 }
 
@@ -1079,7 +1156,7 @@ void line2(BitMatrix& img, int x1, int y1, int x2, int y2) {
 	int error = deltaX - deltaY;
 
 	if ((x1 < 0) || (y1 < 0) || (x2 < 0) || (y2 < 0) || (x1 >= img.width()) || (x2 >= img.width()) || (y1 >= img.height()) || (y2 >= img.height())) return;
-	
+
 	img.set(x2, y2, true);
 	while (x1 != x2 || y1 != y2)
 	{
@@ -1088,9 +1165,9 @@ void line2(BitMatrix& img, int x1, int y1, int x2, int y2) {
 			img.set(x1, y1, true);
 			img.set(x1 + 1, y1 + 1, true);
 		}
-		
+
 		int error2 = error * 2;
-		
+
 		if (error2 > -deltaY)
 		{
 			error -= deltaY;
@@ -1109,82 +1186,84 @@ void line2(BitMatrix& img, int x1, int y1, int x2, int y2) {
 
 
 
-static DetectorResult DetectCRPT(const BitMatrix& image)
-{
+    static DetectorResult DetectCRPT(const BitMatrix& image)
+    {
+        LOGI("DetectCRPT - Starting detection.");
 
-	/*ResultPoint p1(0, 0);
-	ResultPoint p2(0, 0);
-	ResultPoint p3(0, 0);
-	ResultPoint p4(0, 0);
-	createBitmapFromBitMatrix(image, p1, p2, p3, p4);*/
+        BitMatrix newimage = image.copy();
+        ResultPoint pointA, pointB, pointC, pointD;
 
-	BitMatrix newimage = image.copy();
-	ResultPoint pointA, pointB, pointC, pointD;
+        if (!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {
+            LOGI("DetectCRPT - No white rectangle detected, rotating 45 degrees.");
+            rotate45(newimage);
+            if (!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {
+                LOGI("DetectCRPT - No white rectangle detected after rotation, returning empty result.");
+                return {};
+            }
+        }
 
+        LOGI("DetectCRPT - White rectangle detected.");
 
-	if (!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {		
-		rotate45(newimage);
-		//createBitmapFromBitMatrix(newimage, p1, p2, p3, p4);
-		if (!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) return {};
-	
-	}
-		
+        std::array transitions = {
+                TransitionsBetween(newimage, pointA, pointB),
+                TransitionsBetween(newimage, pointA, pointC),
+                TransitionsBetween(newimage, pointB, pointD),
+                TransitionsBetween(newimage, pointC, pointD),
+        };
 
-	std::array transitions = {
-		TransitionsBetween(newimage, pointA, pointB),
-		TransitionsBetween(newimage, pointA, pointC),
-		TransitionsBetween(newimage, pointB, pointD),
-		TransitionsBetween(newimage, pointC, pointD),
-	};
+        std::sort(transitions.begin(), transitions.end(),
+                  [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
 
-	std::sort(transitions.begin(), transitions.end(),
-		[](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+        LOGI("DetectCRPT - Transitions sorted by number of transitions.");
 
+        DetectorResult res;
+        int n1, n2;
 
-	DetectorResult res;
-	int n1, n2;
+        for (int i = 0; i < 3; i++) {
+            if (i == 0) { n1 = 0; n2 = 1; }
+            if (i == 1) { n1 = 0; n2 = 2; }
+            if (i == 2) { n1 = 1; n2 = 2; }
 
-	//���������� L �� ���� ��������� �� image � ������� DetectNew ��� ������� (��� � ������ L ���� ����������� � ���� �����)
-	for (int i = 0; i < 3; i++) {
-		if (i == 0) { n1 = 0; n2 = 1; }
-		if (i == 1) { n1 = 0; n2 = 2; }
-		if (i == 2) { n1 = 1; n2 = 2; }
+            BitMatrix img2 = newimage.copy();
+            line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
+            line2(img2, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
 
-		BitMatrix img2 = newimage.copy();
-		line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
-		line2(img2, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
-			
-		res = DetectNew(img2, true, true);
-		if (!res.isValid()) continue;
-		if (Decode(res.bits()).isValid()) return res;
+            res = DetectNew(img2, true, true);
+            if (!res.isValid()) {
+                LOGI("DetectCRPT - Detection invalid for iteration " << i);
+                continue;
+            }
+            if (Decode(res.bits()).isValid()) {
+                LOGI("DetectCRPT - Successful decode for iteration " << i);
+                return res;
+            }
+        }
 
-	} //i 
+        for (int i = 0; i < 4; i++) {
+            BitMatrix img2 = newimage.copy();
+            n1 = 0; n2 = 1;
 
+            if (i == 0) { correctBottle(img2, false, false);}
+            if (i == 1) { correctBottle(img2, false, true);}
+            if (i == 2) { correctBottle(img2, true, false);}
+            if (i == 3) { correctBottle(img2, true, true);}
 
-	//������������ �������������� �������� �������, 4 ��������: �����������/���������+��������
-	//� ���� ����� ������������ ���3, L1, ������� � �.�, �������� ����������� �� � ��������
-	for (int i = 0; i < 4; i++) {
-		BitMatrix img2 = newimage.copy();
-		n1 = 0; n2 = 1;
+            LOGI("DetectCRPT - Going to DetectNew" << i);
+            res = DetectNew(img2, true, true);
+            LOGI("DetectCRPT - Exited DetectNew" << i);
+            if (!res.isValid()) {
+                LOGI("DetectCRPT - Correction invalid for iteration " << i);
+                continue;
+            }
+            if (Decode(res.bits()).isValid()) {
+                LOGI("DetectCRPT - Successful decode after correction for iteration " << i);
+                return res;
+            }
+        }
 
-		if (i == 0) { correctBottle(img2, false, false);}
-		if (i == 1) { correctBottle(img2, false, true);}
-		if (i == 2) { correctBottle(img2, true, false);}
-		if (i == 3) { correctBottle(img2, true, true);}
-						
-		res = DetectNew(img2, true, true);
-		if (!res.isValid()) continue;
-		if (Decode(res.bits()).isValid()) return res;	
-
-	} //i 
-
-
-
-	
-
-	return res;
-}
-
+        LOGI("DetectCRPT - Detection completed without success.");
+        return res;
+    }
 
 
 

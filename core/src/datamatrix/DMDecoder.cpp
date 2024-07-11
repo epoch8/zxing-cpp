@@ -27,7 +27,7 @@
 #include <iostream>
 
 //#include <android/log.h>
-//#include <sstream>
+#include <sstream>
 namespace ZXing::DataMatrix {
 
 /**
@@ -303,7 +303,7 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 		while (!done && bits.available() >= 8) {
 
 	  int oneByte = bits.readBits(8);
-	  //__android_log_print(ANDROID_LOG_INFO, "ZXING", "Byte: %d", oneByte);
+//	  __android_log_print(ANDROID_LOG_INFO, "ZXING", "Byte: %d", oneByte);
 
 			switch (oneByte) {
 			case 0: done = true; break;//throw FormatError("invalid 0 code word");
@@ -389,14 +389,14 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 * @param numDataCodewords number of codewords that are data bytes
 * @return false if error correction fails
 */
-// template<typename T>
-// std::string VectorToString(const std::vector<T>& vector) {
-//     std::ostringstream oss;
-//     for (const auto& value : vector) {
-//         oss << value << " ";
-//     }
-//     return oss.str();
-// }
+ template<typename T>
+ std::string VectorToString(const std::vector<T>& vector) {
+     std::ostringstream oss;
+     for (const auto& value : vector) {
+         oss << value << " ";
+     }
+     return oss.str();
+ }
 
 static bool
 CorrectErrors(ByteArray& codewordBytes, int numDataCodewords)
@@ -404,10 +404,10 @@ CorrectErrors(ByteArray& codewordBytes, int numDataCodewords)
 	// First read into an array of ints
 	std::vector<int> codewordsInts(codewordBytes.begin(), codewordBytes.end());
 	int numECCodewords = Size(codewordBytes) - numDataCodewords;
-	//__android_log_print(ANDROID_LOG_INFO, "CORRECT_ERRORS", "Before correction: %s", VectorToString(codewordsInts).c_str());
+//	__android_log_print(ANDROID_LOG_INFO, "CORRECT_ERRORS", "Before correction: %s", VectorToString(codewordsInts).c_str());
 	if (!ReedSolomonDecode(GenericGF::DataMatrixField256(), codewordsInts, numECCodewords))
 		return false;
-	//__android_log_print(ANDROID_LOG_INFO, "CORRECT_ERRORS", "After correction: %s", VectorToString(codewordsInts).c_str());
+//	__android_log_print(ANDROID_LOG_INFO, "CORRECT_ERRORS", "After correction: %s", VectorToString(codewordsInts).c_str());
 
 	// Copy back into array of bytes -- only need to worry about the bytes that were data
 	// We don't care about errors in the error-correction codewords
@@ -420,43 +420,43 @@ static DecoderResult DoDecode(const BitMatrix& bits)
 {
 	// Construct a parser and read version, error-correction level
 	const Version* version = VersionForDimensionsOf(bits);
-	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "1");
+//	__android_log_print(ANDROID_LOG_INFO, "DODECODE", "1");
 	if (version == nullptr){
-		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "2");
+//		__android_log_print(ANDROID_LOG_INFO, "DODECODE", "2");
 		return FormatError("Invalid matrix dimension");}
-	
-	//__android_log_print(ANDROID_LOG_INFO, "Version", "Version %d", version->versionNumber);
+
+//	__android_log_print(ANDROID_LOG_INFO, "Version", "Version %d", version->versionNumber);
 
 	// Read codewords
 	ByteArray codewords = CodewordsFromBitMatrix(bits, *version);
-	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "3");
+//	__android_log_print(ANDROID_LOG_INFO, "DODECODE", "3");
 	if (codewords.empty()){
-		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "4");
+//		__android_log_print(ANDROID_LOG_INFO, "DODECODE", "4");
 		return FormatError("Invalid number of code words");}
 
 	bool fix259 = false; // see https://github.com/zxing-cpp/zxing-cpp/issues/259
 retry:
 	// Separate into data blocks
 	std::vector<DataBlock> dataBlocks = GetDataBlocks(codewords, *version, fix259);
-	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "5");
+//	__android_log_print(ANDROID_LOG_INFO, "DODECODE", "5");
 	if (dataBlocks.empty()){
-		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "6");
+//		__android_log_print(ANDROID_LOG_INFO, "DODECODE", "6");
 		return FormatError("Invalid number of data blocks");}
 
 	// Count total number of data bytes
 	ByteArray resultBytes(TransformReduce(dataBlocks, 0, [](const auto& db) { return db.numDataCodewords; }));
-	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "7");
+//	__android_log_print(ANDROID_LOG_INFO, "DODECODE", "7");
 	// Error-correct and copy data blocks together into a stream of bytes
 	const int dataBlocksCount = Size(dataBlocks);
-	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "8");
+//	__android_log_print(ANDROID_LOG_INFO, "DODECODE", "8");
 	for (int j = 0; j < dataBlocksCount; j++) {
-		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "9");
+//		__android_log_print(ANDROID_LOG_INFO, "DODECODE", "9");
 		auto& [numDataCodewords, codewords] = dataBlocks[j];
-		//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "10");
+//		__android_log_print(ANDROID_LOG_INFO, "DODECODE", "10");
 		if (!CorrectErrors(codewords, numDataCodewords)) {
-			//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "11");
+//			__android_log_print(ANDROID_LOG_INFO, "DODECODE", "11");
 			if(version->versionNumber == 24 && !fix259) {
-				//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "12");
+//				__android_log_print(ANDROID_LOG_INFO, "DODECODE", "12");
 				fix259 = true;
 				goto retry;
 			}
@@ -468,7 +468,7 @@ retry:
 			resultBytes[i * dataBlocksCount + j] = codewords[i];
 		}
 	}
-	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "13");
+//	__android_log_print(ANDROID_LOG_INFO, "DODECODE", "13");
 #ifdef PRINT_DEBUG
 	if (fix259){
 	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "14");
@@ -476,7 +476,7 @@ retry:
 #endif
 
 	// Decode the contents of that stream of bytes
-	//__android_log_print(ANDROID_LOG_INFO, "DODECODE", "15");
+//	__android_log_print(ANDROID_LOG_INFO, "DODECODE", "15");
 	return DecodedBitStreamParser::Decode(std::move(resultBytes), version->isDMRE())
 		.setVersionNumber(version->versionNumber);
 }
@@ -493,16 +493,16 @@ static BitMatrix FlippedL(const BitMatrix& bits)
 DecoderResult Decode(const BitMatrix& bits)
 {
 
-	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "Start decode");
+//	__android_log_print(ANDROID_LOG_INFO, "ZXING", "Start decode");
 	if (bits.width() == 0 || bits.height() == 0) return FormatError("Empty DM");
 
 	try{
-	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "BitMatrix width: %d, height: %d", bits.width(), bits.height());
+//	__android_log_print(ANDROID_LOG_INFO, "ZXING", "BitMatrix width: %d, height: %d", bits.width(), bits.height());
 
 	auto res = DoDecode(bits);
-	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "Made decode");
+//	__android_log_print(ANDROID_LOG_INFO, "ZXING", "Made decode");
 	if (res.isValid()){
-		//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
+//		__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
 		return res;}
 
 	//TODO:
@@ -510,17 +510,17 @@ DecoderResult Decode(const BitMatrix& bits)
 	// * rectangular symbols with the a size of 8 x Y are not supported a.t.m.
 	if (auto mirroredRes = DoDecode(FlippedL(bits)); mirroredRes.isValid()) {
 		mirroredRes.setIsMirrored(true);
-		//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
+//		__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
 		return mirroredRes;
 	}
 
 	return res;}
 	catch (...) {
-		//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
+//		__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
 		return FormatError("Empty DM");
 	}
 
-	//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
+//	__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
 }
 
 } // namespace ZXing::DataMatrix
