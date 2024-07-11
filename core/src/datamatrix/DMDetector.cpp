@@ -584,6 +584,17 @@ public:
 		return true;
 	}
 
+	bool updateDirectionFromLine(RegressionLine& line)
+	{
+		return line.evaluate(1.5) && updateDirectionFromOrigin(p - line.project(p) + line.points().front());
+	}
+
+	bool updateDirectionFromLineCentroid(RegressionLine& line)
+	{
+		// Basically a faster, less accurate version of the above without the line evaluation
+		return updateDirectionFromOrigin(line.centroid());
+	}
+	
 	bool traceLine(PointF dEdge, RegressionLine& line)
 	{
 		line.setDirectionInward(dEdge);
@@ -602,14 +613,15 @@ public:
 		} while (true);
 	}
 
-	bool traceGaps(PointF dEdge, RegressionLine& line, int maxStepSize, const RegressionLine& finishLine = {})
+	bool traceGaps(PointF dEdge, RegressionLine& line, int maxStepSize, const RegressionLine& finishLine = {}, double minDist = 0)
 	{
 		line.setDirectionInward(dEdge);
-		int gaps = 0;
+		int gaps = 0, steps = 0, maxStepsPerGap = maxStepSize;
+		PointF lastP;
 		do {
 			// detect an endless loop (lack of progress). if encountered, please report.
-			assert(line.points().empty() || p != line.points().back());
-			if (!line.points().empty() && p == line.points().back())
+			// this fixes a deadlock in falsepositives-1/#570.png and the regression in #574
+			if (p == std::exchange(lastP, p) || steps++ > (gaps == 0 ? 2 : gaps + 1) * maxStepsPerGap)
 				return false;
 			log(p);
 
@@ -642,29 +654,27 @@ public:
 				p = centered(np);
 			}
 			else {
-				auto stepLengthInMainDir = line.points().empty() ? 0.0 : dot(mainDirection(d), (p - line.points().back()));
+				auto curStep = line.points().empty() ? PointF() : p - line.points().back();
+				auto stepLengthInMainDir = line.points().empty() ? 0.0 : dot(mainDirection(d), curStep);
 				line.add(p);
 
-				if (stepLengthInMainDir > 1) {
+				if (stepLengthInMainDir > 1 || maxAbsComponent(curStep) >= 2) {
 					++gaps;
 					if (gaps >= 2 || line.points().size() > 5) {
-						if (!line.evaluate(1.5))
-							return false;
-						if (!updateDirectionFromOrigin(p - line.project(p) + line.points().front()))
+						if (!updateDirectionFromLine(line))
 							return false;
 						// check if the first half of the top-line trace is complete.
 						// the minimum code size is 10x10 -> every code has at least 4 gaps
-						//TODO: maybe switch to termination condition based on bottom line length to get a better
-						// finishLine for the right line trace
-						if (!finishLine.isValid() && gaps == 4) {
+						if (minDist && gaps >= 4 && distance(p, line.points().front()) > minDist) {
 							// undo the last insert, it will be inserted again after the restart
 							line.pop_back();
 							--gaps;
 							return true;
 						}
 					}
-				} else if (gaps == 0 && line.points().size() >= static_cast<size_t>(2 * maxStepSize))
+				} else if (gaps == 0 && Size(line.points()) >= 2 * maxStepSize) {
 					return false; // no point in following a line that has no gaps
+				}
 			}
 
 			if (finishLine.isValid())
@@ -678,6 +688,7 @@ public:
 					   static_cast<int>(finishLine.signedDistance(p)) <= maxStepSize + 1;
 		} while (true);
 	}
+
 
 	bool traceCorner(PointF dir, PointF& corner)
 	{
@@ -718,29 +729,27 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		
 		log(startTracer.p);
 
-		logMessage("Scan2");
+
 		PointF tl, bl, br, tr;
 		auto& [lineL, lineB, lineR, lineT] = lines;
 
-		logMessage("Scan3");
 		for (auto& l : lines) {
 			l.reset();
 		}
 			
 
-		logMessage("Scan4");
+
 #ifdef PRINT_DEBUG
 
-		SCOPE_EXIT([&] {
-			for (auto& l : lines)
-				log(l.points());
-		});
-# define CHECK(A) if (!(A)) { logMessage("Scan41"); printf("broke at %d\n", __LINE__); continue; }
+		// SCOPE_EXIT([&] {
+		// 	for (auto& l : lines)
+		// 		log(l.points());
+		// });
+# define CHECK(A) if (!(A)) { printf("broke at %d\n", __LINE__); continue; }
 #else
-# define CHECK(A) if(!(A)) {logMessage("Scan42"); continue;}
+# define CHECK(A) if(!(A)) {continue;}
 #endif
 
-		logMessage("Scan5");
 		auto t = startTracer;
 
 		// follow left leg upwards
@@ -785,8 +794,8 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		// at this point we found a plausible L-shape and are now looking for the b/w pattern at the top and right:
 		// follow top row right 'half way' (4 gaps), see traceGaps break condition with 'invalid' line
 		tlTracer.setDirection(right);
-		CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize));
 
+		CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize, {}, lenB / 2));
 
 		maxStepSize = std::min(lineT.length() / 3, static_cast<int>(lenL / 5)) * 2;
 
@@ -868,6 +877,7 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 
 		CHECK(res.isValid());
 
+		//logMessage("Scan end");
 		return res;
 	}
 
@@ -1163,10 +1173,10 @@ static DetectorResult DetectCRPT(const BitMatrix& image)
 		BitMatrix img2 = newimage.copy();
 		n1 = 0; n2 = 1;
 
-		if (i == 0) { logMessage("correctBottle 0"); correctBottle(img2, false, false);}
-		if (i == 1) { logMessage("correctBottle 1"); correctBottle(img2, false, true);}
-		if (i == 2) { logMessage("correctBottle 2"); correctBottle(img2, true, false);}
-		if (i == 3) { logMessage("correctBottle 3"); correctBottle(img2, true, true);}
+		if (i == 0) { correctBottle(img2, false, false);}
+		if (i == 1) { correctBottle(img2, false, true);}
+		if (i == 2) { correctBottle(img2, true, false);}
+		if (i == 3) { correctBottle(img2, true, true);}
 						
                         
         //logMessage("DetectNew");

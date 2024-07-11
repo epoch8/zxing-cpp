@@ -8,7 +8,6 @@
 
 #include "BitMatrix.h"
 #include "BitSource.h"
-#include "CharacterSet.h"
 #include "DMBitLayout.h"
 #include "DMDataBlock.h"
 #include "DMVersion.h"
@@ -299,6 +298,12 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 	// int firstFNC1Position = 1;
 	Shift128 upperShift;
 
+	auto setError = [&error](Error&& e) {
+		// return only the first error but keep on decoding if possible
+		if (!error)
+			error = std::move(e);
+	};
+
 	// See ISO 16022:2006, 5.2.3 and Annex C, Table C.2
 	try {
 		while (!done && bits.available() >= 8) {
@@ -330,15 +335,13 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 				break;
 			case 233: // Structured Append
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.6.1
-					////logMessage("err1");
-					throw FormatError("structured append tag must be first code word");
+					setError(FormatError("structured append tag must be first code word"));
 				ParseStructuredAppend(bits, sai);
 				// firstFNC1Position = 5;
 				break;
 			case 234: // Reader Programming
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.2.4.9
-					//logMessage("err2");
-					throw FormatError("reader programming tag must be first code word");
+					setError(FormatError("reader programming tag must be first code word"));
 				readerInit = true;
 				break;
 			case 235: upperShift.set = true; break; // Upper Shift (shift to Extended ASCII)
@@ -363,14 +366,14 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 					// work around encoders that use unlatch to ASCII as last code word (ask upstream)
 					if (oneByte == 254 && bits.available() == 0)
 						break;
-					//logMessage("err3");
-					throw FormatError("invalid code word");
+					setError(FormatError("invalid code word"));
+					break;
 				}
 			}
 			firstCodeword = false;
 		}
 	} catch (Error e) {
-		error = std::move(e);
+		setError(std::move(e));
 	}
 
 	result.append(resultTrailer);
@@ -528,8 +531,7 @@ DecoderResult Decode(const BitMatrix& bits)
 	//TODO:
 	// * unify bit mirroring helper code with QRReader?
 	// * rectangular symbols with the a size of 8 x Y are not supported a.t.m.
-	if (auto mirroredRes = DoDecode(FlippedL(bits)); mirroredRes.isValid()) {
-		//logMessage("try 2");
+	if (auto mirroredRes = DoDecode(FlippedL(bits)); mirroredRes.error().type() != Error::Checksum) {
 		mirroredRes.setIsMirrored(true);
 		//__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
 		return mirroredRes;
