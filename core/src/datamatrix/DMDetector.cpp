@@ -1346,55 +1346,55 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
 
 
 	//MY DETECTOR
-	std::vector<double> cornersAsVector;
+	// std::vector<double> cornersAsVector;
 
-	detRes = DetectNew(image, tryHarder, tryRotate, true, false);
-	outDecoderResult = Decode(detRes.bits());
-	if (outDecoderResult.isValid()) {
-		return detRes;
-	}
+	// detRes = DetectNew(image, tryHarder, tryRotate, true, false);
+	// outDecoderResult = Decode(detRes.bits());
+	// if (outDecoderResult.isValid()) {
+	// 	return detRes;
+	// }
 
-	detRes = DetectNew(image, tryHarder, tryRotate, true, true);
-	outDecoderResult = Decode(detRes.bits());
-	if (outDecoderResult.isValid()) {
-		return detRes;
-	}
+	// detRes = DetectNew(image, tryHarder, tryRotate, true, true);
+	// outDecoderResult = Decode(detRes.bits());
+	// if (outDecoderResult.isValid()) {
+	// 	return detRes;
+	// }
 
-	// for (int dim = 8; dim <= 44; dim+=2) {
-	for (int dim : CommonMatrixDimensions) {
+	// // for (int dim = 8; dim <= 44; dim+=2) {
+	// for (int dim : CommonMatrixDimensions) {
 
-		PointF P[] = {P0, P1, P2, P3};
-		CorrectCorners(image, P[0], P[1], P[2], P[3], dim);
-		int rotateSteps = FindRotation(image, P[0], P[1], P[2], P[3], dim);
-		if(rotateSteps > 0) {
-			PointF PP[4];
-			std::copy(P, &P[4], PP);
-			for(int i = 4; i--;) {
-				P[(i+rotateSteps) % 4] = PP[i];
-			}
-		}
-		//DEBUG DRAW
+	// 	PointF P[] = {P0, P1, P2, P3};
+	// 	CorrectCorners(image, P[0], P[1], P[2], P[3], dim);
+	// 	int rotateSteps = FindRotation(image, P[0], P[1], P[2], P[3], dim);
+	// 	if(rotateSteps > 0) {
+	// 		PointF PP[4];
+	// 		std::copy(P, &P[4], PP);
+	// 		for(int i = 4; i--;) {
+	// 			P[(i+rotateSteps) % 4] = PP[i];
+	// 		}
+	// 	}
+	// 	//DEBUG DRAW
 
-		auto postfix = std::to_string(dim);
+	// 	auto postfix = std::to_string(dim);
 
-		// cornersAsVector = {P[0].x, P[0].y, P[1].x, P[1].y, P[2].x, P[2].y, P[3].x, P[3].y};
-		// drawDebugImageWithLines(image, filename, cornersAsVector);
+	// 	// cornersAsVector = {P[0].x, P[0].y, P[1].x, P[1].y, P[2].x, P[2].y, P[3].x, P[3].y};
+	// 	// drawDebugImageWithLines(image, filename, cornersAsVector);
 
-		//END DEBUG DRAW
+	// 	//END DEBUG DRAW
 
-		auto&& [TL, BL, BR, TR] = P;
+	// 	auto&& [TL, BL, BR, TR] = P;
 
-		detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim);
-		if (detRes.isValid()) {
-			outDecoderResult = Decode(detRes.bits());
-			if (outDecoderResult.isValid()) {
-				// cornersAsVector = {P[0].y, P[0].x, P[1].y, P[1].x, P[2].y, P[2].x, P[3].y, P[3].x};
-				// drawDebugImageWithLines(image, postfix, cornersAsVector);
-				// drawDebugImage(detRes.bits(), postfix);
-				return detRes;
-			}
-		}
-	}
+	// 	detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim);
+	// 	if (detRes.isValid()) {
+	// 		outDecoderResult = Decode(detRes.bits());
+	// 		if (outDecoderResult.isValid()) {
+	// 			// cornersAsVector = {P[0].y, P[0].x, P[1].y, P[1].x, P[2].y, P[2].x, P[3].y, P[3].x};
+	// 			// drawDebugImageWithLines(image, postfix, cornersAsVector);
+	// 			// drawDebugImage(detRes.bits(), postfix);
+	// 			return detRes;
+	// 		}
+	// 	}
+	// }
 	//#MY DETECTOR
 
 	return {};
