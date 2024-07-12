@@ -593,6 +593,17 @@ public:
 		return true;
 	}
 
+	bool updateDirectionFromLine(RegressionLine& line)
+	{
+		return line.evaluate(1.5) && updateDirectionFromOrigin(p - line.project(p) + line.points().front());
+	}
+
+	bool updateDirectionFromLineCentroid(RegressionLine& line)
+	{
+		// Basically a faster, less accurate version of the above without the line evaluation
+		return updateDirectionFromOrigin(line.centroid());
+	}
+
 	bool traceLine(PointF dEdge, RegressionLine& line)
 	{
 		line.setDirectionInward(dEdge);
@@ -611,82 +622,81 @@ public:
 		} while (true);
 	}
 
-	bool traceGaps(PointF dEdge, RegressionLine& line, int maxStepSize, const RegressionLine& finishLine = {})
-	{
-		line.setDirectionInward(dEdge);
-		int gaps = 0;
-		do {
-			// detect an endless loop (lack of progress). if encountered, please report.
-			assert(line.points().empty() || p != line.points().back());
-			if (!line.points().empty() && p == line.points().back())
-				return false;
-			log(p);
+    bool traceGaps(PointF dEdge, RegressionLine& line, int maxStepSize, const RegressionLine& finishLine = {}, double minDist = 0)
+    {
+        line.setDirectionInward(dEdge);
+        int gaps = 0, steps = 0, maxStepsPerGap = maxStepSize;
+        PointF lastP;
+        do {
+            // detect an endless loop (lack of progress). if encountered, please report.
+            // this fixes a deadlock in falsepositives-1/#570.png and the regression in #574
+            if (p == std::exchange(lastP, p) || steps++ > (gaps == 0 ? 2 : gaps + 1) * maxStepsPerGap)
+                return false;
+            log(p);
 
-			// if we drifted too far outside of the code, break
-			if (line.isValid() && line.signedDistance(p) < -5 && (!line.evaluate() || line.signedDistance(p) < -5))
-				return false;
+            // if we drifted too far outside of the code, break
+            if (line.isValid() && line.signedDistance(p) < -5 && (!line.evaluate() || line.signedDistance(p) < -5))
+                return false;
 
-			// if we are drifting towards the inside of the code, pull the current position back out onto the line
-			if (line.isValid() && line.signedDistance(p) > 3) {
-				// The current direction d and the line we are tracing are supposed to be roughly parallel.
-				// In case the 'go outward' step in traceStep lead us astray, we might end up with a line
-				// that is almost perpendicular to d. Then the back-projection below can result in an
-				// endless loop. Break if the angle between d and line is greater than 45 deg.
-				if (std::abs(dot(normalized(d), line.normal())) > 0.7) // thresh is approx. sin(45 deg)
-					return false;
+            // if we are drifting towards the inside of the code, pull the current position back out onto the line
+            if (line.isValid() && line.signedDistance(p) > 3) {
+                // The current direction d and the line we are tracing are supposed to be roughly parallel.
+                // In case the 'go outward' step in traceStep lead us astray, we might end up with a line
+                // that is almost perpendicular to d. Then the back-projection below can result in an
+                // endless loop. Break if the angle between d and line is greater than 45 deg.
+                if (std::abs(dot(normalized(d), line.normal())) > 0.7) // thresh is approx. sin(45 deg)
+                    return false;
 
-				// re-evaluate line with all the points up to here before projecting
-				if (!line.evaluate(1.5))
-					return false;
+                // re-evaluate line with all the points up to here before projecting
+                if (!line.evaluate(1.5))
+                    return false;
 
-				auto np = line.project(p);
-				// make sure we are making progress even when back-projecting:
-				// consider a 90deg corner, rotated 45deg. we step away perpendicular from the line and get
-				// back projected where we left off the line.
-				// The 'while' instead of 'if' was introduced to fix the issue with #245. It turns out that
-				// np can actually be behind the projection of the last line point and we need 2 steps in d
-				// to prevent a dead lock. see #245.png
-				while (distance(np, line.project(line.points().back())) < 1)
-					np = np + d;
-				p = centered(np);
-			}
-			else {
-				auto stepLengthInMainDir = line.points().empty() ? 0.0 : dot(mainDirection(d), (p - line.points().back()));
-				line.add(p);
+                auto np = line.project(p);
+                // make sure we are making progress even when back-projecting:
+                // consider a 90deg corner, rotated 45deg. we step away perpendicular from the line and get
+                // back projected where we left off the line.
+                // The 'while' instead of 'if' was introduced to fix the issue with #245. It turns out that
+                // np can actually be behind the projection of the last line point and we need 2 steps in d
+                // to prevent a dead lock. see #245.png
+                while (distance(np, line.project(line.points().back())) < 1)
+                    np = np + d;
+                p = centered(np);
+            }
+            else {
+                auto curStep = line.points().empty() ? PointF() : p - line.points().back();
+                auto stepLengthInMainDir = line.points().empty() ? 0.0 : dot(mainDirection(d), curStep);
+                line.add(p);
 
-				if (stepLengthInMainDir > 1) {
-					++gaps;
-					if (gaps >= 2 || line.points().size() > 5) {
-						if (!line.evaluate(1.5))
-							return false;
-						if (!updateDirectionFromOrigin(p - line.project(p) + line.points().front()))
-							return false;
-						// check if the first half of the top-line trace is complete.
-						// the minimum code size is 10x10 -> every code has at least 4 gaps
-						//TODO: maybe switch to termination condition based on bottom line length to get a better
-						// finishLine for the right line trace
-						if (!finishLine.isValid() && gaps == 4) {
-							// undo the last insert, it will be inserted again after the restart
-							line.pop_back();
-							--gaps;
-							return true;
-						}
-					}
-				} else if (gaps == 0 && line.points().size() >= static_cast<size_t>(2 * maxStepSize))
-					return false; // no point in following a line that has no gaps
-			}
+                if (stepLengthInMainDir > 1 || maxAbsComponent(curStep) >= 2) {
+                    ++gaps;
+                    if (gaps >= 2 || line.points().size() > 5) {
+                        if (!updateDirectionFromLine(line))
+                            return false;
+                        // check if the first half of the top-line trace is complete.
+                        // the minimum code size is 10x10 -> every code has at least 4 gaps
+                        if (minDist && gaps >= 4 && distance(p, line.points().front()) > minDist) {
+                            // undo the last insert, it will be inserted again after the restart
+                            line.pop_back();
+                            --gaps;
+                            return true;
+                        }
+                    }
+                } else if (gaps == 0 && Size(line.points()) >= 2 * maxStepSize) {
+                    return false; // no point in following a line that has no gaps
+                }
+            }
 
-			if (finishLine.isValid())
-				UpdateMin(maxStepSize, static_cast<int>(finishLine.signedDistance(p)));
+            if (finishLine.isValid())
+                UpdateMin(maxStepSize, static_cast<int>(finishLine.signedDistance(p)));
 
-			auto stepResult = traceStep(dEdge, maxStepSize, line.isValid());
+            auto stepResult = traceStep(dEdge, maxStepSize, line.isValid());
 
-			if (stepResult != StepResult::FOUND)
-				// we are successful iff we found an open end across a valid finishLine
-				return stepResult == StepResult::OPEN_END && finishLine.isValid() &&
-					   static_cast<int>(finishLine.signedDistance(p)) <= maxStepSize + 1;
-		} while (true);
-	}
+            if (stepResult != StepResult::FOUND)
+                // we are successful iff we found an open end across a valid finishLine
+                return stepResult == StepResult::OPEN_END && finishLine.isValid() &&
+                       static_cast<int>(finishLine.signedDistance(p)) <= maxStepSize + 1;
+        } while (true);
+    }
 
 	bool traceCorner(PointF dir, PointF& corner)
 	{
@@ -778,7 +788,7 @@ static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine,
 		// at this point we found a plausible L-shape and are now looking for the b/w pattern at the top and right:
 		// follow top row right 'half way' (4 gaps), see traceGaps break condition with 'invalid' line
 		tlTracer.setDirection(right);
-		CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize));
+		CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize, {}, lenB / 2));
 
 		maxStepSize = std::min(lineT.length() / 3, static_cast<int>(lenL / 5)) * 2;
 
