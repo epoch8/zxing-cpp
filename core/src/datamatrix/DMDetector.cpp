@@ -593,34 +593,46 @@ namespace ZXing::DataMatrix {
             return true;
         }
 
-        bool traceLine(PointF dEdge, RegressionLine& line)
-        {
-            line.setDirectionInward(dEdge);
-            do {
-                log(p);
-                line.add(p);
-                if (line.points().size() % 50 == 10) {
-                    if (!line.evaluate())
-                        return false;
-                    if (!updateDirectionFromOrigin(p - line.project(p) + line.points().front()))
-                        return false;
-                }
-                auto stepResult = traceStep(dEdge, 1, line.isValid());
-                if (stepResult != StepResult::FOUND)
-                    return stepResult == StepResult::OPEN_END && line.points().size() > 1;
-            } while (true);
-        }
+	bool updateDirectionFromLine(RegressionLine& line)
+	{
+		return line.evaluate(1.5) && updateDirectionFromOrigin(p - line.project(p) + line.points().front());
+	}
 
-        bool traceGaps(PointF dEdge, RegressionLine& line, int maxStepSize, const RegressionLine& finishLine = {})
-        {
-            line.setDirectionInward(dEdge);
-            int gaps = 0;
-            do {
-                // detect an endless loop (lack of progress). if encountered, please report.
-                assert(line.points().empty() || p != line.points().back());
-                if (!line.points().empty() && p == line.points().back())
-                    return false;
-                log(p);
+	bool updateDirectionFromLineCentroid(RegressionLine& line)
+	{
+		// Basically a faster, less accurate version of the above without the line evaluation
+		return updateDirectionFromOrigin(line.centroid());
+	}
+
+	bool traceLine(PointF dEdge, RegressionLine& line)
+	{
+		line.setDirectionInward(dEdge);
+		do {
+			log(p);
+			line.add(p);
+			if (line.points().size() % 50 == 10) {
+				if (!line.evaluate())
+					return false;
+				if (!updateDirectionFromOrigin(p - line.project(p) + line.points().front()))
+					return false;
+			}
+			auto stepResult = traceStep(dEdge, 1, line.isValid());
+			if (stepResult != StepResult::FOUND)
+				return stepResult == StepResult::OPEN_END && line.points().size() > 1;
+		} while (true);
+	}
+
+    bool traceGaps(PointF dEdge, RegressionLine& line, int maxStepSize, const RegressionLine& finishLine = {}, double minDist = 0)
+    {
+        line.setDirectionInward(dEdge);
+        int gaps = 0, steps = 0, maxStepsPerGap = maxStepSize;
+        PointF lastP;
+        do {
+            // detect an endless loop (lack of progress). if encountered, please report.
+            // this fixes a deadlock in falsepositives-1/#570.png and the regression in #574
+            if (p == std::exchange(lastP, p) || steps++ > (gaps == 0 ? 2 : gaps + 1) * maxStepsPerGap)
+                return false;
+            log(p);
 
                 // if we drifted too far outside of the code, break
                 if (line.isValid() && line.signedDistance(p) < -5 && (!line.evaluate() || line.signedDistance(p) < -5))
@@ -639,42 +651,40 @@ namespace ZXing::DataMatrix {
                     if (!line.evaluate(1.5))
                         return false;
 
-                    auto np = line.project(p);
-                    // make sure we are making progress even when back-projecting:
-                    // consider a 90deg corner, rotated 45deg. we step away perpendicular from the line and get
-                    // back projected where we left off the line.
-                    // The 'while' instead of 'if' was introduced to fix the issue with #245. It turns out that
-                    // np can actually be behind the projection of the last line point and we need 2 steps in d
-                    // to prevent a dead lock. see #245.png
-                    while (distance(np, line.project(line.points().back())) < 1)
-                        np = np + d;
-                    p = centered(np);
-                }
-                else {
-                    auto stepLengthInMainDir = line.points().empty() ? 0.0 : dot(mainDirection(d), (p - line.points().back()));
-                    line.add(p);
+                auto np = line.project(p);
+                // make sure we are making progress even when back-projecting:
+                // consider a 90deg corner, rotated 45deg. we step away perpendicular from the line and get
+                // back projected where we left off the line.
+                // The 'while' instead of 'if' was introduced to fix the issue with #245. It turns out that
+                // np can actually be behind the projection of the last line point and we need 2 steps in d
+                // to prevent a dead lock. see #245.png
+                while (distance(np, line.project(line.points().back())) < 1)
+                    np = np + d;
+                p = centered(np);
+            }
+            else {
+                auto curStep = line.points().empty() ? PointF() : p - line.points().back();
+                auto stepLengthInMainDir = line.points().empty() ? 0.0 : dot(mainDirection(d), curStep);
+                line.add(p);
 
-                    if (stepLengthInMainDir > 1) {
-                        ++gaps;
-                        if (gaps >= 2 || line.points().size() > 5) {
-                            if (!line.evaluate(1.5))
-                                return false;
-                            if (!updateDirectionFromOrigin(p - line.project(p) + line.points().front()))
-                                return false;
-                            // check if the first half of the top-line trace is complete.
-                            // the minimum code size is 10x10 -> every code has at least 4 gaps
-                            //TODO: maybe switch to termination condition based on bottom line length to get a better
-                            // finishLine for the right line trace
-                            if (!finishLine.isValid() && gaps == 4) {
-                                // undo the last insert, it will be inserted again after the restart
-                                line.pop_back();
-                                --gaps;
-                                return true;
-                            }
+                if (stepLengthInMainDir > 1 || maxAbsComponent(curStep) >= 2) {
+                    ++gaps;
+                    if (gaps >= 2 || line.points().size() > 5) {
+                        if (!updateDirectionFromLine(line))
+                            return false;
+                        // check if the first half of the top-line trace is complete.
+                        // the minimum code size is 10x10 -> every code has at least 4 gaps
+                        if (minDist && gaps >= 4 && distance(p, line.points().front()) > minDist) {
+                            // undo the last insert, it will be inserted again after the restart
+                            line.pop_back();
+                            --gaps;
+                            return true;
                         }
-                    } else if (gaps == 0 && line.points().size() >= static_cast<size_t>(2 * maxStepSize))
-                        return false; // no point in following a line that has no gaps
+                    }
+                } else if (gaps == 0 && Size(line.points()) >= 2 * maxStepSize) {
+                    return false; // no point in following a line that has no gaps
                 }
+            }
 
                 if (finishLine.isValid())
                     UpdateMin(maxStepSize, static_cast<int>(finishLine.signedDistance(p)));
@@ -1308,6 +1318,79 @@ namespace ZXing::DataMatrix {
     }
 
     const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
+DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult)
+{
+
+	#ifdef __cpp_impl_coroutine
+		//OLD DETECTORS
+		detRes = DetectNew(image, tryHarder, tryRotate);
+		if (!detRes.isValid())
+			detRes = DetectCRPT(image.copy());
+
+		if (detRes.isValid()) {
+			outDecoderResult = Decode(detRes.bits());
+			if(outDecoderResult.isValid()) {
+				co_return detRes;
+			}
+		}
+		//#OLD DETECTORS
+
+		//OLD DETECTORS WITH MY SAMPLE GRID
+		detRes = DetectNew(image, tryHarder, tryRotate, true, true);
+		if (detRes.isValid()) {
+			outDecoderResult = Decode(detRes.bits());
+			if(outDecoderResult.isValid()) {
+				co_return detRes;
+			}
+		}
+		detRes = DetectCRPT(image.copy(), true, true);
+
+		if (detRes.isValid()) {
+			outDecoderResult = Decode(detRes.bits());
+			if(outDecoderResult.isValid()) {
+				co_return detRes;
+			}
+		}
+		//OLD DETECTORS WITH MY SAMPLE GRID
+		co_return {};
+	#else
+		DetectorResult detRes;
+
+		//OLD DETECTORS
+		detRes = DetectNew(image, tryHarder, tryRotate);
+		if (!detRes.isValid())
+			detRes = DetectCRPT(image.copy());
+
+		if (detRes.isValid()) {
+			outDecoderResult = Decode(detRes.bits());
+			if(outDecoderResult.isValid()) {
+				return detRes;
+			}
+		}
+		//#OLD DETECTORS
+
+		//OLD DETECTORS WITH MY SAMPLE GRID
+		detRes = DetectNew(image, tryHarder, tryRotate, true, true);
+		if (detRes.isValid()) {
+			outDecoderResult = Decode(detRes.bits());
+			if(outDecoderResult.isValid()) {
+				return detRes;
+			}
+		}
+		detRes = DetectCRPT(image.copy(), true, true);
+
+		if (detRes.isValid()) {
+			outDecoderResult = Decode(detRes.bits());
+			if(outDecoderResult.isValid()) {
+				return detRes;
+			}
+		}
+		//OLD DETECTORS WITH MY SAMPLE GRID
+		return {};
+	#endif
+}
+
+const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
 
     DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult)
     {
@@ -1347,21 +1430,35 @@ namespace ZXing::DataMatrix {
 
         //MY DETECTOR
         // std::vector<double> cornersAsVector;
+	//MY DETECTOR
+	std::vector<double> cornersAsVector;
 
         // detRes = DetectNew(image, tryHarder, tryRotate, true, false);
         // outDecoderResult = Decode(detRes.bits());
         // if (outDecoderResult.isValid()) {
         // 	return detRes;
         // }
+	detRes = DetectNew(image, tryHarder, tryRotate, true, false);
+	outDecoderResult = Decode(detRes.bits());
+	if (outDecoderResult.isValid()) {
+		return detRes;
+	}
 
         // detRes = DetectNew(image, tryHarder, tryRotate, true, true);
         // outDecoderResult = Decode(detRes.bits());
         // if (outDecoderResult.isValid()) {
         // 	return detRes;
         // }
+	detRes = DetectNew(image, tryHarder, tryRotate, true, true);
+	outDecoderResult = Decode(detRes.bits());
+	if (outDecoderResult.isValid()) {
+		return detRes;
+	}
 
         // // for (int dim = 8; dim <= 44; dim+=2) {
         // for (int dim : CommonMatrixDimensions) {
+	// for (int dim = 8; dim <= 44; dim+=2) {
+	for (int dim : CommonMatrixDimensions) {
 
         // 	PointF P[] = {P0, P1, P2, P3};
         // 	CorrectCorners(image, P[0], P[1], P[2], P[3], dim);
@@ -1374,15 +1471,31 @@ namespace ZXing::DataMatrix {
         // 		}
         // 	}
         // 	//DEBUG DRAW
+		PointF P[] = {P0, P1, P2, P3};
+		CorrectCorners(image, P[0], P[1], P[2], P[3], dim);
+		int rotateSteps = FindRotation(image, P[0], P[1], P[2], P[3], dim);
+		if(rotateSteps > 0) {
+			PointF PP[4];
+			std::copy(P, &P[4], PP);
+			for(int i = 4; i--;) {
+				P[(i+rotateSteps) % 4] = PP[i];
+			}
+		}
+		//DEBUG DRAW
 
         // 	auto postfix = std::to_string(dim);
+		auto postfix = std::to_string(dim);
 
         // 	// cornersAsVector = {P[0].x, P[0].y, P[1].x, P[1].y, P[2].x, P[2].y, P[3].x, P[3].y};
         // 	// drawDebugImageWithLines(image, filename, cornersAsVector);
+		// cornersAsVector = {P[0].x, P[0].y, P[1].x, P[1].y, P[2].x, P[2].y, P[3].x, P[3].y};
+		// drawDebugImageWithLines(image, filename, cornersAsVector);
 
         // 	//END DEBUG DRAW
+		//END DEBUG DRAW
 
         // 	auto&& [TL, BL, BR, TR] = P;
+		auto&& [TL, BL, BR, TR] = P;
 
         // 	detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim);
         // 	if (detRes.isValid()) {
@@ -1396,6 +1509,18 @@ namespace ZXing::DataMatrix {
         // 	}
         // }
         //#MY DETECTOR
+		detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim);
+		if (detRes.isValid()) {
+			outDecoderResult = Decode(detRes.bits());
+			if (outDecoderResult.isValid()) {
+				// cornersAsVector = {P[0].y, P[0].x, P[1].y, P[1].x, P[2].y, P[2].x, P[3].y, P[3].x};
+				// drawDebugImageWithLines(image, postfix, cornersAsVector);
+				// drawDebugImage(detRes.bits(), postfix);
+				return detRes;
+			}
+		}
+	}
+	//#MY DETECTOR
 
         return {};
     }
