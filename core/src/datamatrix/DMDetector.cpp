@@ -788,7 +788,7 @@ namespace ZXing::DataMatrix {
             // at this point we found a plausible L-shape and are now looking for the b/w pattern at the top and right:
             // follow top row right 'half way' (4 gaps), see traceGaps break condition with 'invalid' line
             tlTracer.setDirection(right);
-            CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize));
+            CHECK(tlTracer.traceGaps(tlTracer.right(), lineT, maxStepSize, {}, lenB / 2));
 
             maxStepSize = std::min(lineT.length() / 3, static_cast<int>(lenL / 5)) * 2;
 
@@ -1317,7 +1317,7 @@ namespace ZXing::DataMatrix {
 #endif
     }
 
-    const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
+//    const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult)
 {
 
