@@ -8,6 +8,7 @@ option (BUILD_EXAMPLES "Build the example barcode reader/writer applications" ON
 option (BUILD_BLACKBOX_TESTS "Build the black box reader/writer tests" OFF)
 option (BUILD_UNIT_TESTS "Build the unit tests (don't enable for production builds)" OFF)
 option (BUILD_PYTHON_MODULE "Build the python module" OFF)
+option(BUILD_FOR_AARM "Build for android" OFF)
 set(BUILD_DEPENDENCIES "AUTO" CACHE STRING "Fetch from github or use locally installed (AUTO/GITHUB/LOCAL)")
 
 if (WIN32)
@@ -79,5 +80,7 @@ endif()
 
 # log-lib for aarm64 build
 # breaking linux build, just comment it out when building for linux
-#find_library(log-lib log)
-#target_link_libraries(ZXing INTERFACE ${log-lib})
+if(BUILD_FOR_AARM)
+    find_library(log-lib log)
+    target_link_libraries(ZXing INTERFACE ${log-lib})
+endif()
