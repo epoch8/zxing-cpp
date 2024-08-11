@@ -9,6 +9,7 @@ for arg in "$@"; do
   esac
 done
 
+sudo rm -rf zxing-cpp.release
 cd zxing-cpp
 
 sudo rm -r  v8/
@@ -16,6 +17,7 @@ sudo rm -r  v7/
 sudo rm -r  x86/
 sudo rm -r  x86_64/
 sudo rm -r  release/
+
 
 mkdir v8/
 mkdir v7/
