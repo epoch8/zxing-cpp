@@ -253,7 +253,7 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 	float offsetMul = 0.0;
 
 	// float marginWidth = image.width() * 0.05;
-	float marginWidth = distance(mod2Pix({0, 0}), mod2Pix({x1, 0})) * 0.15;
+	float marginWidth = distance(mod2Pix({0, 0}), mod2Pix({x1, 0})) * 0.05;
 
 	// std::vector<double> debugDrawPoints;
 	// debugDrawPoints.reserve(width * 2 * 3 + height * 2 * 3);
@@ -301,7 +301,7 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 			//float SubPixelOffset = 0.0;
 
 			auto startPOffseted = startP - marginWidth * dir;
-			success = pixelTraversal(image, startPOffseted, endP, true, traceResult);
+			success = pixelTraversal(image, startPOffseted, endP, true, traceResult, 1);
 			//calculatedPoints.push_back(PointF(traceResult));
 			if (success) {
 				//auto Result = startPOffseted + (distance(startPOffseted, traceResult) + SubPixelOffset) * dir - startP;
