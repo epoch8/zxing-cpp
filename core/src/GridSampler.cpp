@@ -59,8 +59,10 @@ bool pixelTraversal(const BitMatrix& img, const PointF& p0, const PointF& p1, bo
 
 		if (img.isIn(p)) {
 			if (img.get(p) == searchFor) {
-				if(tol-- == 0) {
+				if(tol == traceTollerance) {
 					outResultPoint = (prevNext_t * rd) + p0;
+				}
+				if(tol-- == 0) {
 					return true;
 				}
 			} else {
@@ -202,8 +204,8 @@ PointF Interp(const std::vector<PointF>& ar, float alpha)
 {
 	// if (alpha <= 0.0) return *ar.data();
 	// if (alpha >= 1.0) return ar[ar.size() - 1];
-	if (alpha >= 1.0) return *ar.data();
-	if (alpha <= 0.0) return ar[ar.size() - 1];
+	if (alpha <= 0.0) return ar[0];
+	if (alpha >= 1.0) return ar[ar.size() - 1];
 	float flIndex = float(ar.size() - 1) * alpha;
 	int i = int(flIndex);
 	float frac = (flIndex - float(i));
@@ -247,18 +249,11 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 
 	Warp warp(x1 - x0, y1 - y0);
 
-	float gridSize = x1 - x0;
-
 	// float offsetMul = subpixelOffset / predictedSize;
 	float offsetMul = 0.0;
 
 	// float marginWidth = image.width() * 0.05;
-	float marginWidth = distance(mod2Pix({0, 0}), mod2Pix({x1, 0})) * 0.15;
-
-	// std::vector<double> debugDrawPoints;
-	// debugDrawPoints.reserve(width * 2 * 3 + height * 2 * 3);
-
-	// auto CalcFor = [&](const PointF& startP, const PointF& endP, std::vector<PointF>& outAr, int id, float addLen = 0) {
+	float marginWidth = distance(mod2Pix({0, 0}), mod2Pix({x1, 0})) * 0.05;
 
 	struct TraceResult {
 		float len;
@@ -301,7 +296,7 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 			//float SubPixelOffset = 0.0;
 
 			auto startPOffseted = startP - marginWidth * dir;
-			success = pixelTraversal(image, startPOffseted, endP, true, traceResult);
+			success = pixelTraversal(image, startPOffseted, endP, true, traceResult, 1);
 			//calculatedPoints.push_back(PointF(traceResult));
 			if (success) {
 				//auto Result = startPOffseted + (distance(startPOffseted, traceResult) + SubPixelOffset) * dir - startP;
@@ -351,7 +346,6 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 
 			// debugDrawPoints.push_back(startP.x);
 			// debugDrawPoints.push_back(startP.y);
-
 			CalcFor(startP, endP, resultBuf[j]);
 			xo += primaryAxisCorrection;
 		}
@@ -392,53 +386,17 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 
 	// 	CalcFor(startP, endP, warp.yOffsets, y - y0, x1 - x0);
 	// }
-
-	auto Filter = [&](std::vector<PointF>& outAr) {
-
-		struct MedianWindowData {
-			float len;
-			int id;
-		};
-
-		std::vector<MedianWindowData> lens(outAr.size());
-
-		for (int i = outAr.size(); i--;) {
-			lens[i] = { float(length(outAr[i])), i };
-		}
-		int windowSize = outAr.size() / 3;
-
-		if (windowSize < 5) {
-			return;
-		}
-
-		windowSize += 1 - (windowSize & 0b1);
-
-		int halfWindowSize = windowSize / 2;
-
-		float avDist = 0;
-
-
-		std::vector<MedianWindowData> medianWindow(windowSize);
-
-		auto arCpy = outAr;
-
-		for (int i = windowSize; i <= outAr.size(); i++) {
-			int j = i - halfWindowSize - 1;
-			std::memcpy(medianWindow.data(), &lens[i - windowSize], windowSize * sizeof(MedianWindowData));
-			std::sort(medianWindow.data(), &medianWindow[windowSize - 1], [](const MedianWindowData& a, const MedianWindowData& b) {return a.len < b.len; });
-			outAr[j] = arCpy[medianWindow[halfWindowSize].id];
-		}
-	};
-
-	// drawDebugImageWithPoints(image, "", debugDrawPoints, 2);
+	// drawDebugImageWithColoredPoints(image, "", debugDrawPoints, 0);
 
 	return std::move(warp);
 }
 
 Warp ComputeWarp(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int width, int height, int predictedSize, float subpixelOffset)
 {
+	// double halfPixelOffset = (-0.5 * float(width)) / float(predictedSize);
+	double halfPixelOffset = 0.0;
 	        return ComputeWarp(image, width, height, predictedSize,
-            	{Rectangle(width - 1, height - 1, 0.0), {topLeft, topRight, bottomRight, bottomLeft}}, subpixelOffset);
+            	{Rectangle(width - 1, height - 1, halfPixelOffset), {topLeft, topRight, bottomRight, bottomLeft}}, subpixelOffset);
 }
 
 //Returns nessesary clockwise rotations TODO Merge this trace clusterfuck with warp calculation
@@ -605,13 +563,6 @@ DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, c
 	if (width <= 0 || height <= 0)
 		return {};
 
-	// std::vector<double> debugDrawPoints;
-	// debugDrawPoints.reserve(width * height);
-	// auto AddDebug = [&](const PointF& P) {
-	// 	debugDrawPoints.push_back(P.x);
-	// 	debugDrawPoints.push_back(P.y);
-	// };
-
 	for (auto&& [x0, x1, y0, y1, mod2Pix] : rois) {
 		// To deal with remaining examples (see #251 and #267) of "numercial instabilities" that have not been
 		// prevented with the Quadrilateral.h:IsConvex() check, we check for all boundary points of the grid to
@@ -638,13 +589,10 @@ DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, c
 				// auto offsetX = Interp(warp.xOffsets, float(x) / float(x1 - 1));
 				auto offsetX = warp.xOffsets[x - x0];
 				auto p = mod2Pix(centered(PointI{x, y}));
-
-				// AddDebug(p);
-
+				
 				p += offsetX;
 				p += offsetY;
 
-				// AddDebug(p);
 
 				// Due to a "numerical instability" in the PerspectiveTransform generation/application it has been observed
 				// that even though all boundary grid points get projected inside the image, it can still happen that an
@@ -676,8 +624,6 @@ DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, c
 
 		return PointI();
 	};
-
-	// drawDebugImageWithPoints(image, "", debugDrawPoints);
 
 	return {std::move(res),
 			{projectCorner({0, 0}), projectCorner({width, 0}), projectCorner({width, height}), projectCorner({0, height})}};
