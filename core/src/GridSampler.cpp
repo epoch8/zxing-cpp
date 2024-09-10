@@ -253,7 +253,7 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 	float offsetMul = 0.0;
 
 	// float marginWidth = image.width() * 0.05;
-	float marginWidth = distance(mod2Pix({0, 0}), mod2Pix({x1, 0})) * 0.05;
+    float marginWidth = distance(mod2Pix({0, 0}), mod2Pix({static_cast<double>(x1), 0})) * 0.05;
 
 	struct TraceResult {
 		float len;
@@ -277,7 +277,7 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 		if(resI != -1) {
 			outResult = results[resI].offset;
 			return true;
-		} 
+		}
 		return false;
 	};
 
@@ -336,7 +336,7 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 
 		// float xo = (x == x0) ? x : ((x == x1 - 1) ? (x - 2.0 * primaryAxisCorrection) : (x - primaryAxisCorrection));
 		float xo = (x == x0) ? x : ((x == x1 - 1) ? (x - 2.0 * primaryAxisCorrection) : (x - primaryAxisCorrection));
-		
+
 		for(int j = 0; j < 3 ; j++) {
 			// Start.x = End.x = x + xo;
 			Start.x = End.x = xo;
@@ -359,12 +359,12 @@ Warp ComputeWarp(const BitMatrix& image, int width, int height, int predictedSiz
 
 	primaryAxisCorrection = float(height) / float(predictedSize);
 
-	Start = {x0, 0}; End = {x1 - 1, 0};
+    Start = {static_cast<double>(x0), 0}; End = {static_cast<double>(x1 - 1), 0};
 
 	for (int y = y0; y < y1; ++y) {
 
 		float yo = (y == y0) ? y : ((y == y1 - 1) ? (y - 2.0 * primaryAxisCorrection) : (y - primaryAxisCorrection));
-		
+
 		for(int j = 0; j < 3 ; j++) {
 			Start.y = End.y = yo;
 
@@ -403,7 +403,7 @@ Warp ComputeWarp(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, Po
 int FindRotation(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int gridSize)
 {
 	PerspectiveTransform mod2Pix = {Rectangle(gridSize, gridSize, 0.5), {topLeft, topRight, bottomRight, bottomLeft}};
-	
+
 	float marginWidth = image.width() * 0.05;
 	PointF traceResult;
 
@@ -589,7 +589,7 @@ DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, c
 				// auto offsetX = Interp(warp.xOffsets, float(x) / float(x1 - 1));
 				auto offsetX = warp.xOffsets[x - x0];
 				auto p = mod2Pix(centered(PointI{x, y}));
-				
+
 				p += offsetX;
 				p += offsetY;
 
