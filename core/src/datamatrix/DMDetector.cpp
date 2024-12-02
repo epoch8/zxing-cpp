@@ -436,6 +436,148 @@ namespace ZXing::DataMatrix {
 
 
 
+    static DetectorResult DetectOldWithOffsets(const BitMatrix& image)
+    {
+        ResultPoint pointA, pointB, pointC, pointD;
+        if (!DetectWhiteRect(image, pointA, pointB, pointC, pointD))
+            return {};
+
+        // Point A and D are across the diagonal from one another,
+        // as are B and C. Figure out which are the solid black lines
+        // by counting transitions
+        std::array transitions = {
+                TransitionsBetween(image, pointA, pointB),
+                TransitionsBetween(image, pointA, pointC),
+                TransitionsBetween(image, pointB, pointD),
+                TransitionsBetween(image, pointC, pointD),
+        };
+        std::sort(transitions.begin(), transitions.end(),
+                  [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+
+        // Sort by number of transitions. First two will be the two solid sides; last two
+        // will be the two alternating black/white sides
+        const auto& lSideOne = transitions[0];
+        const auto& lSideTwo = transitions[1];
+
+        // We accept at most 4 transisions inside the L pattern (i.e. 2 corruptions) to reduce false positive FormatErrors
+        if (lSideTwo.transitions > 8)
+            return {};
+
+        // Figure out which point is their intersection by tallying up the number of times we see the
+        // endpoints in the four endpoints. One will show up twice.
+        std::map<const ResultPoint*, int> pointCount;
+        pointCount[lSideOne.from] += 1;
+        pointCount[lSideOne.to] += 1;
+        pointCount[lSideTwo.from] += 1;
+        pointCount[lSideTwo.to] += 1;
+
+        const ResultPoint* bottomRight = nullptr;
+        const ResultPoint* bottomLeft = nullptr;
+        const ResultPoint* topLeft = nullptr;
+        for (const auto& [point, count] : pointCount) {
+            if (count == 2) {
+                bottomLeft = point; // this is definitely the bottom left, then -- end of two L sides
+            }
+            else {
+                // Otherwise it's either top left or bottom right -- just assign the two arbitrarily now
+                if (bottomRight == nullptr) {
+                    bottomRight = point;
+                }
+                else {
+                    topLeft = point;
+                }
+            }
+        }
+
+        if (bottomRight == nullptr || bottomLeft == nullptr || topLeft == nullptr)
+            return {};
+
+        // Bottom left is correct but top left and bottom right might be switched
+        // Use the dot product trick to sort them out
+        OrderByBestPatterns(bottomRight, bottomLeft, topLeft);
+
+        // Which point didn't we find in relation to the "L" sides? that's the top right corner
+        const ResultPoint* topRight;
+        if (pointCount.find(&pointA) == pointCount.end()) {
+            topRight = &pointA;
+        }
+        else if (pointCount.find(&pointB) == pointCount.end()) {
+            topRight = &pointB;
+        }
+        else if (pointCount.find(&pointC) == pointCount.end()) {
+            topRight = &pointC;
+        }
+        else {
+            topRight = &pointD;
+        }
+
+        // Next determine the dimension by tracing along the top or right side and counting black/white
+        // transitions. Since we start inside a black module, we should see a number of transitions
+        // equal to 1 less than the code dimension. Well, actually 2 less, because we are going to
+        // end on a black module:
+
+        // The top right point is actually the corner of a module, which is one of the two black modules
+        // adjacent to the white module at the top right. Tracing to that corner from either the top left
+        // or bottom right should work here.
+
+        int dimensionTop = TransitionsBetween(image, *topLeft, *topRight).transitions;
+        int dimensionRight = TransitionsBetween(image, *bottomRight, *topRight).transitions;
+
+
+        if ((dimensionTop & 0x01) == 1) {
+            // it can't be odd, so, round... up?
+            dimensionTop++;
+        }
+        dimensionTop += 2;
+
+        if ((dimensionRight & 0x01) == 1) {
+            // it can't be odd, so, round... up?
+            dimensionRight++;
+        }
+        dimensionRight += 2;
+
+        if (dimensionTop < 10 || dimensionTop > 144 || dimensionRight < 8 || dimensionRight > 144 )
+            return {};
+
+
+
+
+        ResultPoint correctedTopRight;
+        {
+            // The matrix is square
+
+            int dimension = std::max(dimensionRight, dimensionTop);
+
+            DetectorResult res;
+            float dimInv = 1.0 / float(dimension);
+            PointF DirTopLR = dimInv * (*topRight - *topLeft);
+            PointF DirBottomLR = dimInv * (*bottomRight - *bottomLeft);
+
+            PointF DirRightBT = dimInv * (*topRight - *bottomRight);
+            PointF DirLeftBT = dimInv * (*topLeft - *bottomLeft);
+
+            dimensionTop = dimensionRight = dimension;
+
+            res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight + DirBottomLR, *topRight + DirTopLR, dimensionTop, dimensionRight);
+            if(Decode(res.bits()).isValid()) return res;
+
+            res = SampleGrid(image, *topLeft + DirLeftBT, *bottomLeft, *bottomRight, *topRight + DirRightBT, dimensionTop, dimensionRight);
+            if(Decode(res.bits()).isValid()) return res;
+
+            correctedTopRight = CorrectTopRight(image, *bottomLeft, *bottomRight, *topLeft, *topRight, dimension);
+
+            DirTopLR = dimInv * (correctedTopRight - *topLeft);
+            DirRightBT = dimInv * (correctedTopRight - *bottomRight);
+
+            res = SampleGrid(image, *topLeft - DirTopLR, *bottomLeft - DirBottomLR, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
+            if(Decode(res.bits()).isValid()) return res;
+
+            res = SampleGrid(image, *topLeft, *bottomLeft - DirLeftBT, *bottomRight - DirRightBT, correctedTopRight, dimensionTop, dimensionRight);
+            if(Decode(res.bits()).isValid()) return res;
+        }
+
+        return {};
+    }
 
 
 
@@ -1366,9 +1508,11 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
 	#else
 		DetectorResult detRes;
 		//OLD DETECTORS
-		detRes = DetectNew(image, tryHarder, tryRotate);
+        detRes = DetectOldWithOffsets(image);
 		if (!detRes.isValid())
 			detRes = DetectCRPT(image.copy());
+		if (!detRes.isValid())
+    		detRes = DetectNew(image, tryHarder, tryRotate);
 
 		if (detRes.isValid()) {
 			outDecoderResult = Decode(detRes.bits());
