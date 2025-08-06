@@ -158,6 +158,8 @@ endif()
 # define subset of public headers that get distributed with the binaries
 set (PUBLIC_HEADERS
         src/BarcodeFormat.h
+        src/BitMatrix.h
+        src/DetectorResult.h
         src/BitHacks.h
         src/ByteArray.h
         src/CharacterSet.h
@@ -166,6 +168,20 @@ set (PUBLIC_HEADERS
         src/TextUtfEncoding.h # [[deprecated]]
         src/ZXAlgorithms.h
         src/ZXConfig.h
+        src/Content.h
+        src/DecodeHints.h
+        src/Error.h
+        src/ImageView.h
+        src/Point.h
+        src/Quadrilateral.h
+        src/ReadBarcode.h
+        src/Result.h
+        src/StructuredAppend.h
+        src/BitMatrix.h
+        src/BitMatrixIO.h
+        src/Matrix.h
+        src/MultiFormatWriter.h
+        src/Range.h
 )
 if (BUILD_READERS)
     set (PUBLIC_HEADERS ${PUBLIC_HEADERS}

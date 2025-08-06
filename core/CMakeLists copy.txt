@@ -1,0 +1,100 @@
+
+if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # Set up the include directory fix
+    set(IOS_INCLUDE_FIX_DIR "${CMAKE_CURRENT_BINARY_DIR}/ios_include_fix")
+    file(MAKE_DIRECTORY ${IOS_INCLUDE_FIX_DIR})
+    
+    # Create symlink to OpenCV headers
+    set(DEVICE_HEADERS_DIR "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/Headers")
+    set(SIMULATOR_HEADERS_DIR "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/Headers")
+    
+    if(EXISTS ${DEVICE_HEADERS_DIR})
+        set(REAL_HEADERS_DIR ${DEVICE_HEADERS_DIR})
+    elseif(EXISTS ${SIMULATOR_HEADERS_DIR})
+        set(REAL_HEADERS_DIR ${SIMULATOR_HEADERS_DIR})
+    else()
+        message(FATAL_ERROR "Could not find OpenCV headers in XCFramework")
+    endif()
+    
+    # Remove existing symlink if it exists, then create new one
+    execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${IOS_INCLUDE_FIX_DIR}/opencv2)
+    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${REAL_HEADERS_DIR} ${IOS_INCLUDE_FIX_DIR}/opencv2)
+    
+    # Add the include fix directory
+    target_include_directories(ZXing PRIVATE ${IOS_INCLUDE_FIX_DIR})
+    
+    # Create imported targets for each architecture
+    if(CMAKE_OSX_SYSROOT MATCHES "iphonesimulator")
+        # Simulator build
+        add_library(opencv2_framework SHARED IMPORTED)
+        set_target_properties(opencv2_framework PROPERTIES
+            IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/opencv2"
+            FRAMEWORK TRUE
+        )
+    else()
+        # Device build  
+        add_library(opencv2_framework SHARED IMPORTED)
+        set_target_properties(opencv2_framework PROPERTIES
+            IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/opencv2"
+            FRAMEWORK TRUE
+        )
+    endif()
+    
+    # Link to the imported framework
+    target_link_libraries(ZXing PRIVATE
+        opencv2_framework
+        "libz.tbd"      
+        Threads::Threads
+    )
+
+
+
+    if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # Set up the include directory fix
+    set(IOS_INCLUDE_FIX_DIR "${CMAKE_CURRENT_BINARY_DIR}/ios_include_fix")
+    file(MAKE_DIRECTORY ${IOS_INCLUDE_FIX_DIR})
+    
+    # Create symlink to OpenCV headers
+    set(DEVICE_HEADERS_DIR "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/Headers")
+    set(SIMULATOR_HEADERS_DIR "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/Headers")
+    
+    if(EXISTS ${DEVICE_HEADERS_DIR})
+        set(REAL_HEADERS_DIR ${DEVICE_HEADERS_DIR})
+    elseif(EXISTS ${SIMULATOR_HEADERS_DIR})
+        set(REAL_HEADERS_DIR ${SIMULATOR_HEADERS_DIR})
+    else()
+        message(FATAL_ERROR "Could not find OpenCV headers in XCFramework")
+    endif()
+    
+    # Remove existing symlink if it exists, then create new one
+    execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${IOS_INCLUDE_FIX_DIR}/opencv2)
+    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${REAL_HEADERS_DIR} ${IOS_INCLUDE_FIX_DIR}/opencv2)
+    
+    # Add the include fix directory
+    target_include_directories(ZXing PRIVATE ${IOS_INCLUDE_FIX_DIR})
+    
+    # Create imported targets for each architecture
+    if("x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+        message(FATAL_ERROR "DEBUG: Building for SIMULATOR") # Раскомментируйте для проверки
+        # Simulator build
+        add_library(opencv2_framework SHARED IMPORTED)
+        set_target_properties(opencv2_framework PROPERTIES
+            IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/opencv2"
+        )
+    else()
+        #message(FATAL_ERROR "DEBUG: Building for DEVICE") # Раскомментируйте для проверки
+        # Device build  
+        add_library(opencv2_framework SHARED IMPORTED)
+        set_target_properties(opencv2_framework PROPERTIES
+            IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/opencv2"
+        )
+    endif()
+    
+    
+    # Link to the imported framework
+    target_link_libraries(ZXing PRIVATE
+        opencv2_framework
+        "libz.tbd"      
+        Threads::Threads
+    )
+
