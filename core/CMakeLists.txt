@@ -5,26 +5,7 @@ project (ZXing VERSION "2.0.0")
 # Add these lines before find_package(OpenCV)
 # For Android builds, OpenCV_DIR will be set by the build script
 # For Linux builds, use pkg-config to avoid static/shared library issues
-if(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
-    # Linux build: use pkg-config for OpenCV
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(OpenCV REQUIRED opencv)
-    
-    # Create OpenCV interface target for compatibility
-    add_library(opencv_interface INTERFACE)
-    target_include_directories(opencv_interface INTERFACE ${OpenCV_INCLUDE_DIRS})
-    target_link_libraries(opencv_interface INTERFACE ${OpenCV_LIBRARIES})
-    target_compile_options(opencv_interface INTERFACE ${OpenCV_CFLAGS_OTHER})
-    
-    # Set variables for later use
-    set(OpenCV_FOUND TRUE)
-    set(OpenCV_LIBS opencv_interface)
-else()
-    # Android build: use CMake configuration
-    set(OpenCV_FIND_VERSION "3.4")
-    set(OpenCV_SHARED ON)  # Force using shared libraries (.so) instead of static (.a)
-    set(BUILD_SHARED_LIBS ON)  # Force shared libraries globally
-endif()
+
 
 set (ZXING_SONAME 3) # see https://github.com/zxing-cpp/zxing-cpp/issues/333
 
@@ -466,17 +447,75 @@ add_library (ZXing
         ${LIBZUECI_FILES}
 )
 
-# Only call find_package(OpenCV) for Android builds
-# Linux builds use pkg-config (configured earlier)
-if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
+
+
+if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # Set up the include directory fix
+    set(IOS_INCLUDE_FIX_DIR "${CMAKE_CURRENT_BINARY_DIR}/ios_include_fix")
+    file(MAKE_DIRECTORY ${IOS_INCLUDE_FIX_DIR})
+    
+    # Create symlink to OpenCV headers
+    set(DEVICE_HEADERS_DIR "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/Headers")
+    set(SIMULATOR_HEADERS_DIR "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/Headers")
+    
+    if(EXISTS ${DEVICE_HEADERS_DIR})
+        set(REAL_HEADERS_DIR ${DEVICE_HEADERS_DIR})
+    elseif(EXISTS ${SIMULATOR_HEADERS_DIR})
+        set(REAL_HEADERS_DIR ${SIMULATOR_HEADERS_DIR})
+    else()
+        message(FATAL_ERROR "Could not find OpenCV headers in XCFramework")
+    endif()
+    
+    # Remove existing symlink if it exists, then create new one
+    execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${IOS_INCLUDE_FIX_DIR}/opencv2)
+    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${REAL_HEADERS_DIR} ${IOS_INCLUDE_FIX_DIR}/opencv2)
+    
+    # Add the include fix directory
+    target_include_directories(ZXing PRIVATE ${IOS_INCLUDE_FIX_DIR})
+    
+    # Create imported targets for each architecture
+    if("x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+        #message(FATAL_ERROR "DEBUG: Building for SIMULATOR") # Раскомментируйте для проверки
+        # Simulator build
+        add_library(opencv2_framework SHARED IMPORTED)
+        set_target_properties(opencv2_framework PROPERTIES
+            IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/opencv2"
+        )
+    else()
+        #message(FATAL_ERROR "DEBUG: Building for DEVICE") # Раскомментируйте для проверки
+        # Device build  
+        add_library(opencv2_framework SHARED IMPORTED)
+        set_target_properties(opencv2_framework PROPERTIES
+            IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/opencv2"
+        )
+    endif()
+    
+    
+    # Link to the imported framework
+    target_link_libraries(ZXing PRIVATE
+        opencv2_framework
+        "libz.tbd"      
+        Threads::Threads
+    )
+
+
+    
+elseif(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
+    # --- Сборка для Android (без изменений) ---
     find_package(OpenCV REQUIRED COMPONENTS core imgproc PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
-    # if (OpenCV_DIR)
-    #     find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
-    # else()
-    #     find_package(OpenCV)
-    # endif()
-    set(OpenCV_LIBS "")
+    target_link_libraries(ZXing PRIVATE Threads::Threads ${OpenCV_LIBS})
+
+else()
+    # --- Сборка для Linux/Other (без изменений) ---
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(OpenCV REQUIRED opencv)
+    add_library(opencv_interface INTERFACE)
+    target_include_directories(opencv_interface INTERFACE ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(opencv_interface INTERFACE ${OpenCV_LIBRARIES})
+    target_link_libraries(ZXing PRIVATE Threads::Threads opencv_interface)
 endif()
+
+
 target_include_directories (ZXing
         PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>" "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
         INTERFACE "$<INSTALL_INTERFACE:include>"
@@ -485,6 +524,7 @@ target_include_directories (ZXing
 target_compile_options (ZXing
         PUBLIC ${ZXING_CORE_DEFINES}
         PRIVATE ${ZXING_CORE_LOCAL_DEFINES}
+        -D_LIBCPP_ENABLE_CXX17_REMOVED_RANDOM_SHUFFLE
 )
 
 include (CheckCXXCompilerFlag)
@@ -498,14 +538,6 @@ endif()
 
 target_compile_features(ZXing PUBLIC cxx_std_17)
 
-# Link OpenCV libraries based on build type
-if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
-    # Android build: use OpenCV_LIBS from find_package
-    target_link_libraries(ZXing PRIVATE Threads::Threads ${OpenCV_LIBS})
-else()
-    # Linux build: use opencv_interface from pkg-config
-    target_link_libraries(ZXing PRIVATE Threads::Threads ${OpenCV_LIBS})
-endif()
 
 #target_link_options (ZXing PRIVATE "LINKER:-rpath-link=${ANDROID_LIB_DIR}")
 
@@ -524,6 +556,7 @@ if (PROJECT_VERSION)
 endif()
 
 set_target_properties(ZXing PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
+
 
 if (APPLE AND BUILD_APPLE_FRAMEWORK)
     set_target_properties(ZXing PROPERTIES
