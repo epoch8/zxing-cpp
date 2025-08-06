@@ -12,6 +12,14 @@
 		<data>
 		5PT2ZA30t3IZ+Na79qHhowfQyFY=
 		</data>
+		<key>Headers/BitMatrix.h</key>
+		<data>
+		jpS305S49HktQEx7CcGBI1j7wAw=
+		</data>
+		<key>Headers/BitMatrixIO.h</key>
+		<data>
+		ZVV1EJM/Olwk55zGuEwNGidCZNI=
+		</data>
 		<key>Headers/ByteArray.h</key>
 		<data>
 		LZ1t3ToFyUXNh7Skg24XsM//kTY=
@@ -27,6 +35,10 @@
 		<key>Headers/DecodeHints.h</key>
 		<data>
 		EiOADT0FNMvx1RHD4suhsqchGOo=
+		</data>
+		<key>Headers/DetectorResult.h</key>
+		<data>
+		bsp3GN3nSm1vYTs7KbbVtaWQaqg=
 		</data>
 		<key>Headers/Error.h</key>
 		<data>
@@ -44,6 +56,10 @@
 		<data>
 		Ne5st5mIy6iZOl1TVG+3MLnhjZ8=
 		</data>
+		<key>Headers/Matrix.h</key>
+		<data>
+		2QQntOAp8HhTXm9BldVqEo2BJEE=
+		</data>
 		<key>Headers/Point.h</key>
 		<data>
 		rlYQuGfgeBZq1WMXpSjsJ750i3w=
@@ -51,6 +67,10 @@
 		<key>Headers/Quadrilateral.h</key>
 		<data>
 		6gVSzvrMTa5npKkiZd9l6omAAKw=
+		</data>
+		<key>Headers/Range.h</key>
+		<data>
+		z2N3Cn8fQGn1qs3sc7rdpp9SEvw=
 		</data>
 		<key>Headers/ReadBarcode.h</key>
 		<data>
@@ -101,6 +121,20 @@
 			LWh+ThEq43HqhU4OiNJZrBk/9hx/4XIa3Eg196YcaPM=
 			</data>
 		</dict>
+		<key>Headers/BitMatrix.h</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			i9ofnsnV6d/NI/9iz6aqzKk+c6FckxaoYXmeaK7JLog=
+			</data>
+		</dict>
+		<key>Headers/BitMatrixIO.h</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			rLl7nCbfHCpc9qks0aX0Gi79i/I38y7OwTl5ZQgNV7k=
+			</data>
+		</dict>
 		<key>Headers/ByteArray.h</key>
 		<dict>
 			<key>hash2</key>
@@ -127,6 +161,13 @@
 			<key>hash2</key>
 			<data>
 			bvSXRyhWau4srkd9DpcNTS67whNocaQXLKH6Y1ajNqU=
+			</data>
+		</dict>
+		<key>Headers/DetectorResult.h</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			jsyS5GZLE7oDmuosOMCMJaA/g2FGVcFIih/oCjQMG2M=
 			</data>
 		</dict>
 		<key>Headers/Error.h</key>
@@ -157,6 +198,13 @@
 			CKg+D2gLljLSyo+Xzw90Al0PoqRoB1OsQjqukR2i6kQ=
 			</data>
 		</dict>
+		<key>Headers/Matrix.h</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			+aoJN82hlsa9lrpKDK8QbsOaQXFrG0RJHlAHtPvTBPA=
+			</data>
+		</dict>
 		<key>Headers/Point.h</key>
 		<dict>
 			<key>hash2</key>
@@ -169,6 +217,13 @@
 			<key>hash2</key>
 			<data>
 			8AK0PG1yO0GNWFtqvgpxDRF6voYOaPlAcv8ljtKFlbc=
+			</data>
+		</dict>
+		<key>Headers/Range.h</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			eN/gngDjYtmN7MxzY2N+Q8hCRs2kzHnc2bh3EoGyPOI=
 			</data>
 		</dict>
 		<key>Headers/ReadBarcode.h</key>
