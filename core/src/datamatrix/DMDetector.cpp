@@ -1188,7 +1188,7 @@ namespace ZXing::DataMatrix {
     void createMaps(cv::Mat& mapXY, int outputSize, bool horizontal, bool inverse) {
         mapXY.create(outputSize, outputSize, CV_32FC2);
 
-        float factor = float(outputSize) / 7.6;
+        float factor = float(outputSize) / 7.6 * 0.5;
 
         static cv::Mat offsetMap;
 
@@ -1561,6 +1561,7 @@ namespace ZXing::DataMatrix {
 
         cv::Mat resizedImg;
         cv::resize(image.asMat(), resizedImg, {remapSize, remapSize}, 0,0, cv::INTER_LINEAR);
+        cv::threshold(resizedImg, resizedImg, 127, 255, cv::THRESH_BINARY);
 
         for (int i = 0; i < 4; i++) {
             n1 = 0; n2 = 1;

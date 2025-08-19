@@ -595,6 +595,11 @@ include (GNUInstallDirs)
 
 set(ZX_INSTALL_TARGETS ZXing)
 
+# Add opencv_interface to install targets if it exists
+if(TARGET opencv_interface)
+    set(ZX_INSTALL_TARGETS ${ZX_INSTALL_TARGETS} opencv_interface)
+endif()
+
 install (
         TARGETS ${ZX_INSTALL_TARGETS} EXPORT ZXingTargets
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
