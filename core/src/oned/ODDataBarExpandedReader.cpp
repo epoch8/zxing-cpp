@@ -119,18 +119,22 @@ constexpr int FINDER_E = 5;
 constexpr int FINDER_F = 6;
 
 // A negative number means the finder pattern is laid out right2left. Note: each finder may only occur once per code.
-static const std::array<std::vector<int>, 10> FINDER_PATTERN_SEQUENCES = {{
-	{FINDER_A, -FINDER_A},
-	{FINDER_A, -FINDER_B, FINDER_B},
-	{FINDER_A, -FINDER_C, FINDER_B, -FINDER_D},
-	{FINDER_A, -FINDER_E, FINDER_B, -FINDER_D, FINDER_C},
-	{FINDER_A, -FINDER_E, FINDER_B, -FINDER_D, FINDER_D, -FINDER_F},
-	{FINDER_A, -FINDER_E, FINDER_B, -FINDER_D, FINDER_E, -FINDER_F, FINDER_F},
-	{FINDER_A, -FINDER_A, FINDER_B, -FINDER_B, FINDER_C, -FINDER_C, FINDER_D, -FINDER_D},
-	{FINDER_A, -FINDER_A, FINDER_B, -FINDER_B, FINDER_C, -FINDER_C, FINDER_D, -FINDER_E, FINDER_E},
-	{FINDER_A, -FINDER_A, FINDER_B, -FINDER_B, FINDER_C, -FINDER_C, FINDER_D, -FINDER_E, FINDER_F, -FINDER_F},
-	{FINDER_A, -FINDER_A, FINDER_B, -FINDER_B, FINDER_C, -FINDER_D, FINDER_D, -FINDER_E, FINDER_E, -FINDER_F, FINDER_F},
-}};
+static const std::array<std::vector<int>, 10>& FINDER_PATTERN_SEQUENCES()
+{
+    static const std::array<std::vector<int>, 10> sequences = {{
+        {FINDER_A, -FINDER_A},
+        {FINDER_A, -FINDER_B, FINDER_B},
+        {FINDER_A, -FINDER_C, FINDER_B, -FINDER_D},
+        {FINDER_A, -FINDER_E, FINDER_B, -FINDER_D, FINDER_C},
+        {FINDER_A, -FINDER_E, FINDER_B, -FINDER_D, FINDER_D, -FINDER_F},
+        {FINDER_A, -FINDER_E, FINDER_B, -FINDER_D, FINDER_E, -FINDER_F, FINDER_F},
+        {FINDER_A, -FINDER_A, FINDER_B, -FINDER_B, FINDER_C, -FINDER_C, FINDER_D, -FINDER_D},
+        {FINDER_A, -FINDER_A, FINDER_B, -FINDER_B, FINDER_C, -FINDER_C, FINDER_D, -FINDER_E, FINDER_E},
+        {FINDER_A, -FINDER_A, FINDER_B, -FINDER_B, FINDER_C, -FINDER_C, FINDER_D, -FINDER_E, FINDER_F, -FINDER_F},
+        {FINDER_A, -FINDER_A, FINDER_B, -FINDER_B, FINDER_C, -FINDER_D, FINDER_D, -FINDER_E, FINDER_E, -FINDER_F, FINDER_F},
+    }};
+    return sequences;
+}
 
 static const std::array<int, 7> VALID_HALF_PAIRS = {{-FINDER_A, FINDER_B, -FINDER_D, FINDER_C, -FINDER_F, FINDER_F, FINDER_E}};
 
@@ -168,7 +172,7 @@ static int SequenceIndex(Character first)
 static bool ChecksumIsValid(Character first)
 {
 	int i = SequenceIndex(first);
-	return 0 <= i && i < Size(FINDER_PATTERN_SEQUENCES);
+    return 0 <= i && i < Size(FINDER_PATTERN_SEQUENCES());
 }
 
 static Pair ReadPair(const PatternView& view, Direction dir)
@@ -288,12 +292,12 @@ static bool FindValidSequence(const PairMap& all, ITER begin, ITER end, Pairs& s
 static Pairs FindValidSequence(PairMap& all)
 {
 	Pairs stack;
-	for (const auto& first : all[FINDER_A]) {
+    for (const auto& first : all[FINDER_A]) {
 		int sequenceIndex = SequenceIndex(first.left);
 		// if we have not seen enough pairs to possibly complete the sequence, wait for more
 		if (Size(all) < sequenceIndex + 2)
 			continue;
-		auto& sequence = FINDER_PATTERN_SEQUENCES[sequenceIndex];
+        auto& sequence = FINDER_PATTERN_SEQUENCES()[sequenceIndex];
 		stack.push_back(first);
 		// recursively fill the stack with pairs according to the valid finder sequence
 		if (FindValidSequence(all, std::next(std::begin(sequence)), std::end(sequence), stack))

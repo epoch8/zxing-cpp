@@ -162,27 +162,31 @@ constexpr int CHAR_LEN = 6;
 constexpr float QUIET_ZONE = 5;	// quiet zone spec is 10 modules, real world examples ignore that, see #138
 constexpr int CHAR_SUM = 11;
 
-//TODO: make this a constexpr variable initialization
-static auto E2E_PATTERNS = [] {
-	// This creates an array of ints for fast IndexOf lookup of the edge-2-edge patterns (ISO/IEC 15417:2007(E) Table 2)
-	// e.g. a code pattern of { 2, 1, 2, 2, 2, 2 } becomes the e2e pattern { 3, 3, 4, 4 } and the value 0b11100011110000.
-	std::array<int, 107> res;
-	for (int i = 0; i < Size(res); ++i) {
-		const auto& a = Code128::CODE_PATTERNS[i];
-		std::array<int, 4> e2e;
-		for (int j = 0; j < 4; j++)
-			e2e[j] = a[j] + a[j + 1];
-		res[i] = ToInt(e2e);
-	}
-	return res;
-}();
+// Build-on-first-use to avoid TU-level static initialization at dlopen time
+static const std::array<int, 107>& E2E_PATTERNS()
+{
+    static const std::array<int, 107> res = [] {
+        // This creates an array of ints for fast IndexOf lookup of the edge-2-edge patterns (ISO/IEC 15417:2007(E) Table 2)
+        // e.g. a code pattern of { 2, 1, 2, 2, 2, 2 } becomes the e2e pattern { 3, 3, 4, 4 } and the value 0b11100011110000.
+        std::array<int, 107> tmp{};
+        for (int i = 0; i < Size(tmp); ++i) {
+            const auto& a = Code128::CODE_PATTERNS[i];
+            std::array<int, 4> e2e;
+            for (int j = 0; j < 4; j++)
+                e2e[j] = a[j] + a[j + 1];
+            tmp[i] = ToInt(e2e);
+        }
+        return tmp;
+    }();
+    return res;
+}
 
 Result Code128Reader::decodePattern(int rowNumber, PatternView& next, std::unique_ptr<DecodingState>&) const
 {
 	int minCharCount = 4; // start + payload + checksum + stop
-	auto decodePattern = [](const PatternView& view, bool start = false) {
+    auto decodePattern = [](const PatternView& view, bool start = false) {
 		// This is basically the reference algorithm from the specification
-		int code = IndexOf(E2E_PATTERNS, ToInt(NormalizedE2EPattern<CHAR_LEN, CHAR_SUM>(view)));
+        int code = IndexOf(E2E_PATTERNS(), ToInt(NormalizedE2EPattern<CHAR_LEN, CHAR_SUM>(view)));
 		if (code == -1 && !start) // if the reference algo fails, give the original upstream version a try (required to decode a few samples)
 			code = DecodeDigit(view, Code128::CODE_PATTERNS, MAX_AVG_VARIANCE, MAX_INDIVIDUAL_VARIANCE);
 		return code;

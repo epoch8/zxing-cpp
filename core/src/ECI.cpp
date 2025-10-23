@@ -7,11 +7,12 @@
 
 #include "ZXAlgorithms.h"
 
-#include <map>
+#include <array>
 
 namespace ZXing {
 
-static const std::map<ECI, CharacterSet> ECI_TO_CHARSET = {
+// Use constexpr array of trivially-constructible pairs to avoid TU-level dynamic initialization.
+static constexpr std::array<std::pair<ECI, CharacterSet>, 35> kEciToCharset = {{
 	{ECI(0), CharacterSet::Cp437},     // Obsolete
 	{ECI(1), CharacterSet::ISO8859_1}, // Obsolete
 	{ECI::Cp437, CharacterSet::Cp437}, // Obsolete but still used by PDF417 Macro fields (ISO/IEC 15438:2015 Annex H.2.3)
@@ -47,7 +48,7 @@ static const std::map<ECI, CharacterSet> ECI_TO_CHARSET = {
 	{ECI::EUC_KR, CharacterSet::EUC_KR},
 	{ECI::ISO646_Inv, CharacterSet::ASCII},
 	{ECI::Binary, CharacterSet::BINARY},
-};
+}};
 
 std::string ToString(ECI eci)
 {
@@ -56,9 +57,9 @@ std::string ToString(ECI eci)
 
 CharacterSet ToCharacterSet(ECI eci)
 {
-	if (auto it = ECI_TO_CHARSET.find(eci); it != ECI_TO_CHARSET.end())
-		return it->second;
-
+	for (const auto& kv : kEciToCharset) {
+		if (kv.first == eci) return kv.second;
+	}
 	return CharacterSet::Unknown;
 }
 
@@ -71,9 +72,9 @@ ECI ToECI(CharacterSet cs)
 	if (cs == CharacterSet::Cp437)
 		return ECI::Cp437;
 
-	for (auto& [key, value] : ECI_TO_CHARSET)
-		if (value == cs)
-			return key;
+    for (const auto& kv : kEciToCharset)
+        if (kv.second == cs)
+            return kv.first;
 
 	return ECI::Unknown;
 }

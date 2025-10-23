@@ -16,7 +16,8 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include "opencv2/opencv.hpp"
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
 
 namespace ZXing {
 

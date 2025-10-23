@@ -25,11 +25,17 @@ static const int INDEXES_STOP_PATTERN[] = { 6, 2, 7, 3 };
 static const float MAX_AVG_VARIANCE = 0.42f;
 static const float MAX_INDIVIDUAL_VARIANCE = 0.8f;
 
-// B S B S B S B S Bar/Space pattern
+// B S B S B S B S Bar/Space patterns as function-local statics to avoid TU-level constructors
 // 11111111 0 1 0 1 0 1 000
-static const std::vector<int> START_PATTERN = { 8, 1, 1, 1, 1, 1, 1, 3 };
+static const std::vector<int>& StartPatternVec() {
+    static const std::vector<int> k = { 8, 1, 1, 1, 1, 1, 1, 3 };
+    return k;
+}
 // 1111111 0 1 000 1 0 1 00 1
-static const std::vector<int> STOP_PATTERN = { 7, 1, 1, 3, 1, 1, 1, 2, 1 };
+static const std::vector<int>& StopPatternVec() {
+    static const std::vector<int> k = { 7, 1, 1, 3, 1, 1, 1, 2, 1 };
+    return k;
+}
 static const int MAX_PIXEL_DRIFT = 3;
 static const int MAX_PATTERN_DRIFT = 5;
 // if we set the value too low, then we don't detect the correct height of the bar if the start patterns are damaged.
@@ -231,17 +237,17 @@ static std::array<Nullable<ResultPoint>, 8> FindVertices(const BitMatrix& matrix
 
 	std::array<Nullable<ResultPoint>, 4> tmp;
 	std::array<Nullable<ResultPoint>, 8> result;
-	CopyToResult(result, FindRowsWithPattern(matrix, height, width, startRow, startColumn, START_PATTERN, tmp), INDEXES_START_PATTERN);
+    CopyToResult(result, FindRowsWithPattern(matrix, height, width, startRow, startColumn, StartPatternVec(), tmp), INDEXES_START_PATTERN);
 
 	if (result[4] != nullptr) {
 		startColumn = static_cast<int>(result[4].value().x());
 		startRow = static_cast<int>(result[4].value().y());
 #if 1 // 2x speed improvement for images with no PDF417 symbol by not looking for symbols without start guard (which are not conforming to spec anyway)
-		CopyToResult(result, FindRowsWithPattern(matrix, height, width, startRow, startColumn, STOP_PATTERN, tmp), INDEXES_STOP_PATTERN);
+        CopyToResult(result, FindRowsWithPattern(matrix, height, width, startRow, startColumn, StopPatternVec(), tmp), INDEXES_STOP_PATTERN);
 	}
 #else
 	}
-	CopyToResult(result, FindRowsWithPattern(matrix, height, width, startRow, startColumn, STOP_PATTERN, tmp), INDEXES_STOP_PATTERN);
+    CopyToResult(result, FindRowsWithPattern(matrix, height, width, startRow, startColumn, StopPatternVec(), tmp), INDEXES_STOP_PATTERN);
 #endif
 	return result;
 }

@@ -53,13 +53,29 @@ if [ ! -f "${OPENCV_JNI_PATH}/OpenCVConfig.cmake" ] && [ ! -f "${OPENCV_JNI_PATH
   exit 1
 fi
 
-# Add C++17 support, OpenCV include path, and fix NEON macro issue
-CMAKE_CXX_FLAGS="-std=c++17 -I${OPENCV_INCLUDE_PATH} -DCV_CPU_HAS_SUPPORT_NEON=0 -DCV_CPU_HAS_SUPPORT_SSE2=0"
+# Add C++17 support, OpenCV include path, fix NEON macro, and enable ctor warnings
+CMAKE_CXX_FLAGS="-std=c++17 -I${OPENCV_INCLUDE_PATH} -DCV_CPU_HAS_SUPPORT_NEON=0 -DCV_CPU_HAS_SUPPORT_SSE2=0 -Wglobal-constructors -Wexit-time-destructors"
 
 # Function to get architecture-specific linking flags
 get_linker_flags() {
     local arch=$1
     echo "-llog -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536 -L${OPENCV_LIBS_PATH}/${arch} -lopencv_java3"
+}
+
+# Post-build checker: fail if TU-level constructors are present in the .so
+check_global_ctors() {
+  local so="$1"
+  if command -v nm >/dev/null 2>&1; then
+    if nm -C "$so" | grep -q '_GLOBAL__sub_I_'; then
+      echo "❌ TU constructors present in $so" >&2
+      nm -C "$so" | grep '_GLOBAL__sub_I_'
+      exit 1
+    else
+      echo "OK: no TU constructors in $(basename "$so")"
+    fi
+  else
+    echo "(nm not found; skipping TU constructor check)"
+  fi
 }
 
 # Build for arm64-v8a
@@ -79,6 +95,7 @@ if [ -f "core/libZXing.so" ]; then
     cp core/libZXing.so ../arm64-v8a/
     # cp core/libc++_shared.so ../arm64-v8a/
     file ../arm64-v8a/libZXing.so
+    check_global_ctors ../arm64-v8a/libZXing.so
     echo "✅ arm64-v8a build successful"
 else
     echo "❌ arm64-v8a build failed - libZXing.so not found"
@@ -101,6 +118,7 @@ if [ -f "core/libZXing.so" ]; then
     cp core/libZXing.so ../armeabi-v7a/
     # cp core/libc++_shared.so ../armeabi-v7a/
     file ../armeabi-v7a/libZXing.so
+    check_global_ctors ../armeabi-v7a/libZXing.so
     echo "✅ armeabi-v7a build successful"
 else
     echo "❌ armeabi-v7a build failed - libZXing.so not found"
@@ -123,6 +141,7 @@ if [ -f "core/libZXing.so" ]; then
     cp core/libZXing.so ../x86/
     # cp core/libc++_shared.so ../x86/
     file ../x86/libZXing.so
+    check_global_ctors ../x86/libZXing.so
     echo "✅ x86 build successful"
 else
     echo "❌ x86 build failed - libZXing.so not found"
@@ -145,6 +164,7 @@ if [ -f "core/libZXing.so" ]; then
     cp core/libZXing.so ../x86_64/
     # cp core/libc++_shared.so ../x86_64/
     file ../x86_64/libZXing.so
+    check_global_ctors ../x86_64/libZXing.so
     echo "✅ x86_64 build successful"
 else
     echo "❌ x86_64 build failed - libZXing.so not found"
