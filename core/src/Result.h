@@ -61,6 +61,11 @@ public:
 	const ByteArray& bytes() const;
 
 	/**
+	 * @brief bytes is the raw / standard content without any modifications like character set conversions
+	 */
+	ByteArray bytesFNCFix() const;
+
+	/**
 	 * @brief bytesECI is the raw / standard content following the ECI protocol
 	 */
 	ByteArray bytesECI() const;
