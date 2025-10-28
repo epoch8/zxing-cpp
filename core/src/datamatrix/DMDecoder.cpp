@@ -168,6 +168,8 @@ static void DecodeC40OrTextSegment(BitSource& bits, Content& result, Mode mode)
 			case 2:
 				if (cValue < 28) // Size(SHIFT_SET_CHARS))
           if (SHIFT_SET_CHARS[cValue] == (char)29) {
+			// result.push_back(232);
+			result.fncPositions.push_back(result.bytes.size());
             result.push_back((char)'{');
             result.push_back((char)'F');
             result.push_back((char)'N');
@@ -295,7 +297,7 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 	bool readerInit = false;
 	bool firstCodeword = true;
 	bool done = false;
-	int firstFNC1Position = 1;
+	// int firstFNC1Position = 1;
 	Shift128 upperShift;
 
 	// See ISO 16022:2006, 5.2.3 and Annex C, Table C.2
@@ -314,25 +316,21 @@ DecoderResult Decode(ByteArray&& bytes, const bool isDMRE)
 				// Only recognizing an FNC1 as first/second by codeword position (aka symbol character position), not
 				// by decoded character position, i.e. not recognizing a C40/Text encoded FNC1 (which requires a latch
 				// and a shift)
-				if (bits.byteOffset() == firstFNC1Position)
-				{
-					result.push_back((char)'{');
-					result.push_back((char)'F');
-					result.push_back((char)'N');
-					result.push_back((char)'C');
-					result.push_back((char)'1');
-					result.push_back((char)'}');
-					break;
-				}
-				//result.symbology.modifier = '2'; // GS1
+				// if (bits.byteOffset() == firstFNC1Position)
+				// 	result.symbology.modifier = '2'; // GS1
 				// else if (bits.byteOffset() == firstFNC1Position + 1)
 				// 	result.symbology.modifier = '3'; // AIM, note no AIM Application Indicator format defined, ISO 16022:2006 11.2
-				else
-				{
-					result.push_back((char)29); // translate as ASCII 29 <GS>
-					break;
-				}
-
+				// else
+				// 	result.push_back((char)29); // translate as ASCII 29 <GS>
+				// result.push_back(232);
+				result.fncPositions.push_back(result.bytes.size());
+                result.push_back((char)'{');
+                result.push_back((char)'F');
+                result.push_back((char)'N');
+                result.push_back((char)'C');
+                result.push_back((char)'1');
+                result.push_back((char)'}');
+				break;
 			case 233: // Structured Append
 				if (!firstCodeword) // Must be first ISO 16022:2006 5.6.1
 					throw FormatError("structured append tag must be first code word");

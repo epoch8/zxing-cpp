@@ -52,6 +52,24 @@ const ByteArray& Result::bytes() const
 	return _content.bytes;
 }
 
+ByteArray Result::bytesFNCFix() const
+{
+	auto& fncPos = _content.fncPositions;
+	if(fncPos.empty()) {
+		return ByteArray(_content.bytes);
+	}
+	ByteArray newBytes(_content.bytes.size() - fncPos.size() * 5);
+	size_t a = 0, i = 0;
+	for(size_t b : fncPos){
+		std::copy(&_content.bytes[a], &_content.bytes[b], &newBytes[i]);
+		i+=b-a;
+		newBytes[i++] = 232;
+		a = b + 6;
+	}
+	std::copy(&_content.bytes[a], &_content.bytes[_content.bytes.size()], &newBytes[i]);
+	return newBytes;
+}
+
 ByteArray Result::bytesECI() const
 {
 	return _content.bytesECI();
