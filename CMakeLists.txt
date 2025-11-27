@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 
 project(ZXing)
+
+
+
 # Add these lines before find_package(OpenCV)
 #set(OpenCV_DIR "/usr/local/lib/cmake/opencv3")  # Likely location of OpenCV 3.4 config
 #set(OpenCV_FIND_VERSION "3.4")
@@ -69,6 +72,15 @@ endif()
 
 add_subdirectory (core)
 
+
+if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
+  # Make the dependency explicit in case the toolchain doesn't add it
+  find_library(cpp_shared c++_shared)
+  if(cpp_shared)
+    target_link_libraries(ZXing PRIVATE ${cpp_shared})
+  endif()
+endif()
+
 enable_testing()
 
 include(zxing.cmake)
@@ -96,4 +108,11 @@ if(BUILD_FOR_AARM)
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
     set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+endif()
+
+if(BUILD_FOR_AARM)
+  # Use the shared C++ runtime on Android
+  set(ANDROID_STL c++_shared CACHE STRING "Android STL")
+  # Older CMake fallback:
+  set(CMAKE_ANDROID_STL_TYPE c++_shared)
 endif()

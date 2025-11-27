@@ -53,6 +53,8 @@ for (auto v : vec) \
 printf("\n");
 #endif
 
+#define VEC_SIZE 4
+
 namespace ZXing::DataMatrix {
 
 /**
@@ -130,6 +132,42 @@ namespace ZXing::DataMatrix {
     static float RoundToNearestF(T x)
     {
         return static_cast<float>(std::round(x));
+    }
+
+    int8_t testCenterLineOffset(const BitMatrix& img) {
+        if(img.width() < 32 || img.width() > 52) return 0;
+        uint8_t lineInfoCnt[4];
+        for(int i = 4; i--;){
+            lineInfoCnt[i] = 1.0f;
+        }
+        int startY = img.height() / 2 - 2;
+
+        for(int yo = 0; yo < 4; yo++) {
+            int y = startY + yo;
+            uint8_t curState = img.get(0, y);
+            for(int x = 1; x < img.width(); x++) {
+                auto v = img.get(x, y);
+                if(curState != v) {
+                    lineInfoCnt[yo]++;
+                    curState = v;
+                }
+            }
+        }
+
+        int indexSync = std::min_element(lineInfoCnt, lineInfoCnt + 4) - lineInfoCnt;
+        int indexLine = std::max_element(lineInfoCnt, lineInfoCnt + 4) - lineInfoCnt;
+        int minLine = std::min(indexSync, indexLine);
+        return minLine - 1;
+    }
+
+
+
+    std::pair<int8_t, int8_t> testCenterLineBiOffset(const BitMatrix& img) {
+        int8_t offsetY = testCenterLineOffset(img);
+        auto imgRotated = img.copy();
+        imgRotated.rotate90();
+        int8_t offsetX = testCenterLineOffset(imgRotated);
+        return {offsetX, offsetY};
     }
 
 /**
@@ -233,6 +271,34 @@ namespace ZXing::DataMatrix {
     {
         return SampleGridWarped(image, width, height, warp,
                                 {Rectangle(width, height, 0.5), {topLeft, topRight, bottomRight, bottomLeft}});
+    }
+
+    static DetectorResult SampleGridTestOffseted(const BitMatrix& image, int width, int height, const PerspectiveTransform& mod2Pix)
+    {
+        auto res = SampleGrid(image, width, height, mod2Pix);
+        // return res;
+        auto [xMul, yMul] = testCenterLineBiOffset(res.bits());
+        if(xMul != 0 || yMul != 0) {
+            auto oo = mod2Pix({0, 0});
+            // PointF xo = float(xMul) * (mod2Pix({width, 0}) - oo) / float(width);
+            // PointF yo = float(yMul) * (mod2Pix({0, height}) - oo) / float(height);
+            PointF xo = {float(xMul), 0.0f};
+            PointF yo = {0.0f, float(yMul)};
+            Warp w({{}, xo, {}}, {{}, yo, {}});
+            w.isFinal = false;
+            w.Resample(width, height);
+            res = SampleGridWarped(image, width, height, w, mod2Pix);
+            // auto offsets = testCenterLineBiOffset(res.bits());
+            return res;
+        }
+        return res;
+    }
+
+    static DetectorResult SampleGridTestOffseted(const BitMatrix& image, const ResultPoint& topLeft, const ResultPoint& bottomLeft,
+                                                 const ResultPoint& bottomRight, const ResultPoint& topRight, int width, int height)
+    {
+        PerspectiveTransform mod2pix = { Rectangle(width, height, 0.5), {topLeft, topRight, bottomRight, bottomLeft} };
+        return SampleGridTestOffseted(image, width, height, mod2pix);
     }
 
 /**
@@ -580,7 +646,9 @@ namespace ZXing::DataMatrix {
             res = SampleGrid(image, *topLeft, *bottomLeft - DirLeftBT, *bottomRight - DirRightBT, correctedTopRight, dimensionTop, dimensionRight);
             if(outDecoderResult = Decode(res.bits()); outDecoderResult.isValid()) return res;
             correctedOffset = false;
-            res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
+            // res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
+            res = SampleGridTestOffseted(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
+
             outDecoderResult = Decode(res.bits());
             return res;
         }
@@ -1037,7 +1105,7 @@ namespace ZXing::DataMatrix {
                     res = SampleGridWarped(*startTracer.img, dimT, dimR, *warp, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
                 }
             } else {
-                res = SampleGrid(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
+                res = SampleGridTestOffseted(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
             }
 
             CHECK(res.isValid());
@@ -1185,6 +1253,21 @@ namespace ZXing::DataMatrix {
 
     }
 
+	float very_fast_cos(float x) {
+		constexpr float two_pi = 2.0f * M_PI;
+		constexpr float inv_two_pi = 1.0f / two_pi;
+		
+		x -= two_pi * static_cast<int>(x * inv_two_pi);
+		
+		if (x > M_PI) x = two_pi - x;
+		float x_abs = (x < 0) ? -x : x;
+		
+		constexpr float a = -0.25f;
+		constexpr float b = 1.0f;
+		
+		return a * x_abs * x_abs + b;
+	}
+
     void createMaps(cv::Mat& mapXY, int outputSize, bool horizontal, bool inverse) {
         mapXY.create(outputSize, outputSize, CV_32FC2);
 
@@ -1192,37 +1275,35 @@ namespace ZXing::DataMatrix {
 
         static cv::Mat offsetMap;
 
+		constexpr size_t alignment = VEC_SIZE * 4;
+		constexpr size_t elements_per_vector = VEC_SIZE;
+
         if(offsetMap.cols != outputSize) {
             offsetMap = cv::Mat(1, outputSize, CV_32F);
 
-            constexpr const int vec_size = cv::v_float32::nlanes;
-            constexpr size_t simd_alignment = cv::v_float32::nlanes * sizeof(float);
-            float* mapRow = offsetMap.ptr<float>(0);
-            int i = 0;
-            alignas(simd_alignment) float tmp[vec_size];
-            alignas(simd_alignment) float tmp2[vec_size];
-            for(int k = 0; k < vec_size; k++) {
-                tmp2[k] = k;
-            }
-            cv::v_float32 indexAdd = cv::v_load_aligned(tmp2);
             float indexMul = 2.0 / float(outputSize - 1);
+            size_t i = 0;
+			float* mapRow = offsetMap.ptr<float>(0);
 
-            for (; i <= outputSize - vec_size; i += vec_size) {
+			while ((reinterpret_cast<uintptr_t>(mapRow + i) & (alignment - 1)) != 0 && i < outputSize) {
+				mapRow[i] = (very_fast_cos(std::fabs(float(i) * indexMul - 1.0f)) - 0.75) * factor;
+				i++;
+			}
 
-                cv::v_float32 v_val = (cv::v_setall_f32(static_cast<float>(i)) + indexAdd) * cv::v_setall_f32(indexMul);
+			if (i + elements_per_vector <= outputSize) {
+				const size_t aligned_size = (outputSize - i) & ~(elements_per_vector - 1);
+				float* aligned_data = static_cast<float*>(__builtin_assume_aligned(mapRow + i, alignment));
 
-                v_val = cv::v_abs(v_val - cv::v_setall_f32(1.0));
-                cv::v_store_aligned(tmp, v_val);
+				for (size_t j = 0; j < aligned_size; j+=VEC_SIZE) {
+					for(size_t jj = 0; jj < VEC_SIZE; jj++) {
+						size_t ij = j + jj;
+						aligned_data[ij] = (very_fast_cos(std::abs(float(i++) * indexMul - 1.0f)) - 0.75) * factor;
+					}
+				}
+			}
 
-                for(int k = 0; k < vec_size; k++) {
-                    tmp[k] = std::cos(tmp[k]);
-                }
-                v_val = cv::v_load_aligned(tmp);
-                v_val = (v_val - cv::v_setall_f32(0.75)) * cv::v_setall_f32(factor);
-                cv::v_store(mapRow + i, v_val);
-            }
-            for (; i < outputSize; ++i) {
-                mapRow[i] = (std::cos(std::fabs(float(i) * indexMul - 1.0)) - 0.75) * factor;
+			for (; i < outputSize; ++i) {
+                mapRow[i] = (very_fast_cos(std::abs(float(i) * indexMul - 1.0f)) - 0.75) * factor;
             }
         }
 

@@ -36,42 +36,43 @@ namespace ZXing {
 * @return {@link DetectorResult} representing a grid of points sampled from the image within a region
 *   defined by the "src" parameters. Result is empty if transformation is invalid (out of bound access).
 */
-DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const PerspectiveTransform& mod2Pix);
-DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const class Warp& warp, const PerspectiveTransform& mod2Pix);
-template <typename PointT = PointF>
-Quadrilateral<PointT> Rectangle(int x0, int x1, int y0, int y1, typename PointT::value_t o = 0.5)
-{
-	return {PointT{x0 + o, y0 + o}, {x1 + o, y0 + o}, {x1 + o, y1 + o}, {x0 + o, y1 + o}};
-}
-class ROI
-{
-public:
-	int x0, x1, y0, y1;
-	PerspectiveTransform mod2Pix;
-};
-class Warp
-{
-public:
-	Warp() = default;
-	Warp(int sampleCount, const PointF& defaultVal = { 0.0, 0.0 }) : xOffsets(sampleCount, defaultVal), yOffsets(sampleCount, defaultVal) {};
-	Warp(int xSize, int ySize, const PointF& defaultVal = { 0.0, 0.0 }) : xOffsets(xSize, defaultVal), yOffsets(ySize, defaultVal) {};
-	
-	void Resample(int sizeX, int sizeY);
+    DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const PerspectiveTransform& mod2Pix);
+    DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const class Warp& warp, const PerspectiveTransform& mod2Pix);
+    template <typename PointT = PointF>
+    Quadrilateral<PointT> Rectangle(int x0, int x1, int y0, int y1, typename PointT::value_t o = 0.5)
+    {
+        return {PointT{x0 + o, y0 + o}, {x1 + o, y0 + o}, {x1 + o, y1 + o}, {x0 + o, y1 + o}};
+    }
+    class ROI
+    {
+    public:
+        int x0, x1, y0, y1;
+        PerspectiveTransform mod2Pix;
+    };
+    class Warp
+    {
+    public:
+        Warp() = default;
+        Warp(int sampleCount, const PointF& defaultVal = { 0.0, 0.0 }) : xOffsets(sampleCount, defaultVal), yOffsets(sampleCount, defaultVal) {};
+        Warp(int xSize, int ySize, const PointF& defaultVal = { 0.0, 0.0 }) : xOffsets(xSize, defaultVal), yOffsets(ySize, defaultVal) {};
+        Warp(std::vector<PointF> && x, std::vector<PointF>&& y) : xOffsets(std::move(x)), yOffsets(std::move(y)) {};
+        void Resample(int sizeX, int sizeY);
 
-	inline bool isValid() {
-		return !xOffsets.empty() && !yOffsets.empty();
-	}
+        inline bool isValid() {
+            return !xOffsets.empty() && !yOffsets.empty();
+        }
 
-	std::vector<PointF> xOffsets;
-	std::vector<PointF> yOffsets;
-};
-using ROIs = std::vector<ROI>;
-DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const ROIs& rois);
+        std::vector<PointF> xOffsets;
+        std::vector<PointF> yOffsets;
+        bool isFinal = true;
+    };
+    using ROIs = std::vector<ROI>;
+    DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const ROIs& rois);
 
-DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const Warp& warp, const ROIs& rois);
-void CorrectCorners(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int gridSize, float subpixelOffset = 0.5);
-Warp ComputeWarp(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int width, int height, int predictedSize, float subpixelOffset = 0.5);
+    DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const Warp& warp, const ROIs& rois);
+    void CorrectCorners(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int gridSize, float subpixelOffset = 0.5);
+    Warp ComputeWarp(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int width, int height, int predictedSize, float subpixelOffset = 0.5);
 
-int FindRotation(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int gridSize);
+    int FindRotation(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int gridSize);
 
 } // ZXing

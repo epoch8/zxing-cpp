@@ -18,9 +18,10 @@ namespace ZXing {
 
 // TODO: c++20 has char8_t
 #if __cplusplus <= 201703L
-using char8_t = uint8_t;
+    using char8_t = uint8_t; // or unsigned char
 #endif
-using utf8_t = std::basic_string_view<char8_t>;
+    using state_t = uint8_t;
+    using utf8_t = std::string_view;
 
 using state_t = uint8_t;
 constexpr state_t kAccepted = 0;
@@ -103,7 +104,7 @@ static void AppendFromUtf8(utf8_t utf8, std::wstring& buffer)
 	state_t state = kAccepted;
 
 	for (auto b : utf8) {
-		if (Utf8Decode(b, state, codePoint) != kAccepted)
+        if (Utf8Decode(static_cast<char8_t>(static_cast<unsigned char>(b)), state, codePoint) != kAccepted)
 			continue;
 
 		if (sizeof(wchar_t) == 2 && codePoint > 0xffff) { // surrogate pair
@@ -115,19 +116,17 @@ static void AppendFromUtf8(utf8_t utf8, std::wstring& buffer)
 	}
 }
 
-std::wstring FromUtf8(std::string_view utf8)
-{
-	std::wstring str;
-	AppendFromUtf8({reinterpret_cast<const char8_t*>(utf8.data()), utf8.size()}, str);
-	return str;
+std::wstring FromUtf8(std::string_view utf8) {
+    std::wstring str;
+    AppendFromUtf8(utf8, str);
+    return str;
 }
 
 #if __cplusplus > 201703L
-std::wstring FromUtf8(std::u8string_view utf8)
-{
-	std::wstring str;
-	AppendFromUtf8(utf8, str);
-	return str;
+    std::wstring FromUtf8(std::u8string_view utf8) {
+    std::wstring str;
+    AppendFromUtf8(std::string_view{reinterpret_cast<const char*>(utf8.data()), utf8.size()}, str);
+    return str;
 }
 #endif
 

@@ -17,183 +17,201 @@
 
 namespace ZXing {
 
-Result::Result(const std::string& text, int y, int xStart, int xStop, BarcodeFormat format, SymbologyIdentifier si, Error error, bool readerInit)
-	: _content({ByteArray(text)}, si),
-	  _error(error),
-	  _position(Line(y, xStart, xStop)),
-	  _format(format),
-	  _readerInit(readerInit)
-{}
+    Result::Result(const std::string& text, int y, int xStart, int xStop, BarcodeFormat format, SymbologyIdentifier si, Error error, bool readerInit)
+            : _content({ByteArray(text)}, si),
+              _error(error),
+              _position(Line(y, xStart, xStop)),
+              _format(format),
+              _readerInit(readerInit)
+    {}
 
-Result::Result(DecoderResult&& decodeResult, Position&& position, BarcodeFormat format)
-	: _content(std::move(decodeResult).content()),
-	  _error(std::move(decodeResult).error()),
-	  _position(std::move(position)),
-	  _sai(decodeResult.structuredAppend()),
-	  _format(format),
-	  _lineCount(decodeResult.lineCount()),
-	  _isMirrored(decodeResult.isMirrored()),
-	  _readerInit(decodeResult.readerInit())
-{
-	if (decodeResult.versionNumber())
-		snprintf(_version, 4, "%d", decodeResult.versionNumber());
-	snprintf(_ecLevel, 4, "%s", decodeResult.ecLevel().data());
+    Result::Result(DecoderResult&& decodeResult, Position&& position, BarcodeFormat format)
+            : _content(std::move(decodeResult).content()),
+              _error(std::move(decodeResult).error()),
+              _position(std::move(position)),
+              _sai(decodeResult.structuredAppend()),
+              _format(format),
+              _lineCount(decodeResult.lineCount()),
+              _isMirrored(decodeResult.isMirrored()),
+              _readerInit(decodeResult.readerInit())
+    {
+        if (decodeResult.versionNumber())
+            snprintf(_version, 4, "%d", decodeResult.versionNumber());
+        snprintf(_ecLevel, 4, "%s", decodeResult.ecLevel().data());
 
-	// TODO: add type opaque and code specific 'extra data'? (see DecoderResult::extra())
-}
+        // TODO: add type opaque and code specific 'extra data'? (see DecoderResult::extra())
+    }
 
-bool Result::isValid() const
-{
-	return format() != BarcodeFormat::None && _content.symbology.code != 0 && !error();
-}
+    bool Result::isValid() const
+    {
+        return format() != BarcodeFormat::None && _content.symbology.code != 0 && !error();
+    }
 
-const ByteArray& Result::bytes() const
-{
-	return _content.bytes;
-}
+    const ByteArray& Result::bytes() const
+    {
+        return _content.bytes;
+    }
 
-ByteArray Result::bytesECI() const
-{
-	return _content.bytesECI();
-}
+    ByteArray Result::bytesFNCFix() const
+    {
+        auto& fncPos = _content.fncPositions;
+        if(fncPos.empty()) {
+            return ByteArray(_content.bytes);
+        }
+        ByteArray newBytes(_content.bytes.size() - fncPos.size() * 5);
+        size_t a = 0, i = 0;
+        for(size_t b : fncPos){
+            std::copy(&_content.bytes[a], &_content.bytes[b], &newBytes[i]);
+            i+=b-a;
+            newBytes[i++] = 232;
+            a = b + 6;
+        }
+        std::copy(&_content.bytes[a], &_content.bytes[_content.bytes.size()], &newBytes[i]);
+        return newBytes;
+    }
 
-std::string Result::text(TextMode mode) const
-{
-	return _content.text(mode);
-}
+    ByteArray Result::bytesECI() const
+    {
+        return _content.bytesECI();
+    }
 
-std::string Result::text() const
-{
-	return text(_decodeHints.textMode());
-}
+    std::string Result::text(TextMode mode) const
+    {
+        return _content.text(mode);
+    }
 
-std::string Result::ecLevel() const
-{
-	return _ecLevel;
-}
+    std::string Result::text() const
+    {
+        return text(_decodeHints.textMode());
+    }
 
-ContentType Result::contentType() const
-{
-	return _content.type();
-}
+    std::string Result::ecLevel() const
+    {
+        return _ecLevel;
+    }
 
-bool Result::hasECI() const
-{
-	return _content.hasECI;
-}
+    ContentType Result::contentType() const
+    {
+        return _content.type();
+    }
 
-int Result::orientation() const
-{
-	constexpr auto std_numbers_pi_v = 3.14159265358979323846; // TODO: c++20 <numbers>
-	return narrow_cast<int>(std::lround(_position.orientation() * 180 / std_numbers_pi_v));
-}
+    bool Result::hasECI() const
+    {
+        return _content.hasECI;
+    }
 
-std::string Result::symbologyIdentifier() const
-{
-	return _content.symbology.toString();
-}
+    int Result::orientation() const
+    {
+        constexpr auto std_numbers_pi_v = 3.14159265358979323846; // TODO: c++20 <numbers>
+        return narrow_cast<int>(std::lround(_position.orientation() * 180 / std_numbers_pi_v));
+    }
 
-int Result::sequenceSize() const
-{
-	return _sai.count;
-}
+    std::string Result::symbologyIdentifier() const
+    {
+        return _content.symbology.toString();
+    }
 
-int Result::sequenceIndex() const
-{
-	return _sai.index;
-}
+    int Result::sequenceSize() const
+    {
+        return _sai.count;
+    }
 
-std::string Result::sequenceId() const
-{
-	return _sai.id;
-}
+    int Result::sequenceIndex() const
+    {
+        return _sai.index;
+    }
 
-std::string Result::version() const
-{
-	return _version;
-}
+    std::string Result::sequenceId() const
+    {
+        return _sai.id;
+    }
 
-Result& Result::setDecodeHints(DecodeHints hints)
-{
-	if (hints.characterSet() != CharacterSet::Unknown)
-		_content.defaultCharset = hints.characterSet();
-	_decodeHints = hints;
-	return *this;
-}
+    std::string Result::version() const
+    {
+        return _version;
+    }
 
-bool Result::operator==(const Result& o) const
-{
-	// handle case where both are MatrixCodes first
-	if (!BarcodeFormats(BarcodeFormat::LinearCodes).testFlags(format() | o.format())) {
-		if (format() != o.format() || (bytes() != o.bytes() && isValid() && o.isValid()))
-			return false;
+    Result& Result::setDecodeHints(DecodeHints hints)
+    {
+        if (hints.characterSet() != CharacterSet::Unknown)
+            _content.defaultCharset = hints.characterSet();
+        _decodeHints = hints;
+        return *this;
+    }
 
-		// check for equal position if both are valid with equal bytes or at least one is in error
-		return IsInside(Center(o.position()), position());
-	}
+    bool Result::operator==(const Result& o) const
+    {
+        // handle case where both are MatrixCodes first
+        if (!BarcodeFormats(BarcodeFormat::LinearCodes).testFlags(format() | o.format())) {
+            if (format() != o.format() || (bytes() != o.bytes() && isValid() && o.isValid()))
+                return false;
 
-	if (format() != o.format() || bytes() != o.bytes() || error() != o.error())
-		return false;
+            // check for equal position if both are valid with equal bytes or at least one is in error
+            return IsInside(Center(o.position()), position());
+        }
 
-	if (orientation() != o.orientation())
-		return false;
+        if (format() != o.format() || bytes() != o.bytes() || error() != o.error())
+            return false;
 
-	if (lineCount() > 1 && o.lineCount() > 1)
-		return IsInside(Center(o.position()), position());
+        if (orientation() != o.orientation())
+            return false;
 
-	// the following code is only meant for this->lineCount == 1
-	assert(lineCount() == 1);
+        if (lineCount() > 1 && o.lineCount() > 1)
+            return IsInside(Center(o.position()), position());
 
-	// if one line is less than half the length of the other away from the
-	// latter, we consider it to belong to the same symbol. additionally, both need to have
-	// roughly the same length (see #367)
-	auto dTop = maxAbsComponent(o.position().topLeft() - position().topLeft());
-	auto dBot = maxAbsComponent(o.position().bottomLeft() - position().topLeft());
-	auto length = maxAbsComponent(position().topLeft() - position().bottomRight());
-	auto dLength = std::abs(length - maxAbsComponent(o.position().topLeft() - o.position().bottomRight()));
+        // the following code is only meant for this->lineCount == 1
+        assert(lineCount() == 1);
 
-	return std::min(dTop, dBot) < length / 2 && dLength < length / 5;
-}
+        // if one line is less than half the length of the other away from the
+        // latter, we consider it to belong to the same symbol. additionally, both need to have
+        // roughly the same length (see #367)
+        auto dTop = maxAbsComponent(o.position().topLeft() - position().topLeft());
+        auto dBot = maxAbsComponent(o.position().bottomLeft() - position().topLeft());
+        auto length = maxAbsComponent(position().topLeft() - position().bottomRight());
+        auto dLength = std::abs(length - maxAbsComponent(o.position().topLeft() - o.position().bottomRight()));
 
-Result MergeStructuredAppendSequence(const Results& results)
-{
-	if (results.empty())
-		return {};
+        return std::min(dTop, dBot) < length / 2 && dLength < length / 5;
+    }
 
-	std::list<Result> allResults(results.begin(), results.end());
-	allResults.sort([](const Result& r1, const Result& r2) { return r1.sequenceIndex() < r2.sequenceIndex(); });
+    Result MergeStructuredAppendSequence(const Results& results)
+    {
+        if (results.empty())
+            return {};
 
-	Result res = allResults.front();
-	for (auto i = std::next(allResults.begin()); i != allResults.end(); ++i)
-		res._content.append(i->_content);
+        std::list<Result> allResults(results.begin(), results.end());
+        allResults.sort([](const Result& r1, const Result& r2) { return r1.sequenceIndex() < r2.sequenceIndex(); });
 
-	res._position = {};
-	res._sai.index = -1;
+        Result res = allResults.front();
+        for (auto i = std::next(allResults.begin()); i != allResults.end(); ++i)
+            res._content.append(i->_content);
 
-	if (allResults.back().sequenceSize() != Size(allResults) ||
-		!std::all_of(allResults.begin(), allResults.end(),
-					 [&](Result& it) { return it.sequenceId() == allResults.front().sequenceId(); }))
-		res._error = FormatError("sequenceIDs not matching during structured append sequence merging");
+        res._position = {};
+        res._sai.index = -1;
 
-	return res;
-}
+        if (allResults.back().sequenceSize() != Size(allResults) ||
+            !std::all_of(allResults.begin(), allResults.end(),
+                         [&](Result& it) { return it.sequenceId() == allResults.front().sequenceId(); }))
+            res._error = FormatError("sequenceIDs not matching during structured append sequence merging");
 
-Results MergeStructuredAppendSequences(const Results& results)
-{
-	std::map<std::string, Results> sas;
-	for (auto& res : results) {
-		if (res.isPartOfSequence())
-			sas[res.sequenceId()].push_back(res);
-	}
+        return res;
+    }
 
-	Results saiResults;
-	for (auto& [id, seq] : sas) {
-		auto res = MergeStructuredAppendSequence(seq);
-		if (res.isValid())
-			saiResults.push_back(std::move(res));
-	}
+    Results MergeStructuredAppendSequences(const Results& results)
+    {
+        std::map<std::string, Results> sas;
+        for (auto& res : results) {
+            if (res.isPartOfSequence())
+                sas[res.sequenceId()].push_back(res);
+        }
 
-	return saiResults;
-}
+        Results saiResults;
+        for (auto& [id, seq] : sas) {
+            auto res = MergeStructuredAppendSequence(seq);
+            if (res.isValid())
+                saiResults.push_back(std::move(res));
+        }
+
+        return saiResults;
+    }
 
 } // ZXing
