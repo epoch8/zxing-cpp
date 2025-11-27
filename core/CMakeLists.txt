@@ -3,34 +3,35 @@ cmake_minimum_required(VERSION 3.15)
 if(NOT DEFINED PROJECT_VERSION OR "${PROJECT_VERSION}" STREQUAL "")
     set(PROJECT_VERSION "2.0.0")
 endif()
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    if(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
+        # Linux build: prefer OpenCV 4 via pkg-config, fallback to opencv (3.x)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(OpenCV opencv4)
+        if(NOT OpenCV_FOUND)
+            pkg_check_modules(OpenCV REQUIRED opencv)
+        endif()
 
-if(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
-    # Linux build: prefer OpenCV 4 via pkg-config, fallback to opencv (3.x)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(OpenCV opencv4)
-    if(NOT OpenCV_FOUND)
-        pkg_check_modules(OpenCV REQUIRED opencv)
+        add_library(opencv_interface INTERFACE)
+        target_include_directories(opencv_interface INTERFACE ${OpenCV_INCLUDE_DIRS})
+        target_link_libraries(opencv_interface INTERFACE ${OpenCV_LIBRARIES})
+        target_compile_options(opencv_interface INTERFACE ${OpenCV_CFLAGS_OTHER})
+
+        set(OpenCV_FOUND TRUE)
+        set(OpenCV_LIBS opencv_interface)
+    else()
+        # Android build: use OpenCV Android SDK (OpenCVConfig.cmake)
+        set(OpenCV_FIND_VERSION "4.0")
+        set(OpenCV_SHARED ON)
+        set(BUILD_SHARED_LIBS ON)
+
+        # Point OpenCV_DIR to ABI-specific config if present
+        if(OpenCV_DIR AND ANDROID_ABI AND EXISTS "${OpenCV_DIR}/abi-${ANDROID_ABI}/OpenCVConfig.cmake")
+            set(OpenCV_DIR "${OpenCV_DIR}/abi-${ANDROID_ABI}")
+        endif()
+
+        find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
     endif()
-
-    add_library(opencv_interface INTERFACE)
-    target_include_directories(opencv_interface INTERFACE ${OpenCV_INCLUDE_DIRS})
-    target_link_libraries(opencv_interface INTERFACE ${OpenCV_LIBRARIES})
-    target_compile_options(opencv_interface INTERFACE ${OpenCV_CFLAGS_OTHER})
-
-    set(OpenCV_FOUND TRUE)
-    set(OpenCV_LIBS opencv_interface)
-else()
-    # Android build: use OpenCV Android SDK (OpenCVConfig.cmake)
-    set(OpenCV_FIND_VERSION "4.0")
-    set(OpenCV_SHARED ON)
-    set(BUILD_SHARED_LIBS ON)
-
-    # Point OpenCV_DIR to ABI-specific config if present
-    if(OpenCV_DIR AND ANDROID_ABI AND EXISTS "${OpenCV_DIR}/abi-${ANDROID_ABI}/OpenCVConfig.cmake")
-        set(OpenCV_DIR "${OpenCV_DIR}/abi-${ANDROID_ABI}")
-    endif()
-
-    find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
 endif()
 
 

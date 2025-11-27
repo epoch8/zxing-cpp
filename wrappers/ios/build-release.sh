@@ -1,5 +1,5 @@
 #!/bin/sh
-
+PATH="/Applications/CMake.app/Contents/bin":"$PATH"
 # Определяем папки для каждой сборки
 SIM_BUILD_DIR="_builds_sim"
 DEV_BUILD_DIR="_builds_dev"

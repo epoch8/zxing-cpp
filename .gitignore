@@ -7,3 +7,10 @@ CMakeLists.txt.user
 
 .idea
 release
+*.DS_Store
+wrappers/ios/_builds_dev
+wrappers/ios/_builds_sim
+
+#огромные файлы, нельзя через lfs засунуть в форк
+wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/Versions/A/opencv2
+wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/Versions/A/opencv2 
