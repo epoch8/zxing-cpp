@@ -20,6 +20,8 @@ option (BUILD_BLACKBOX_TESTS "Build the black box reader/writer tests" OFF)
 option (BUILD_UNIT_TESTS "Build the unit tests (don't enable for production builds)" OFF)
 option (BUILD_PYTHON_MODULE "Build the python module" OFF)
 option(BUILD_FOR_AARM "Build for android" OFF)
+option(BUILD_FOR_WASM "Build for wasm" OFF)
+
 set(BUILD_DEPENDENCIES "AUTO" CACHE STRING "Fetch from github or use locally installed (AUTO/GITHUB/LOCAL)")
 
 if (WIN32)
@@ -96,6 +98,9 @@ if (BUILD_UNIT_TESTS)
 endif()
 if (BUILD_PYTHON_MODULE)
     add_subdirectory (wrappers/python)
+endif()
+if (BUILD_FOR_WASM)
+    add_subdirectory (wasm)
 endif()
 
 # log-lib for aarm64 build

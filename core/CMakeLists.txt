@@ -4,7 +4,11 @@ if(NOT DEFINED PROJECT_VERSION OR "${PROJECT_VERSION}" STREQUAL "")
     set(PROJECT_VERSION "2.0.0")
 endif()
 
-if(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
+if(BUILD_FOR_WASM)
+    message("INFO: BUILD FOR WASM")
+    find_package(OpenCV REQUIRED COMPONENTS core imgproc PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
+    set(BUILD_SHARED_LIBS OFF)
+elseif(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
     # Linux build: prefer OpenCV 4 via pkg-config, fallback to opencv (3.x)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(OpenCV opencv4)
@@ -573,14 +577,7 @@ endif()
 target_compile_features(ZXing PUBLIC cxx_std_17)
 
 # Link OpenCV libraries based on build type
-if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
-    # Android build: use OpenCV_LIBS from find_package
-    target_link_libraries(ZXing PRIVATE Threads::Threads ${OpenCV_LIBS})
-else()
-    # Linux build: use opencv_interface from pkg-config
-    target_link_libraries(ZXing PRIVATE Threads::Threads ${OpenCV_LIBS})
-endif()
-
+target_link_libraries(ZXing PRIVATE Threads::Threads ${OpenCV_LIBS})
 #target_link_options (ZXing PRIVATE "LINKER:-rpath-link=${ANDROID_LIB_DIR}")
 
 add_library(ZXing::ZXing ALIAS ZXing)
