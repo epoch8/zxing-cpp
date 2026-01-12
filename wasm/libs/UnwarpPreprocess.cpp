@@ -52,9 +52,6 @@ pair<vector<Point>, vector<Point2f>> findMainContour(Mat thresh, float epsilon) 
     findContours(thresh, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
     // Check if any contours were found
     if (contours.empty()) {
-        // Return empty result or throw an exception
-//        LOG(ERROR) << "No contours found in image - throwing runtime_error";
-        throw runtime_error("No contours found in image");
 		return {{}, {}};
     }
 
