@@ -7,3 +7,6 @@ CMakeLists.txt.user
 
 .idea
 release
+
+build
+build_wasm

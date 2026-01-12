@@ -108,16 +108,19 @@ std::unique_ptr<ZXing::Results> try_decode_image_crpt(cv::Mat image_cv, cv::Mat 
 	return zxing_results;
 }
 
+std::string readCode(val jsTypedArray, int width, int height, val jsParams) {
 
-std::string readCode(val jsTypedArray, int width, int height) {
-
-	uint8_t length = jsTypedArray["length"].as<uint8_t>();
+	size_t length = jsTypedArray["length"].as<size_t>();
 
 	std::vector<uint8_t> data(length);
 
 	val memoryView = val(typed_memory_view(length, data.data()));
 
 	memoryView.call<void>("set", jsTypedArray);
+
+	bool tryUnwarp = jsParams["unwarp"].isUndefined() ? true : jsParams["unwarp"].as<bool>();
+	int preprocessesCount = jsParams["preproc"].isNumber() ? jsParams["preproc"].as<int>() : 6;
+	preprocessesCount = preprocessesCount > 6 ? 6 : preprocessesCount;
 
 	const auto hints = ZXing::DecodeHints()
 		.setFormats(ZXing::BarcodeFormat::EAN13 | ZXing::BarcodeFormat::EAN8 | ZXing::BarcodeFormat::DataMatrix
@@ -138,7 +141,7 @@ std::string readCode(val jsTypedArray, int width, int height) {
 	ZXing::Result result;
 
 	auto processImage = [&](const cv::Mat& unwrapped_image) -> bool {
-		for (int candidate = 0; candidate <= 6; candidate++) {
+		for (int candidate = 0; candidate <= preprocessesCount; candidate++) {
 			cv::Mat image_candidate = preprocessesState.get_next_possible_image(image_cv, candidate);
 			std::unique_ptr<ZXing::Results> zxing_results_ptr = try_decode_image_crpt(image_cv, image_candidate, hints);
 			image_candidate.release();
@@ -151,12 +154,9 @@ std::string readCode(val jsTypedArray, int width, int height) {
 	};
 
 	bool anyResults = processImage(image_cv);
-	if (!anyResults) {
-		try {
-			cv::Mat unwarpedImage;
-			anyResults = cvUnwarpPreprocessPredefined(unwarpedImage, image_cv, {}, processImage, UnwarpParams());
-		} catch(...) {
-		}
+	if (!anyResults && tryUnwarp) {
+		cv::Mat unwarpedImage;
+		anyResults = cvUnwarpPreprocessPredefined(unwarpedImage, image_cv, {}, processImage, UnwarpParams());
 	}
 	if (anyResults) {
 		return result.text();
