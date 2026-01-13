@@ -97,18 +97,52 @@ std::unique_ptr<ZXing::Results> try_decode_image_crpt(cv::Mat image_cv, cv::Mat 
 {
 	std::unique_ptr<ZXing::Results> zxing_results = nullptr;
 
-	try {
-		zxing_results = std::make_unique<ZXing::Results>(
-			ZXing::readbarcodescrpt_samplegridv1(ZXing::ImageViewFromMat(image), hints));
-	}
-	catch (...) {
-		zxing_results = nullptr;
-	}
+	if(hints.formats() == ZXing::BarcodeFormat::DataMatrix) {
+		try {
+			zxing_results = std::make_unique<ZXing::Results>(ZXing::readbarcodescrpt_samplegridv1(ZXing::ImageViewFromMat(image), hints));
+		}
+		catch (...) {
+		}
 
+	}
+	else if(hints.hasFormat(ZXing::BarcodeFormat::DataMatrix)) {
+		try {
+			auto IV = ZXing::ImageViewFromMat(image);
+			auto noDmHints = hints;
+			noDmHints.setFormats(ZXing::BarcodeFormat::EAN13 | ZXing::BarcodeFormat::EAN8 | ZXing::BarcodeFormat::QRCode | ZXing::BarcodeFormat::PDF417);
+			zxing_results = std::make_unique<ZXing::Results>(ZXing::readbarcodescrpt_samplegridv1(IV, hints));
+			if(zxing_results == nullptr || zxing_results->size() < 1) {
+				zxing_results = std::make_unique<ZXing::Results>(ZXing::ReadBarcodes(IV, noDmHints));
+			}
+		}
+		catch (...) {
+		}
+	}
+	else {
+		try {
+			zxing_results = std::make_unique<ZXing::Results>(ZXing::ReadBarcodes(ZXing::ImageViewFromMat(image), hints));
+		}
+		catch (...) {
+		}
+
+	}
 	return zxing_results;
 }
 
-std::string readCode(val jsTypedArray, int width, int height, val jsParams) {
+val jsObjFromResult(const ZXing::Result result) {
+	auto ret = val::object();
+	auto bytes = result.bytesFNCFix();
+	auto raw = result.bytesFNCFix();
+	val rawMV = val(typed_memory_view(raw.size(), raw.data()));
+	ret.set("type", ZXing::ToString(result.format()));
+	ret.set("result", result.text());
+	auto jsAr = val::global("Uint8Array").new_(raw.size());
+	jsAr.call<void>("set", rawMV);
+	ret.set("bytes", jsAr);
+	return ret;
+}
+
+val readCode(val jsTypedArray, int width, int height, val jsParams) {
 
 	size_t length = jsTypedArray["length"].as<size_t>();
 
@@ -120,17 +154,18 @@ std::string readCode(val jsTypedArray, int width, int height, val jsParams) {
 
 	bool tryUnwarp = jsParams["unwarp"].isUndefined() ? true : jsParams["unwarp"].as<bool>();
 	int preprocessesCount = jsParams["preproc"].isNumber() ? jsParams["preproc"].as<int>() : 6;
+	bool onlyDM = jsParams["onlyDM"].isUndefined() ? false : jsParams["onlyDM"].as<bool>();
 	preprocessesCount = preprocessesCount > 6 ? 6 : preprocessesCount;
 
-	const auto hints = ZXing::DecodeHints()
-		.setFormats(ZXing::BarcodeFormat::EAN13 | ZXing::BarcodeFormat::EAN8 | ZXing::BarcodeFormat::DataMatrix
-					| ZXing::BarcodeFormat::QRCode | ZXing::BarcodeFormat::PDF417)
+	auto hints = ZXing::DecodeHints()
+		.setFormats(onlyDM ? ZXing::BarcodeFormat::DataMatrix : ( ZXing::BarcodeFormat::EAN13 | ZXing::BarcodeFormat::EAN8 | ZXing::BarcodeFormat::DataMatrix
+					| ZXing::BarcodeFormat::QRCode | ZXing::BarcodeFormat::PDF417))
 		.setTryRotate(true)
 		.setTryDownscale(true)
 		.setDownscaleFactor(4)
 		.setBinarizer(ZXing::Binarizer::LocalAverage)
 		.setIsPure(false)
-		.setMaxNumberOfSymbols(0xff)
+		.setMaxNumberOfSymbols(0x1)
 		.setEanAddOnSymbol(ZXing::EanAddOnSymbol::Ignore);
 
 	auto image_cv = cv::Mat(height, width, CV_8UC3, data.data()).clone();
@@ -159,10 +194,10 @@ std::string readCode(val jsTypedArray, int width, int height, val jsParams) {
 		anyResults = cvUnwarpPreprocessPredefined(unwarpedImage, image_cv, {}, processImage, UnwarpParams());
 	}
 	if (anyResults) {
-		return result.text();
+		return jsObjFromResult(result);
 	}
 
-	return "";
+	return val::null();
 }
 
 EMSCRIPTEN_BINDINGS(ZXingModule) {
