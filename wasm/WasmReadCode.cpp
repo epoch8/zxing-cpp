@@ -168,7 +168,27 @@ val readCode(val jsTypedArray, int width, int height, val jsParams) {
 		.setMaxNumberOfSymbols(0x1)
 		.setEanAddOnSymbol(ZXing::EanAddOnSymbol::Ignore);
 
-	auto image_cv = cv::Mat(height, width, CV_8UC3, data.data()).clone();
+	if(data.size() % (width * height) != 0) {
+		throw std::invalid_argument("Wrong array size");
+	}
+	int colorCnt = data.size() / (width * height);
+
+	cv::Mat image_cv;
+	switch (colorCnt)
+	{
+	case 1:
+		image_cv = cv::Mat(height, width, CV_8UC1, data.data()).clone();
+		break;
+	case 3:
+		cv::cvtColor(cv::Mat(height, width, CV_8UC3, data.data()), image_cv, cv::COLOR_RGB2BGR);
+		break;
+	case 4:
+		cv::cvtColor(cv::Mat(height, width, CV_8UC4, data.data()), image_cv, cv::COLOR_RGBA2BGR);
+		break;
+	default:
+		throw std::invalid_argument("Wrong array size");
+	}
+
 	data.clear();
 
 	Preprocesses preprocessesState;
