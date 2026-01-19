@@ -10,10 +10,10 @@ if (OpenCV_FOUND)
     target_include_directories (WasmReadCode PRIVATE libs)
     target_include_directories (WasmReadCode PRIVATE ${OpenCV_INCLUDE_DIRS})
     target_link_libraries (WasmReadCode ZXing::ZXing ${OpenCV_LIBS})
-    target_compile_options(WasmReadCode PRIVATE 
-        # -gsource-map=inline
-        -fdebug-compilation-dir=..
-    )
+    # target_compile_options(WasmReadCode PRIVATE 
+    #     # -gsource-map=inline
+    #     -fdebug-compilation-dir=..
+    # )
 
     set_target_properties(WasmReadCode PROPERTIES
         LINK_FLAGS "\
@@ -22,29 +22,19 @@ if (OpenCV_FOUND)
             -s MODULARIZE=1 \
             -s EXPORT_ES6=1 \
             -s EXPORT_NAME='createZXingModule' \
-            -s EXPORTED_RUNTIME_METHODS='[\"ccall\", \"cwrap\"]' \
-            -fexceptions \
             -msimd128 \
             -lembind \
-            -g3 \
+            -s ENVIRONMENT='web' \
         "
     )
-    # -gsource-map=inline
-            # -gsource-map=inline \
-            # --source-map-base / \
-
-    # --source-map-base / \
-            # -gsource-map=inline \
-        
-    # -gline-tables-only \
-
-
-    # -gsource-map=inline \
-            # -gseparate-dwarf \
+    target_compile_options(WasmReadCode PRIVATE
+        "$<$<CONFIG:Debug>:-g3>"
+        "$<$<CONFIG:Debug>:-fexceptions>"
+    )
             # -O3 \
-                # -s SINGLE_FILE=1 \
-            # -gsource-map=inline \
-            # --source-map-base / \
+
+            # -fexceptions \
+            # -g3 \
 
 else ()
     message("INFO: OpenCV not found, skipping DebugReadbardcode")

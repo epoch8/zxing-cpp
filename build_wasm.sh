@@ -10,7 +10,7 @@ OPENCV_PATH="/home/chorbier/opencv_wasm/build_js_simd"
 
 # Build for WASM
 echo "Building for WASM"
-emcmake cmake -B . -S .. -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" -DOpenCV_DIR="$OPENCV_PATH" -DBUILD_FOR_WASM=ON -DCMAKE_BUILD_TYPE=Debug
+emcmake cmake -B . -S .. -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" -DOpenCV_DIR="$OPENCV_PATH" -DBUILD_FOR_WASM=ON -DCMAKE_BUILD_TYPE=Release
 if [ ! -f "Makefile" ]; then
     echo "❌ CMake failed to generate Makefile for WASM"
     exit 1
