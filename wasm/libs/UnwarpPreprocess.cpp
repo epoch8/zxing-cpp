@@ -207,7 +207,11 @@ vector<Point2f> adjustCornersToContour(const vector<Point>& contour, const vecto
 
 Mat adaptiveBinarization(const Mat& image) {
     Mat gray, blurred;
-    cvtColor(image, gray, COLOR_BGR2GRAY);
+	if(image.channels() == 1) {
+		gray = image.clone();
+	} else {
+	    cvtColor(image, gray, COLOR_BGR2GRAY);
+	}
     bilateralFilter(gray, blurred, 6, 75, 75);
 
     Mat gradX, gradY;
