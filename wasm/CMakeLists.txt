@@ -10,24 +10,24 @@ if (OpenCV_FOUND)
     target_include_directories (WasmReadCode PRIVATE libs)
     target_include_directories (WasmReadCode PRIVATE ${OpenCV_INCLUDE_DIRS})
     target_link_libraries (WasmReadCode ZXing::ZXing ${OpenCV_LIBS})
-    # target_compile_options(WasmReadCode PRIVATE 
-    #     # -gsource-map=inline
-    #     -fdebug-compilation-dir=..
-    # )
 
-    set_target_properties(WasmReadCode PROPERTIES
-        LINK_FLAGS "\
-            -s WASM=1 \
-            -s ALLOW_MEMORY_GROWTH=1 \
-            -s MODULARIZE=1 \
-            -s EXPORT_ES6=1 \
-            -s EXPORT_NAME='createZXingModule' \
-            -msimd128 \
-            -lembind \
-            -s ENVIRONMENT='web' \
-        "
+    option(ENABLE_WASM_SIMD "Enable WebAssembly SIMD128 instructions" OFF)
+
+    if(ENABLE_WASM_SIMD)
+        target_compile_options(WasmReadCode PRIVATE -msimd128)
+    endif()
+
+    target_link_options(WasmReadCode PRIVATE
+        "SHELL:-s WASM=1"
+        "SHELL:-s ALLOW_MEMORY_GROWTH=1"
+        "SHELL:-s MODULARIZE=1"
+        "SHELL:-s EXPORT_ES6=1"
+        "SHELL:-s EXPORT_NAME='createZXingModule'"
+        "SHELL:-lembind"
+        "SHELL:-s ENVIRONMENT='web'"
     )
-    target_compile_options(WasmReadCode PRIVATE
+
+    target_compile_options(WasmReadCode PRIVATE 
         "$<$<CONFIG:Debug>:-g3>"
         "$<$<CONFIG:Debug>:-fexceptions>"
     )
