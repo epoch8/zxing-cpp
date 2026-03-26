@@ -16,11 +16,23 @@
 
 namespace ZXing {
 
-// TODO: c++20 has char8_t
-#if __cplusplus <= 201703L
+// Use uint8_t directly; std::char_traits<char8_t> is not available in all
+// libc++ implementations (notably Android NDK r28b).
 using char8_t = uint8_t;
-#endif
-using utf8_t = std::basic_string_view<char8_t>;
+
+struct utf8_t {
+	const char8_t* ptr;
+	size_t len;
+	utf8_t(const char8_t* p, size_t l) : ptr(p), len(l) {}
+	template <typename T>
+	utf8_t(const T& sv) : ptr(reinterpret_cast<const char8_t*>(sv.data())), len(sv.size()) {}
+	const char8_t* data() const { return ptr; }
+	size_t size() const { return len; }
+	const char8_t* begin() const { return ptr; }
+	const char8_t* end() const { return ptr + len; }
+	bool empty() const { return len == 0; }
+	const char8_t& operator[](size_t i) const { return ptr[i]; }
+};
 
 using state_t = uint8_t;
 constexpr state_t kAccepted = 0;

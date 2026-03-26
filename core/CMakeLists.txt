@@ -21,7 +21,7 @@ if(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
     set(OpenCV_LIBS opencv_interface)
 else()
     # Android build: use CMake configuration
-    set(OpenCV_FIND_VERSION "3.4")
+    set(OpenCV_FIND_VERSION "4.0")
     set(OpenCV_SHARED ON)  # Force using shared libraries (.so) instead of static (.a)
     set(BUILD_SHARED_LIBS ON)  # Force shared libraries globally
 endif()

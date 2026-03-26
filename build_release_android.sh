@@ -30,18 +30,19 @@ mkdir -p release/
 
 cd release/
 
-# Use MediaPipe's OpenCV instead of the old path
-OPENCV_JNI_PATH="/home/lev/.cache/bazel/_bazel_lev/5ee74aee6f1c35e49eadf238c6df3c19/external/android_opencv/sdk/native/jni"
-OPENCV_INCLUDE_PATH="/home/lev/.cache/bazel/_bazel_lev/5ee74aee6f1c35e49eadf238c6df3c19/external/android_opencv/sdk/native/jni/include"
-OPENCV_LIBS_PATH="/home/lev/.cache/bazel/_bazel_lev/5ee74aee6f1c35e49eadf238c6df3c19/external/android_opencv/sdk/native/libs"
+# Use Bazel's OpenCV 4.x Android SDK (populated after a successful Bazel build)
+BAZEL_CACHE="/home/lev/.cache/bazel/_bazel_lev/5ee74aee6f1c35e49eadf238c6df3c19"
+OPENCV_JNI_PATH="${BAZEL_CACHE}/external/android_opencv/sdk/native/jni"
+OPENCV_INCLUDE_PATH="${BAZEL_CACHE}/external/android_opencv/sdk/native/jni/include"
+OPENCV_LIBS_PATH="${BAZEL_CACHE}/external/android_opencv/sdk/native/libs"
 
-# Add C++17 support, OpenCV include path, and fix NEON macro issue
-CMAKE_CXX_FLAGS="-std=c++17 -I${OPENCV_INCLUDE_PATH} -DCV_CPU_HAS_SUPPORT_NEON=0 -DCV_CPU_HAS_SUPPORT_SSE2=0"
+# Add C++20 support, OpenCV include path, and fix NEON macro issue
+CMAKE_CXX_FLAGS="-std=c++20 -I${OPENCV_INCLUDE_PATH} -DCV_CPU_HAS_SUPPORT_NEON=0 -DCV_CPU_HAS_SUPPORT_SSE2=0"
 
 # Function to get architecture-specific linking flags
 get_linker_flags() {
     local arch=$1
-    echo "-llog -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536 -L${OPENCV_LIBS_PATH}/${arch} -lopencv_java3"
+    echo "-llog -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536 -L${OPENCV_LIBS_PATH}/${arch} -lopencv_java4"
 }
 
 # Build for arm64-v8a

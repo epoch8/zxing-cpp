@@ -57,6 +57,18 @@ ByteArray Result::bytesECI() const
 	return _content.bytesECI();
 }
 
+ByteArray Result::bytesFNCFix() const
+{
+	const auto& raw = _content.bytes;
+	ByteArray result;
+	result.reserve(raw.size());
+	for (uint8_t byte : raw) {
+		if (byte != 0x1D) // Skip GS (Group Separator) chars inserted for FNC1
+			result.push_back(byte);
+	}
+	return result;
+}
+
 std::string Result::text(TextMode mode) const
 {
 	return _content.text(mode);

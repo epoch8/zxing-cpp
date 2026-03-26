@@ -66,6 +66,13 @@ public:
 	ByteArray bytesECI() const;
 
 	/**
+	 * @brief bytesFNCFix returns bytes() with FNC1 GS separators (0x1D) removed.
+	 * In GS1-128 barcodes, the decoder inserts ASCII 29 (GS) for FNC1 function codes.
+	 * This method strips those so the raw byte vector contains only actual data bytes.
+	 */
+	ByteArray bytesFNCFix() const;
+
+	/**
 	 * @brief text returns the bytes() content rendered to unicode/utf8 text accoring to specified TextMode
 	 */
 	std::string text(TextMode mode) const;
