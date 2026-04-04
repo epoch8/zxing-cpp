@@ -8,7 +8,23 @@ project (ZXing VERSION "2.0.0")
 if(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
     # Linux build: use pkg-config for OpenCV
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(OpenCV REQUIRED opencv)
+    pkg_check_modules(OpenCV QUIET opencv4)
+    if(NOT OpenCV_FOUND)
+        pkg_check_modules(OpenCV REQUIRED opencv)
+    endif()
+
+    # Prefer the locally built static OpenCV archives when available.
+    # This avoids accidentally resolving against stray system/shared OpenCV
+    # runtimes with a different ABI version at load time.
+    set(OPENCV_LOCAL_CORE_A "/usr/local/lib/libopencv_core.a")
+    set(OPENCV_LOCAL_IMGPROC_A "/usr/local/lib/libopencv_imgproc.a")
+    if(EXISTS "${OPENCV_LOCAL_CORE_A}" AND EXISTS "${OPENCV_LOCAL_IMGPROC_A}")
+        message(STATUS "Using explicit local static OpenCV archives for ZXing")
+        set(OpenCV_LIBRARIES
+            "${OPENCV_LOCAL_IMGPROC_A}"
+            "${OPENCV_LOCAL_CORE_A}"
+        )
+    endif()
 
     # Create OpenCV interface target for compatibility
     add_library(opencv_interface INTERFACE)
