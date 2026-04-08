@@ -37,7 +37,7 @@
 #include <vector>
 #include <iostream>
 #include "opencv2/opencv.hpp"
-#include <opencv2/core/hal/intrin.hpp>
+// #include <opencv2/core/hal/intrin.hpp>
 
 #undef min
 #undef max
@@ -51,6 +51,8 @@ for (auto v : vec) \
 	printf(fmt, v); \
 printf("\n");
 #endif
+
+#define VEC_SIZE 4
 
 namespace ZXing::DataMatrix {
 
@@ -167,6 +169,48 @@ namespace ZXing::DataMatrix {
         return {offsetX, offsetY};
     }
 
+	struct DoubleLineFlags {
+		bool top : 1;
+		bool bottom : 1;
+		bool left : 1;
+		bool right : 1;
+		
+		bool any() {
+			return top || bottom || left || right;
+		};
+	};
+
+	DoubleLineFlags testDoubleLine(const BitMatrix& img) {
+		
+		auto testStartY = [](const BitMatrix& img, int startY) -> uint8_t {
+			for(int yo = 0; yo < 2; yo++) {
+				uint8_t lineInfoCnt = 0;
+				int y = startY + yo;
+				uint8_t curState = img.get(0, y);
+				for(int x = 1; x < img.width(); x++) {
+					auto v = img.get(x, y);
+					if(curState != v) {
+						lineInfoCnt++;
+						curState = v;
+					}
+				}
+				if(lineInfoCnt>4)
+					return 0;
+			}
+			return 1;
+		};
+
+		DoubleLineFlags res;
+
+		res.top = testStartY(img, 0);
+		res.bottom = testStartY(img, img.height() - 2);
+		auto imgRotated = img.copy();
+		imgRotated.rotate90();
+		res.left = testStartY(imgRotated, 0);
+		res.right = testStartY(imgRotated, imgRotated.height() - 2);
+		return res;
+	}
+
 /**
 * Calculates the position of the white top right module using the output of the rectangle detector
 * for a rectangular matrix
@@ -270,26 +314,57 @@ namespace ZXing::DataMatrix {
                                 {Rectangle(width, height, 0.5), {topLeft, topRight, bottomRight, bottomLeft}});
     }
 
-    static DetectorResult SampleGridTestOffseted(const BitMatrix& image, int width, int height, const PerspectiveTransform& mod2Pix)
-    {
+	DetectorResult SampleGridTestOffseted(const BitMatrix& image, int width, int height, PerspectiveTransform mod2Pix) {
         auto res = SampleGrid(image, width, height, mod2Pix);
-        // return res;
-        auto [xMul, yMul] = testCenterLineBiOffset(res.bits());
-        if(xMul != 0 || yMul != 0) {
-            auto oo = mod2Pix({0, 0});
+		auto doubleLine = testDoubleLine(res.bits());
+
+		if(doubleLine.any()) {
+			PointF wh = {static_cast<float>(width), static_cast<float>(height)};
+			PointF tl = mod2Pix({0.0, 0.0});
+			PointF tr = mod2Pix({wh.x, 0.0});
+			PointF bl = mod2Pix({0.0, wh.y});
+			PointF br = mod2Pix(wh);
+
+			float dimInv = 0.62 / float(width);
+			PointF DirTopLR = dimInv * (tr - tl);
+			PointF DirBottomLR = dimInv * (br - bl);
+			PointF DirRightBT = dimInv * (tr - br);
+			PointF DirLeftBT = dimInv * (tl - bl);
+			if(doubleLine.left) {
+				tl += DirTopLR;
+				bl += DirBottomLR;
+			}
+			if(doubleLine.right) {
+				tr += -DirTopLR;
+				br += -DirBottomLR;
+			}
+			if(doubleLine.top) {
+				tl += -DirLeftBT;
+				tr += -DirRightBT;
+			}
+			if(doubleLine.bottom) {
+				bl += DirLeftBT;
+				br += DirRightBT;
+			}
+			mod2Pix = { Rectangle(width, height, 0), {tl, tr, br, bl} };
+			res = SampleGrid(image, width, height, mod2Pix);
+		}
+
+		auto [xMul, yMul] = testCenterLineBiOffset(res.bits());
+		if(xMul != 0 || yMul != 0) {
             // PointF xo = float(xMul) * (mod2Pix({width, 0}) - oo) / float(width);
             // PointF yo = float(yMul) * (mod2Pix({0, height}) - oo) / float(height);
-            PointF xo = {float(xMul), 0.0f};
-            PointF yo = {0.0f, float(yMul)};
-            Warp w({{}, xo, {}}, {{}, yo, {}});
-            w.isFinal = false;
-            w.Resample(width, height);
+			PointF xo = {float(xMul), 0.0f};
+			PointF yo = {0.0f, float(yMul)};
+			Warp w({{}, xo, {}}, {{}, yo, {}});
+			w.isFinal = false;
+			w.Resample(width, height);
             res = SampleGridWarped(image, width, height, w, mod2Pix);
             // auto offsets = testCenterLineBiOffset(res.bits());
-            return res;
-        }
-        return res;
-    }
+			return res;
+		}
+		return res;
+	}
 
     static DetectorResult SampleGridTestOffseted(const BitMatrix& image, const ResultPoint& topLeft, const ResultPoint& bottomLeft,
                                                  const ResultPoint& bottomRight, const ResultPoint& topRight, int width, int height)
@@ -1250,6 +1325,21 @@ namespace ZXing::DataMatrix {
 
     }
 
+	float very_fast_cos(float x) {
+		constexpr float two_pi = 2.0f * M_PI;
+		constexpr float inv_two_pi = 1.0f / two_pi;
+		
+		x -= two_pi * static_cast<int>(x * inv_two_pi);
+		
+		if (x > M_PI) x = two_pi - x;
+		float x_abs = (x < 0) ? -x : x;
+		
+		constexpr float a = -0.25f;
+		constexpr float b = 1.0f;
+		
+		return a * x_abs * x_abs + b;
+	}
+
     void createMaps(cv::Mat& mapXY, int outputSize, bool horizontal, bool inverse) {
         mapXY.create(outputSize, outputSize, CV_32FC2);
 
@@ -1257,13 +1347,35 @@ namespace ZXing::DataMatrix {
 
         static cv::Mat offsetMap;
 
+		constexpr size_t alignment = VEC_SIZE * 4;
+		constexpr size_t elements_per_vector = VEC_SIZE;
+
         if(offsetMap.cols != outputSize) {
             offsetMap = cv::Mat(1, outputSize, CV_32F);
 
-            float* mapRow = offsetMap.ptr<float>(0);
             float indexMul = 2.0 / float(outputSize - 1);
-            for (int i = 0; i < outputSize; ++i) {
-                mapRow[i] = (std::cos(std::fabs(float(i) * indexMul - 1.0)) - 0.75) * factor;
+            size_t i = 0;
+			float* mapRow = offsetMap.ptr<float>(0);
+
+			while ((reinterpret_cast<uintptr_t>(mapRow + i) & (alignment - 1)) != 0 && i < outputSize) {
+				mapRow[i] = (very_fast_cos(std::fabs(float(i) * indexMul - 1.0f)) - 0.75) * factor;
+				i++;
+			}
+
+			if (i + elements_per_vector <= outputSize) {
+				const size_t aligned_size = (outputSize - i) & ~(elements_per_vector - 1);
+				float* aligned_data = static_cast<float*>(__builtin_assume_aligned(mapRow + i, alignment));
+
+				for (size_t j = 0; j < aligned_size; j+=VEC_SIZE) {
+					for(size_t jj = 0; jj < VEC_SIZE; jj++) {
+						size_t ij = j + jj;
+						aligned_data[ij] = (very_fast_cos(std::abs(float(i++) * indexMul - 1.0f)) - 0.75) * factor;
+					}
+				}
+			}
+
+			for (; i < outputSize; ++i) {
+                mapRow[i] = (very_fast_cos(std::abs(float(i) * indexMul - 1.0f)) - 0.75) * factor;
             }
         }
 
