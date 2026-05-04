@@ -52,6 +52,7 @@ public:
 	SymbologyIdentifier symbology;
 	CharacterSet defaultCharset = CharacterSet::Unknown;
 	bool hasECI = false;
+    std::vector<size_t> fncPositions;
 
 	Content();
 	Content(ByteArray&& bytes, SymbologyIdentifier si);

@@ -16,23 +16,12 @@
 
 namespace ZXing {
 
-// Use uint8_t directly; std::char_traits<char8_t> is not available in all
-// libc++ implementations (notably Android NDK r28b).
-using char8_t = uint8_t;
-
-struct utf8_t {
-	const char8_t* ptr;
-	size_t len;
-	utf8_t(const char8_t* p, size_t l) : ptr(p), len(l) {}
-	template <typename T>
-	utf8_t(const T& sv) : ptr(reinterpret_cast<const char8_t*>(sv.data())), len(sv.size()) {}
-	const char8_t* data() const { return ptr; }
-	size_t size() const { return len; }
-	const char8_t* begin() const { return ptr; }
-	const char8_t* end() const { return ptr + len; }
-	bool empty() const { return len == 0; }
-	const char8_t& operator[](size_t i) const { return ptr[i]; }
-};
+// TODO: c++20 has char8_t
+#if __cplusplus <= 201703L
+    using char8_t = uint8_t; // or unsigned char
+#endif
+    using state_t = uint8_t;
+    using utf8_t = std::string_view;
 
 using state_t = uint8_t;
 constexpr state_t kAccepted = 0;
@@ -115,7 +104,7 @@ static void AppendFromUtf8(utf8_t utf8, std::wstring& buffer)
 	state_t state = kAccepted;
 
 	for (auto b : utf8) {
-		if (Utf8Decode(b, state, codePoint) != kAccepted)
+        if (Utf8Decode(static_cast<char8_t>(static_cast<unsigned char>(b)), state, codePoint) != kAccepted)
 			continue;
 
 		if (sizeof(wchar_t) == 2 && codePoint > 0xffff) { // surrogate pair
@@ -127,19 +116,17 @@ static void AppendFromUtf8(utf8_t utf8, std::wstring& buffer)
 	}
 }
 
-std::wstring FromUtf8(std::string_view utf8)
-{
-	std::wstring str;
-	AppendFromUtf8({reinterpret_cast<const char8_t*>(utf8.data()), utf8.size()}, str);
-	return str;
+std::wstring FromUtf8(std::string_view utf8) {
+    std::wstring str;
+    AppendFromUtf8(utf8, str);
+    return str;
 }
 
 #if __cplusplus > 201703L
-std::wstring FromUtf8(std::u8string_view utf8)
-{
-	std::wstring str;
-	AppendFromUtf8(utf8, str);
-	return str;
+    std::wstring FromUtf8(std::u8string_view utf8) {
+    std::wstring str;
+    AppendFromUtf8(std::string_view{reinterpret_cast<const char*>(utf8.data()), utf8.size()}, str);
+    return str;
 }
 #endif
 
