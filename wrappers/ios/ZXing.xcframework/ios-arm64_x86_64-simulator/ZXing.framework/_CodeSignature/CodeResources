@@ -60,6 +60,10 @@
 		<data>
 		2QQntOAp8HhTXm9BldVqEo2BJEE=
 		</data>
+		<key>Headers/MultiFormatWriter.h</key>
+		<data>
+		69WLi534Tow5xV9ZbXdzpYAA6Ps=
+		</data>
 		<key>Headers/Point.h</key>
 		<data>
 		rlYQuGfgeBZq1WMXpSjsJ750i3w=
@@ -98,7 +102,7 @@
 		</data>
 		<key>Info.plist</key>
 		<data>
-		BlLY/pRjazEFjjX1cd0a7XZpEG8=
+		MmU1JF2Yga/toE8EbAlDkCteMW8=
 		</data>
 		<key>Modules/module.modulemap</key>
 		<data>
@@ -203,6 +207,13 @@
 			<key>hash2</key>
 			<data>
 			+aoJN82hlsa9lrpKDK8QbsOaQXFrG0RJHlAHtPvTBPA=
+			</data>
+		</dict>
+		<key>Headers/MultiFormatWriter.h</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			xpBE7JeVzncss5Lg+jZyA18nCEx2wM2sZXPLFJ5HNxA=
 			</data>
 		</dict>
 		<key>Headers/Point.h</key>

@@ -317,6 +317,9 @@ namespace ZXing::DataMatrix {
 
 	DetectorResult SampleGridTestOffseted(const BitMatrix& image, int width, int height, PerspectiveTransform mod2Pix) {
         auto res = SampleGrid(image, width, height, mod2Pix);
+		if(!res.isValid() || res.bits().width() < 16 ) {
+			return res;
+		}
 		auto doubleLine = testDoubleLine(res.bits());
 
 		if(doubleLine.any()) {

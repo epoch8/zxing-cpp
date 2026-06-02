@@ -1,4 +1,10 @@
 #!/bin/sh
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "${SCRIPT_DIR}"
+
 PATH="/Applications/CMake.app/Contents/bin":"$PATH"
 # Определяем папки для каждой сборки
 SIM_BUILD_DIR="_builds_sim"
@@ -20,6 +26,7 @@ cmake -S../../ -B${SIM_BUILD_DIR} -GXcode \
     -DBUILD_UNIT_TESTS=NO \
     -DBUILD_BLACKBOX_TESTS=NO \
     -DBUILD_EXAMPLES=NO \
+    -DBUILD_WRITERS=YES \
     -DBUILD_APPLE_FRAMEWORK=YES
 
 echo "========= Build the sdk for Simulators"
@@ -41,6 +48,7 @@ cmake -S../../ -B${DEV_BUILD_DIR} -GXcode \
     -DBUILD_UNIT_TESTS=NO \
     -DBUILD_BLACKBOX_TESTS=NO \
     -DBUILD_EXAMPLES=NO \
+    -DBUILD_WRITERS=YES \
     -DBUILD_APPLE_FRAMEWORK=YES
 
 echo "========= Build the sdk for iOS"
@@ -57,5 +65,22 @@ xcodebuild -create-xcframework \
     -framework ./${SIM_BUILD_DIR}/core/Release-iphonesimulator/ZXing.framework \
     -framework ./${DEV_BUILD_DIR}/core/Release-iphoneos/ZXing.framework \
     -output ZXing.xcframework
+
+copy_plist() {
+    SRC="$1"
+    DST="$2"
+
+    if [ ! -f "${SRC}" ]; then
+        echo "Missing plist: ${SRC}"
+        exit 1
+    fi
+
+    cp "${SRC}" "${DST}"
+}
+
+echo "========= Copy canonical Info.plist files"
+copy_plist "${REPO_ROOT}/Info.plist" "ZXing.xcframework/Info.plist"
+copy_plist "${REPO_ROOT}/Info 2.plist" "ZXing.xcframework/ios-arm64/ZXing.framework/Info.plist"
+copy_plist "${REPO_ROOT}/Info 3.plist" "ZXing.xcframework/ios-arm64_x86_64-simulator/ZXing.framework/Info.plist"
 
 echo "========= DONE! ========= "
