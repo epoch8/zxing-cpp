@@ -233,6 +233,25 @@ if (BUILD_WRITERS)
             src/Range.h
     )
 endif()
+
+set (IOS_WRAPPER_SOURCES)
+if (CMAKE_SYSTEM_NAME STREQUAL "iOS" AND BUILD_APPLE_FRAMEWORK AND BUILD_WRITERS)
+    enable_language(OBJCXX)
+
+    set (IOS_WRAPPER_ROOT "${CMAKE_SOURCE_DIR}/wrappers/ios/Sources/Wrapper")
+    set (IOS_WRAPPER_SOURCES
+            "${IOS_WRAPPER_ROOT}/Writer/ZXIBarcodeWriter.mm"
+            "${IOS_WRAPPER_ROOT}/ZXIFormatHelper.mm"
+            "${IOS_WRAPPER_ROOT}/ZXIFormatHelper.h"
+    )
+    set (IOS_WRAPPER_PUBLIC_HEADERS
+            "${IOS_WRAPPER_ROOT}/ZXing.h"
+            "${IOS_WRAPPER_ROOT}/Writer/ZXIBarcodeWriter.h"
+            "${IOS_WRAPPER_ROOT}/ZXIErrors.h"
+            "${IOS_WRAPPER_ROOT}/ZXIFormat.h"
+    )
+    set (PUBLIC_HEADERS ${PUBLIC_HEADERS} ${IOS_WRAPPER_PUBLIC_HEADERS})
+endif()
 # end of public header set
 
 set (AZTEC_FILES
@@ -489,6 +508,8 @@ add_library (ZXing
         ${PDF417_FILES}
         ${QRCODE_FILES}
         ${LIBZUECI_FILES}
+        ${IOS_WRAPPER_SOURCES}
+        ${IOS_WRAPPER_PUBLIC_HEADERS}
 )
 # iOS block (from HEAD)
 if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
@@ -511,9 +532,18 @@ if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
     # Remove existing symlink if it exists, then create new one
     execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${IOS_INCLUDE_FIX_DIR}/opencv2)
     execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${REAL_HEADERS_DIR} ${IOS_INCLUDE_FIX_DIR}/opencv2)
+    execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${IOS_INCLUDE_FIX_DIR}/ZXing)
+    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/src ${IOS_INCLUDE_FIX_DIR}/ZXing)
     
     # Add the include fix directory
     target_include_directories(ZXing PRIVATE ${IOS_INCLUDE_FIX_DIR})
+
+    if(BUILD_APPLE_FRAMEWORK AND BUILD_WRITERS)
+        target_include_directories(ZXing PRIVATE
+                "${IOS_WRAPPER_ROOT}"
+                "${IOS_WRAPPER_ROOT}/Writer"
+        )
+    endif()
     
     # Create imported targets for each architecture
     if("x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)
@@ -536,6 +566,13 @@ if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
         "libz.tbd"      
         Threads::Threads
     )
+
+    if(BUILD_APPLE_FRAMEWORK AND BUILD_WRITERS)
+        target_link_libraries(ZXing PRIVATE
+                "-framework Foundation"
+                "-framework CoreGraphics"
+        )
+    endif()
 
 # Android block (from incoming)
 elseif(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
@@ -676,7 +713,7 @@ if (APPLE AND BUILD_APPLE_FRAMEWORK)
             FRAMEWORK_VERSION "C"
             XCODE_ATTRIBUTE_DEFINES_MODULE YES
             XCODE_ATTRIBUTE_BUILD_LIBRARY_FOR_DISTRIBUTION YES
-            XCODE_ATTRIBUTE_MODULEMAP_FILE "wrappers/ios/Sources/Wrapper/module.modulemap"
+            XCODE_ATTRIBUTE_MODULEMAP_FILE "${CMAKE_SOURCE_DIR}/wrappers/ios/Sources/Wrapper/framework.modulemap"
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
             MACOSX_FRAMEWORK_IDENTIFIER "com.zxing-cpp.ios"
             CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH NO

@@ -83,4 +83,8 @@ copy_plist "${REPO_ROOT}/Info.plist" "ZXing.xcframework/Info.plist"
 copy_plist "${REPO_ROOT}/Info 2.plist" "ZXing.xcframework/ios-arm64/ZXing.framework/Info.plist"
 copy_plist "${REPO_ROOT}/Info 3.plist" "ZXing.xcframework/ios-arm64_x86_64-simulator/ZXing.framework/Info.plist"
 
+echo "========= Remove build-time signatures after replacing Info.plist files"
+codesign --remove-signature "ZXing.xcframework/ios-arm64/ZXing.framework" 2>/dev/null || true
+codesign --remove-signature "ZXing.xcframework/ios-arm64_x86_64-simulator/ZXing.framework" 2>/dev/null || true
+
 echo "========= DONE! ========= "
