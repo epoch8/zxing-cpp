@@ -37,7 +37,8 @@ namespace ZXing {
 *   defined by the "src" parameters. Result is empty if transformation is invalid (out of bound access).
 */
     DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const PerspectiveTransform& mod2Pix);
-    DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const class Warp& warp, const PerspectiveTransform& mod2Pix);
+    DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const class Warp& warp,
+                                    const PerspectiveTransform& mod2Pix);
     template <typename PointT = PointF>
     Quadrilateral<PointT> Rectangle(int x0, int x1, int y0, int y1, typename PointT::value_t o = 0.5)
     {
@@ -70,6 +71,28 @@ namespace ZXing {
     DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const ROIs& rois);
 
     DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const Warp& warp, const ROIs& rois);
+
+    /** Result of SnapToModuleCenter: position plus whether the probe saw a color edge. */
+    struct ModuleSnapResult
+    {
+        PointF p;
+        bool plateau = true; ///< true if no color transition within the probe window
+        PointF delta{0, 0};  ///< snapped - input (clipped)
+    };
+
+    /**
+     * Snap a sample point toward the center of the local black/white module blob by measuring
+     * distances to the nearest color transitions along the module axes.
+     */
+    ModuleSnapResult SnapToModuleCenter(const BitMatrix& image, PointF p, PointF moduleStepX, PointF moduleStepY);
+
+    /**
+     * Build module centers incrementally from the L-pattern corner (bottom-left), snapping each
+     * predicted neighbor to the local blob center so local paper crumple does not accumulate.
+     */
+    DetectorResult SampleGridRegionGrowing(const BitMatrix& image, int width, int height,
+                                           const PerspectiveTransform& mod2Pix);
+
     void CorrectCorners(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int gridSize, float subpixelOffset = 0.5);
     Warp ComputeWarp(const BitMatrix& image, PointF& topLeft, PointF& bottomLeft, PointF& bottomRight, PointF& topRight, int width, int height, int predictedSize, float subpixelOffset = 0.5);
 

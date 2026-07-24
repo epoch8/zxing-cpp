@@ -191,4 +191,24 @@ ByteArray CodewordsFromBitMatrix(const BitMatrix& bits, const Version& version)
 	return result;
 }
 
+std::vector<std::array<PointI, 8>> CodewordBitPositions(int dataWidth, int dataHeight)
+{
+	std::vector<std::array<PointI, 8>> out;
+	out.reserve(static_cast<size_t>(dataWidth) * static_cast<size_t>(dataHeight) / 8);
+	VisitMatrix(dataHeight, dataWidth, [&out](const BitPosArray& bitPos) {
+		std::array<PointI, 8> mods;
+		for (size_t i = 0; i < 8; ++i)
+			mods[i] = {bitPos[i].col, bitPos[i].row};
+		out.push_back(mods);
+	});
+	return out;
+}
+
+PointI DataModuleToSymbol(const Version& version, int dataCol, int dataRow)
+{
+	int ix = dataCol + 1 + (dataCol / version.dataBlockWidth) * 2;
+	int iy = dataRow + 1 + (dataRow / version.dataBlockHeight) * 2;
+	return {ix, iy};
+}
+
 } // namespace ZXing::DataMatrix

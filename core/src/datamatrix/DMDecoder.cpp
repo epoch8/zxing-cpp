@@ -403,21 +403,130 @@ std::string VectorToString(const std::vector<T>& vector) {
 }
 
 static bool
-CorrectErrors(ByteArray& codewordBytes, int numDataCodewords)
+CorrectErrors(ByteArray& codewordBytes, int numDataCodewords, int* numErrorsCorrected = nullptr,
+			  std::vector<int>* errorPositions = nullptr)
 {
     // First read into an array of ints
     std::vector<int> codewordsInts(codewordBytes.begin(), codewordBytes.end());
     int numECCodewords = Size(codewordBytes) - numDataCodewords;
+    int errors = 0;
     //__android_log_print(ANDROID_LOG_INFO, "CORRECT_ERRORS", "Before correction: %s", VectorToString(codewordsInts).c_str());
-    if (!ReedSolomonDecode(GenericGF::DataMatrixField256(), codewordsInts, numECCodewords))
+    if (!ReedSolomonDecode(GenericGF::DataMatrixField256(), codewordsInts, numECCodewords, &errors, errorPositions))
         return false;
     //__android_log_print(ANDROID_LOG_INFO, "CORRECT_ERRORS", "After correction: %s", VectorToString(codewordsInts).c_str());
+
+    if (numErrorsCorrected)
+        *numErrorsCorrected = errors;
 
     // Copy back into array of bytes -- only need to worry about the bytes that were data
     // We don't care about errors in the error-correction codewords
     std::copy_n(codewordsInts.begin(), numDataCodewords, codewordBytes.begin());
 
     return true;
+}
+
+/** Build rawCodewordIndex[block][posInBlock] for de-interleave inverse of GetDataBlocks. */
+static std::vector<std::vector<int>> BuildBlockPosToRawIndex(const Version& version, bool fix259)
+{
+	auto& ecBlocks = version.ecBlocks;
+	const int numResultBlocks = ecBlocks.numBlocks();
+	std::vector<DataBlock> layout;
+	layout.reserve(numResultBlocks);
+	for (auto& ecBlock : ecBlocks.blocks)
+		for (int i = 0; i < ecBlock.count; i++)
+			layout.push_back({ecBlock.dataCodewords, ByteArray(ecBlocks.codewordsPerBlock + ecBlock.dataCodewords)});
+
+	std::vector<std::vector<int>> map(numResultBlocks);
+	for (int j = 0; j < numResultBlocks; ++j)
+		map[j].assign(Size(layout[j].codewords), -1);
+
+	const int numCodewords = Size(layout[0].codewords);
+	const int numDataCodewords = numCodewords - ecBlocks.codewordsPerBlock;
+	const bool size144x144 = version.symbolHeight == 144;
+	const int numLongerBlocks = size144x144 ? 8 : numResultBlocks;
+
+	int raw = 0;
+	for (int i = 0; i < numDataCodewords - 1; i++)
+		for (int j = 0; j < numResultBlocks; j++)
+			map[j][i] = raw++;
+
+	for (int j = 0; j < numLongerBlocks; j++)
+		map[j][numDataCodewords - 1] = raw++;
+
+	for (int i = numDataCodewords; i < numCodewords; i++) {
+		for (int j = 0; j < numResultBlocks; j++) {
+			int jOffset = size144x144 && fix259 ? (j + 8) % numResultBlocks : j;
+			int iOffset = size144x144 && jOffset > 7 ? i - 1 : i;
+			map[jOffset][iOffset] = raw++;
+		}
+	}
+	return map;
+}
+
+static void AppendErrorModules(std::vector<PointI>& out, const Version& version, int rawCodewordIndex,
+							   const std::vector<std::array<PointI, 8>>& codewordBits)
+{
+	if (rawCodewordIndex < 0 || rawCodewordIndex >= Size(codewordBits))
+		return;
+	for (const auto& p : codewordBits[rawCodewordIndex]) {
+		PointI sym = DataModuleToSymbol(version, p.x, p.y);
+		out.push_back(sym);
+	}
+}
+
+static DecodeScore EvaluateDoDecode(const BitMatrix& bits)
+{
+	DecodeScore score;
+	const Version* version = VersionForDimensionsOf(bits);
+	if (version == nullptr)
+		return score;
+
+	ByteArray codewords = CodewordsFromBitMatrix(bits, *version);
+	if (codewords.empty())
+		return score;
+
+	bool fix259 = false;
+retry:
+	std::vector<DataBlock> dataBlocks = GetDataBlocks(codewords, *version, fix259);
+	if (dataBlocks.empty())
+		return score;
+
+	auto blockToRaw = BuildBlockPosToRawIndex(*version, fix259);
+	auto codewordBits = CodewordBitPositions(version->dataWidth(), version->dataHeight());
+
+	score.totalBlocks = Size(dataBlocks);
+	int totalErrors = 0;
+	int failed = 0;
+	std::vector<PointI> errorMods;
+	errorMods.reserve(64);
+
+	for (int j = 0; j < score.totalBlocks; j++) {
+		auto& [numDataCodewords, blockCodewords] = dataBlocks[j];
+		int blockErrors = 0;
+		std::vector<int> positions;
+		if (!CorrectErrors(blockCodewords, numDataCodewords, &blockErrors, &positions)) {
+			++failed;
+			if (version->versionNumber == 24 && !fix259) {
+				fix259 = true;
+				goto retry;
+			}
+		} else {
+			totalErrors += blockErrors;
+			for (int pos : positions) {
+				if (j < Size(blockToRaw) && pos >= 0 && pos < Size(blockToRaw[j]))
+					AppendErrorModules(errorMods, *version, blockToRaw[j][pos], codewordBits);
+			}
+		}
+	}
+	score.failedBlocks = failed;
+	score.errorsCorrected = totalErrors;
+	score.ok = (failed == 0);
+	std::sort(errorMods.begin(), errorMods.end(), [](PointI a, PointI b) {
+		return a.y < b.y || (a.y == b.y && a.x < b.x);
+	});
+	errorMods.erase(std::unique(errorMods.begin(), errorMods.end()), errorMods.end());
+	score.errorModules = std::move(errorMods);
+	return score;
 }
 
 static DecoderResult DoDecode(const BitMatrix& bits)
@@ -525,6 +634,21 @@ DecoderResult Decode(const BitMatrix& bits)
     }
 
     //__android_log_print(ANDROID_LOG_INFO, "ZXING", "End decode");
+}
+
+DecodeScore EvaluateDecode(const BitMatrix& bits)
+{
+	if (bits.width() == 0 || bits.height() == 0)
+		return {};
+	try {
+		auto score = EvaluateDoDecode(bits);
+		if (score.ok)
+			return score;
+		auto mirrored = EvaluateDoDecode(FlippedL(bits));
+		return mirrored.score() < score.score() ? mirrored : score;
+	} catch (...) {
+		return {};
+	}
 }
 
 } // namespace ZXing::DataMatrix
