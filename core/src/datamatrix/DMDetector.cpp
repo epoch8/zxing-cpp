@@ -312,7 +312,7 @@ namespace ZXing::DataMatrix {
 		}
 
 		int maxArea = 0;
-		std::vector<PointT<uint16_t>> checkStack;
+		std::vector<PointI> checkStack;
 
 		// drawDebugImage(targetImage, "square");
 
@@ -586,9 +586,9 @@ namespace ZXing::DataMatrix {
 
 		if(doubleLine.any()) {
 			PointF tl = mod2pix({0, 0});
-			PointF tr = mod2pix({width, 0});
-			PointF bl = mod2pix({0, height});
-			PointF br = mod2pix({ width, height});
+			PointF tr = mod2pix({static_cast<float>(width), 0});
+			PointF bl = mod2pix({0, static_cast<float>(height)});
+			PointF br = mod2pix({ static_cast<float>(width), static_cast<float>(height)});
 
 			float dimInv = 0.62 / float(width);
 			PointF DirTopLR = dimInv * (tr - tl);
@@ -2042,12 +2042,11 @@ namespace ZXing::DataMatrix {
 		}
     }
 
-	void rotateCV45(const BitMatrix& img, BitMatrix& outImg) {
-		auto M = cv::getRotationMatrix2D({outImg.width() / 2, outImg.height() / 2}, 45, 0.70710678118);
-		auto outputMat = outImg.asMat();
-		cv::warpAffine(img.asMat(), outputMat, M, outputMat.size(), cv::INTER_NEAREST, cv::BORDER_CONSTANT, BitMatrix::UNSET_V);
-	}
-
+    void rotateCV45(const BitMatrix& img, BitMatrix& outImg) {
+        auto M = cv::getRotationMatrix2D({float(outImg.width()) * 0.5f, float(outImg.height()) * 0.5f}, 45, 0.70710678118);
+        auto outputMat = outImg.asMat();
+        cv::warpAffine(img.asMat(), outputMat, M, outputMat.size(), cv::INTER_NEAREST, cv::BORDER_CONSTANT, BitMatrix::UNSET_V);
+    }
 
     void rotate45(BitMatrix& img) {
         int  rows, cols, r, c, r1, c1, k, s;
@@ -2294,7 +2293,7 @@ namespace ZXing::DataMatrix {
 		auto img2Mat = img2.asMat();
 
 		cv::Mat resizedImg;
-		cv::resize(image.asMat(), resizedImg, {remapSize, remapSize}, 0,0, cv::INTER_LINEAR);
+		cv::resize(image.asMat(), resizedImg, {static_cast<int>(remapSize), static_cast<int>(remapSize)}, 0,0, cv::INTER_LINEAR);
 		cv::threshold(resizedImg, resizedImg, 127, 255, cv::THRESH_BINARY);
 		// drawDebugImage(resizedImg, "orig");
 
