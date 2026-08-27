@@ -60,6 +60,20 @@ struct DMGridRefineOptions
 	static constexpr DMGridRefineOptions All() noexcept { return {true, true}; }
 };
 
+/**
+ * DataMatrix DetectCRPT preprocessing stages (rotation / bottle unwrap).
+ * Default: all off. Enable individually or via All().
+ */
+struct DMCrptOptions
+{
+	bool rotateCV45 = false;      ///< 45° OpenCV rotation when white-rect detection fails
+	bool correctBottleCv = false; ///< Curved-surface (bottle) correction via remap
+
+	constexpr bool any() const noexcept { return rotateCV45 || correctBottleCv; }
+
+	static constexpr DMCrptOptions All() noexcept { return {true, true}; }
+};
+
 class DecodeHints
 {
 	bool _tryHarder                : 1;
@@ -84,6 +98,7 @@ class DecodeHints
 	uint16_t _downscaleThreshold = 500;
 	BarcodeFormats _formats      = BarcodeFormat::None;
 	DMGridRefineOptions _dmGridRefine{};
+	DMCrptOptions _dmCrpt{};
 
 public:
 	// bitfields don't get default initialized to 0 before c++20
@@ -167,6 +182,9 @@ public:
 
 	/// DataMatrix: per-stage grid correction (snap / region growing / RS feedback). Default all off.
 	ZX_PROPERTY(DMGridRefineOptions, dmGridRefine, setDMGridRefine)
+
+	/// DataMatrix: DetectCRPT preprocessing (rotateCV45 / correctBottleCv). Default all off.
+	ZX_PROPERTY(DMCrptOptions, dmCrpt, setDMCrpt)
 
 	/// Specify whether to ignore, read or require EAN-2/5 add-on symbols while scanning EAN/UPC codes
 	ZX_PROPERTY(EanAddOnSymbol, eanAddOnSymbol, setEanAddOnSymbol)

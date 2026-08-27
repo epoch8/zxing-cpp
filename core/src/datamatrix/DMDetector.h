@@ -29,13 +29,14 @@ using DetectorResults = DetectorResult;
 #endif
 
 DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure,
-					   DMGridRefineOptions gridRefine = {});
+					   DMGridRefineOptions gridRefine = {}, DMCrptOptions crptOptions = {});
 
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
-								   DMGridRefineOptions gridRefine = {});
+								   DMGridRefineOptions gridRefine = {}, DMCrptOptions crptOptions = {});
 
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder,
-							  bool tryRotate, bool isPure, DecoderResult& outDecoderResult, DMGridRefineOptions gridRefine = {});
+							  bool tryRotate, bool isPure, DecoderResult& outDecoderResult, DMGridRefineOptions gridRefine = {},
+							  DMCrptOptions crptOptions = {});
 
 } // DataMatrix
 } // ZXing

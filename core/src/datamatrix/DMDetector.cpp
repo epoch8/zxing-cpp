@@ -2198,7 +2198,7 @@ namespace ZXing::DataMatrix {
 	}
 
     static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect, Warp* warp = nullptr, bool needToTraceWarp = false, bool correctCorners = false,
-									 DMGridRefineOptions gridRefine = {})
+									 DMGridRefineOptions gridRefine = {}, DMCrptOptions crptOptions = {})
     {
 
         /*ResultPoint p1(0, 0);
@@ -2216,6 +2216,8 @@ namespace ZXing::DataMatrix {
 
         if (!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {
 			// drawDebugImage(newimage, "unrotated");
+			if (!crptOptions.rotateCV45)
+				return {};
 			rotateCV45(image, newimage);
 			// drawDebugImage(newimage, "rotated");
 			if(!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {
@@ -2282,6 +2284,7 @@ namespace ZXing::DataMatrix {
         //� ���� ����� ������������ ���3, L1, ������� � �.�, �������� ����������� �� � ��������
         // BitMatrix img2;
 
+		if (crptOptions.correctBottleCv) {
 		const size_t remapSizeBig = 256;
 		const size_t remapSizeHalfThreshold = 160;
 		size_t remapSize = remapSizeBig;
@@ -2310,6 +2313,7 @@ namespace ZXing::DataMatrix {
             if (!res.isValid()) continue;
             if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid()) return res;
         } //i
+		}
         return res;
     }
 
@@ -2366,7 +2370,7 @@ static DetectorResult DetectPure(const BitMatrix& image)
             {{left, top}, {right, top}, {right, bottom}, {left, bottom}} };
 }
 
-DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DMGridRefineOptions gridRefine)
+DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DMGridRefineOptions gridRefine, DMCrptOptions crptOptions)
 {
 #ifdef __cpp_impl_coroutine
     // First try the very fast DetectPure() path. Also because DetectNew() generally fails with pure module size 1 symbols
@@ -2394,7 +2398,7 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
     //	result = DetectPure(image);
     ResultedDefect _;
     if (!result.isValid() && tryHarder)
-        result = DetectCRPT(image, outDecoderResult, _, nullptr, false, false, gridRefine);
+        result = DetectCRPT(image, outDecoderResult, _, nullptr, false, false, gridRefine, crptOptions);
     return result;
 
 #endif
@@ -2402,7 +2406,7 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 
 //    const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
-								   DMGridRefineOptions gridRefine)
+								   DMGridRefineOptions gridRefine, DMCrptOptions crptOptions)
 {
 
 #ifdef __cpp_impl_coroutine
@@ -2461,7 +2465,7 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
     if (outDecoderResult.isValid()) return detRes;
 
     ResultedDefect possibleResultedDefect = ResultedDefect::Default;
-    detRes = DetectCRPT(image, outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine);
+    detRes = DetectCRPT(image, outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine, crptOptions);
     SetResultCandidate();
     detRes.setResultedDefect(possibleResultedDefect);
     if (outDecoderResult.isValid()) return detRes;
@@ -2491,7 +2495,7 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
         }
     }
 
-    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine);
+    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine, crptOptions);
     SetResultCandidate();
     if (outDecoderResult.isValid()) return detRes;
     if (detRes.isValid()) {
@@ -2509,7 +2513,7 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
 const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
 
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
-							  DMGridRefineOptions gridRefine)
+							  DMGridRefineOptions gridRefine, DMCrptOptions crptOptions)
 {
     DetectorResult detRes;
 
@@ -2517,7 +2521,7 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
     detRes = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine);
     ResultedDefect possibleResultedDefect;
     if (!detRes.isValid())
-        detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine);
+        detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine, crptOptions);
 
     if (detRes.isValid()) {
         outDecoderResult = DecodeResult(detRes);
@@ -2538,7 +2542,7 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
             return detRes;
         }
     }
-    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine);
+    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine, crptOptions);
 
     if (detRes.isValid()) {
         outDecoderResult = DecodeResult(detRes);

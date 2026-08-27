@@ -27,7 +27,7 @@ Result Reader::decode(const BinaryBitmap& image) const
 	if (binImg == nullptr)
 		return {};
 
-	auto detectorResult = Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine());
+	auto detectorResult = Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine(), _hints.dmCrpt());
 	if (!detectorResult.isValid())
 		return {};
 
@@ -46,7 +46,7 @@ Result Reader::decode(const BinaryBitmap& image, const PointF& P0, const PointF&
 
 	DecoderResult decoderResult;
 	auto detectorResult = DetectDefined(*binImg, P0, P1, P2, P3, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult,
-										_hints.dmGridRefine());
+										_hints.dmGridRefine(), _hints.dmCrpt());
 
 	if (!detectorResult.isValid()) return {};
 
@@ -61,7 +61,7 @@ Results Reader::decode(const BinaryBitmap& image, int maxSymbols) const
 		return {};
 
 	Results results;
-	for (auto&& detRes : Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine())) {
+	for (auto&& detRes : Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine(), _hints.dmCrpt())) {
 		auto decRes = Decode(detRes.bits());
 		if (decRes.isValid(_hints.returnErrors())) {
 			results.emplace_back(std::move(decRes), std::move(detRes).position(), BarcodeFormat::DataMatrix);
@@ -83,7 +83,7 @@ Result DMCRPTReader::decode(const BinaryBitmap& image) const
 
 	DecoderResult decoderResult;
 	auto detectorResult = DetectSamplegridV1(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult,
-											 _hints.dmGridRefine());
+											 _hints.dmGridRefine(), _hints.dmCrpt());
 
 	if (!decoderResult.isValid() && detectorResult.isValid()) {
 		decoderResult = Decode(detectorResult.bits());
@@ -102,7 +102,7 @@ Result DMCRPTReader::decode(const BinaryBitmap& image, int maxSymbols) const
 
 	DecoderResult decoderResult;
 	auto detectorResult = DetectSamplegridV1(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult,
-											 _hints.dmGridRefine());
+											 _hints.dmGridRefine(), _hints.dmCrpt());
 
 	if (!detectorResult.isValid()) return {};
 
