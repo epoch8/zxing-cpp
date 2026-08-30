@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "ReadBarcode.h"
+#include "CrptProfile.h"
 
 #include "DecodeHints.h"
 #include "GlobalHistogramBinarizer.h"
@@ -138,11 +139,19 @@ Result ReadBarcode(const ImageView& _iv, const DecodeHints& hints)
 
 Results ReadBarcodes(const ImageView& _iv, const DecodeHints& hints)
 {
+	CRPT_ZX_COUNT(entry_calls);
 	if (sizeof(PatternType) < 4 && hints.hasFormat(BarcodeFormat::LinearCodes) && (_iv.width() > 0xffff || _iv.height() > 0xffff))
 		throw std::invalid_argument("maximum image width/height is 65535");
 
 	LumImage lum;
-	ImageView iv = SetupLumImageView(_iv, lum, hints);
+	// C1: colour->lum conversion, paid once per entry call before any detection.
+	// Immediately-invoked lambda rather than a separate statement because
+	// ImageView has no default constructor, so declaration and initialisation
+	// cannot be split.
+	ImageView iv = [&] {
+		CRPT_ZX_SCOPED_NS(lum_ns, lum_calls);
+		return SetupLumImageView(_iv, lum, hints);
+	}();
 	MultiFormatReader reader(hints);
 
 	if (hints.isPure())
@@ -156,20 +165,42 @@ Results ReadBarcodes(const ImageView& _iv, const DecodeHints& hints)
 		closedReader = std::make_unique<MultiFormatReader>(closedHints);
 	}
 
+	// C1b: the pyramid downscales the whole image once per layer. It is built
+	// AFTER the lum scope has closed, so lum_ns never included it. T0/T1 because
+	// `pyramid` must outlive the timed region.
+	CRPT_ZX_T0(_t_pyr);
 	LumImagePyramid pyramid(iv, hints.downscaleThreshold() * hints.tryDownscale(), hints.downscaleFactor());
+	CRPT_ZX_T1(_t_pyr, pyramid_ns, pyramid_calls);
 
 	Results results;
 	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
 	for (auto&& iv : pyramid.layers) {
-		auto bitmap = CreateBitmap(hints.binarizer(), iv);
+		// C3: CreateBitmap only CONSTRUCTS the binarizer; the actual
+		// binarization is lazy and happens in BinaryBitmap::getBitMatrix(),
+		// timed in DMReader.cpp. Braced because a bare ScopedNs would live to
+		// the end of this loop body and swallow every decode inside it — which
+		// is exactly how the first version of this reported 111% of ladder time.
+		std::unique_ptr<BinaryBitmap> bitmap;
+		{
+			CRPT_ZX_SCOPED_NS(binarizer_ns, binarizer_calls);
+			bitmap = CreateBitmap(hints.binarizer(), iv);
+		}
 		for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
-			if (close)
+			if (close) {
+				CRPT_ZX_SCOPED_NS(close_ns, close_calls);
 				bitmap->close();
+			}
 
 			// TODO: check if closing after invert would be beneficial
 			for (int invert = 0; invert <= static_cast<int>(hints.tryInvert() && !close); ++invert) {
-				if (invert)
+				// C2: on a failing decode this loop runs to exhaustion —
+				// createHintsForLabel sets maxNumberOfSymbols(0xff) and maxSymbols
+				// only decrements on a UNIQUE hit, so nothing breaks out early.
+				CRPT_ZX_COUNT(loop_iters);
+				if (invert) {
+					CRPT_ZX_SCOPED_NS(invert_ns, invert_calls);
 					bitmap->invert();
+				}
 				auto rs = (close ? *closedReader : reader).readMultiple(*bitmap, maxSymbols);
 				for (auto& r : rs) {
 					if (iv.width() != _iv.width())
@@ -192,11 +223,19 @@ Results ReadBarcodes(const ImageView& _iv, const DecodeHints& hints)
 
 Results readbarcodescrpt_detector_v1_samplegridv1(const ImageView& _iv, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, const DecodeHints& hints)
 {
+	CRPT_ZX_COUNT(entry_calls);
 	if (sizeof(PatternType) < 4 && hints.hasFormat(BarcodeFormat::LinearCodes) && (_iv.width() > 0xffff || _iv.height() > 0xffff))
 		throw std::invalid_argument("maximum image width/height is 65535");
 
 	LumImage lum;
-	ImageView iv = SetupLumImageView(_iv, lum, hints);
+	// C1: colour->lum conversion, paid once per entry call before any detection.
+	// Immediately-invoked lambda rather than a separate statement because
+	// ImageView has no default constructor, so declaration and initialisation
+	// cannot be split.
+	ImageView iv = [&] {
+		CRPT_ZX_SCOPED_NS(lum_ns, lum_calls);
+		return SetupLumImageView(_iv, lum, hints);
+	}();
 
 	auto reader = std::make_unique<ZXing::DataMatrix::Reader>(hints);
 
@@ -208,12 +247,26 @@ Results readbarcodescrpt_detector_v1_samplegridv1(const ImageView& _iv, const Po
 		closedReader = std::make_unique<MultiFormatReader>(closedHints);
 	}
 
+	// C1b: the pyramid downscales the whole image once per layer. It is built
+	// AFTER the lum scope has closed, so lum_ns never included it. T0/T1 because
+	// `pyramid` must outlive the timed region.
+	CRPT_ZX_T0(_t_pyr);
 	LumImagePyramid pyramid(iv, hints.downscaleThreshold() * hints.tryDownscale(), hints.downscaleFactor());
+	CRPT_ZX_T1(_t_pyr, pyramid_ns, pyramid_calls);
 
 	Results results;
 	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
 	for (auto&& iv : pyramid.layers) {
-		auto bitmap = CreateBitmap(hints.binarizer(), iv);
+		// C3: CreateBitmap only CONSTRUCTS the binarizer; the actual
+		// binarization is lazy and happens in BinaryBitmap::getBitMatrix(),
+		// timed in DMReader.cpp. Braced because a bare ScopedNs would live to
+		// the end of this loop body and swallow every decode inside it — which
+		// is exactly how the first version of this reported 111% of ladder time.
+		std::unique_ptr<BinaryBitmap> bitmap;
+		{
+			CRPT_ZX_SCOPED_NS(binarizer_ns, binarizer_calls);
+			bitmap = CreateBitmap(hints.binarizer(), iv);
+		}
 
 		PointF layerScale(iv.width(), iv.height());
 
@@ -223,13 +276,21 @@ Results readbarcodescrpt_detector_v1_samplegridv1(const ImageView& _iv, const Po
 		PointF sP3 = P3 * layerScale;
 
 		for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
-			if (close)
+			if (close) {
+				CRPT_ZX_SCOPED_NS(close_ns, close_calls);
 				bitmap->close();
+			}
 
 			// TODO: check if closing after invert would be beneficial
 			for (int invert = 0; invert <= static_cast<int>(hints.tryInvert() && !close); ++invert) {
-				if (invert)
+				// C2: on a failing decode this loop runs to exhaustion —
+				// createHintsForLabel sets maxNumberOfSymbols(0xff) and maxSymbols
+				// only decrements on a UNIQUE hit, so nothing breaks out early.
+				CRPT_ZX_COUNT(loop_iters);
+				if (invert) {
+					CRPT_ZX_SCOPED_NS(invert_ns, invert_calls);
 					bitmap->invert();
+				}
 
 
 				auto r = reader->decode(*bitmap, sP0, sP1, sP2, sP3);
@@ -253,11 +314,19 @@ Results readbarcodescrpt_detector_v1_samplegridv1(const ImageView& _iv, const Po
 
 Results readbarcodescrpt_samplegridv1(const ImageView& _iv, const DecodeHints& hints, bool returnEdges)
 {
+	CRPT_ZX_COUNT(entry_calls);
 	if (sizeof(PatternType) < 4 && hints.hasFormat(BarcodeFormat::LinearCodes) && (_iv.width() > 0xffff || _iv.height() > 0xffff))
 		throw std::invalid_argument("maximum image width/height is 65535");
 
 	LumImage lum;
-	ImageView iv = SetupLumImageView(_iv, lum, hints);
+	// C1: colour->lum conversion, paid once per entry call before any detection.
+	// Immediately-invoked lambda rather than a separate statement because
+	// ImageView has no default constructor, so declaration and initialisation
+	// cannot be split.
+	ImageView iv = [&] {
+		CRPT_ZX_SCOPED_NS(lum_ns, lum_calls);
+		return SetupLumImageView(_iv, lum, hints);
+	}();
 
 	auto reader = std::make_unique<ZXing::DataMatrix::DMCRPTReader>(hints);
 
@@ -269,21 +338,43 @@ Results readbarcodescrpt_samplegridv1(const ImageView& _iv, const DecodeHints& h
 		closedReader = std::make_unique<MultiFormatReader>(closedHints);
 	}
 
+	// C1b: the pyramid downscales the whole image once per layer. It is built
+	// AFTER the lum scope has closed, so lum_ns never included it. T0/T1 because
+	// `pyramid` must outlive the timed region.
+	CRPT_ZX_T0(_t_pyr);
 	LumImagePyramid pyramid(iv, hints.downscaleThreshold() * hints.tryDownscale(), hints.downscaleFactor());
+	CRPT_ZX_T1(_t_pyr, pyramid_ns, pyramid_calls);
 
 	Results results;
 	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
 	for (auto&& iv : pyramid.layers) {
-		auto bitmap = CreateBitmap(hints.binarizer(), iv);
+		// C3: CreateBitmap only CONSTRUCTS the binarizer; the actual
+		// binarization is lazy and happens in BinaryBitmap::getBitMatrix(),
+		// timed in DMReader.cpp. Braced because a bare ScopedNs would live to
+		// the end of this loop body and swallow every decode inside it — which
+		// is exactly how the first version of this reported 111% of ladder time.
+		std::unique_ptr<BinaryBitmap> bitmap;
+		{
+			CRPT_ZX_SCOPED_NS(binarizer_ns, binarizer_calls);
+			bitmap = CreateBitmap(hints.binarizer(), iv);
+		}
 
 		for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
-			if (close)
+			if (close) {
+				CRPT_ZX_SCOPED_NS(close_ns, close_calls);
 				bitmap->close();
+			}
 
 			// TODO: check if closing after invert would be beneficial
 			for (int invert = 0; invert <= static_cast<int>(hints.tryInvert() && !close); ++invert) {
-				if (invert)
+				// C2: on a failing decode this loop runs to exhaustion —
+				// createHintsForLabel sets maxNumberOfSymbols(0xff) and maxSymbols
+				// only decrements on a UNIQUE hit, so nothing breaks out early.
+				CRPT_ZX_COUNT(loop_iters);
+				if (invert) {
+					CRPT_ZX_SCOPED_NS(invert_ns, invert_calls);
 					bitmap->invert();
+				}
 
 				if(!close) {
 					auto r = reader->decode(*bitmap);

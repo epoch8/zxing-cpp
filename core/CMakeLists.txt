@@ -163,6 +163,7 @@ if (BUILD_READERS)
             src/PerspectiveTransform.cpp
             src/Reader.h
             src/ReadBarcode.h
+            src/CrptProfile.cpp
             src/ReadBarcode.cpp
             src/ReedSolomonDecoder.h
             src/ReedSolomonDecoder.cpp
@@ -561,6 +562,13 @@ if (COMPILER_NEEDS_FLOAT_STORE)
     target_compile_options(ZXing PRIVATE
             -ffloat-store   # same floating point precision in all optimization levels
     )
+endif()
+
+# Layer C benchmarking counters. OFF by default so the shipping
+# libZXing.so is unchanged; see src/CrptProfile.h.
+option(CRPT_ZXING_PROFILING "Build ZXing with CRPT Layer C counters" OFF)
+if (CRPT_ZXING_PROFILING)
+    target_compile_definitions(ZXing PUBLIC CRPT_ZXING_PROFILING)
 endif()
 
 target_compile_features(ZXing PUBLIC cxx_std_17)
