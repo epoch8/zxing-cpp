@@ -59,6 +59,12 @@ printf("\n");
 
 namespace ZXing::DataMatrix {
 
+    static std::vector<Warp>& EmptyWarps()
+    {
+        static std::vector<Warp> empty;
+        return empty;
+    }
+
     /**
     * The following code is the 'old' code by Sean Owen based on the Java upstream project.
     * It looks for a white rectangle, then cuts the corners until it hits a black pixel, which
@@ -1549,7 +1555,7 @@ namespace ZXing::DataMatrix {
     };
 
 
-    static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, Warp* warp = nullptr, bool tryToTraceWarp = false, bool correctCorners = false,
+    static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, std::vector<Warp>& warps = EmptyWarps(), bool tryToTraceWarp = false, bool correctCorners = false,
 							   DMGridRefineOptions gridRefine = {})
     {
         while (startTracer.moveToNextWhiteAfterBlack()) {
@@ -1679,44 +1685,46 @@ namespace ZXing::DataMatrix {
             };
 
             DetectorResult res;
-            if (tryToTraceWarp && warp) {
-                if (!warp->isValid() || warp->xOffsets.size() > dimT || warp->yOffsets.size() > dimR) {
-                    *warp = ComputeWarp(*startTracer.img, tl, bl, br, tr, 5, 5, dimT);
+            if (!warps.empty()) {
+                for (auto& w : warps) {
+                    if (tryToTraceWarp) {
+                        if (!w.isValid() || w.xOffsets.size() > dimT || w.yOffsets.size() > dimR) {
+                            w = ComputeWarp(*startTracer.img, tl, bl, br, tr, 5, 5, dimT);
+                        }
+                    }
+                    if (w.xOffsets.size() != dimT || w.yOffsets.size() != dimR) {
+                        w.Resample(dimT, dimR);
+                    }
+                    if (correctCorners) {
+                        auto TL = tl, BL = bl, BR = br, TR = tr;
+                        CorrectCorners(*startTracer.img, TL, BL, BR, TR, dimT);
+                        res = SampleGridWarped(*startTracer.img, TL, BL, BR, TR, dimT, dimR, w);
+                    } else {
+                        res = SampleGridWarped(*startTracer.img, dimT, dimR, w, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
+                    }
+                    if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
+                        auto scoreWarp = EvaluateDecode(res.bits());
+                        if (!scoreWarp.ok) {
+                            PerspectiveTransform mod2pix{Rectangle(dimT, dimR, 0), sourcePoints};
+                            if (gridRefine.regionGrowing) {
+                                auto grown = SampleGridRegionGrowing(*startTracer.img, dimT, dimR, mod2pix);
+                                if (grown.isValid() && EvaluateDecode(grown.bits()).score() < scoreWarp.score()) {
+                                    res = std::move(grown);
+                                    scoreWarp = EvaluateDecode(res.bits());
+                                }
+                            }
+                            if (gridRefine.rsFeedback && !scoreWarp.errorModules.empty())
+                                res = RefineGridWithDecoderFeedback(*startTracer.img, dimT, dimR, mod2pix, std::move(res), scoreWarp);
+                        }
+                    }
+                    if (res.isValid() && DecodeResult(res).isValid())
+                        return res;
                 }
-                // warp->Resample(dimT, dimR);
+                continue;
             }
-            if (warp) {
-                if (warp->xOffsets.size() != dimT || warp->yOffsets.size() != dimR) {
-                    warp->Resample(dimT, dimR);
-                }
-                if (correctCorners) {
-                    auto TL = tl, BL = bl, BR = br, TR = tr;
-                    CorrectCorners(*startTracer.img, TL, BL, BR, TR, dimT);
-                    res = SampleGridWarped(*startTracer.img, TL, BL, BR, TR, dimT, dimR, *warp);
-                }
-                else {
-                    res = SampleGridWarped(*startTracer.img, dimT, dimR, *warp, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
-                }
-				if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
-					auto scoreWarp = EvaluateDecode(res.bits());
-					if (!scoreWarp.ok) {
-						PerspectiveTransform mod2pix{Rectangle(dimT, dimR, 0), sourcePoints};
-						if (gridRefine.regionGrowing) {
-							auto grown = SampleGridRegionGrowing(*startTracer.img, dimT, dimR, mod2pix);
-							if (grown.isValid() && EvaluateDecode(grown.bits()).score() < scoreWarp.score()) {
-								res = std::move(grown);
-								scoreWarp = EvaluateDecode(res.bits());
-							}
-						}
-						if (gridRefine.rsFeedback && !scoreWarp.errorModules.empty())
-							res = RefineGridWithDecoderFeedback(*startTracer.img, dimT, dimR, mod2pix, std::move(res), scoreWarp);
-					}
-				}
-            }
-            else {
-                res = SampleGridTestOffseted(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints),
-											 gridRefine);
-            }
+
+            res = SampleGridTestOffseted(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints),
+                                         gridRefine);
 
             CHECK(res.isValid());
             return res;
@@ -1726,7 +1734,7 @@ namespace ZXing::DataMatrix {
     }
 
 
-    static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tryRotate, Warp* warp = nullptr, bool tryToTraceWarp = false, bool correctCorners = false,
+    static DetectorResults DetectNew(const BitMatrix& image, bool tryHarder, bool tryRotate, std::vector<Warp>& warps = EmptyWarps(), bool tryToTraceWarp = false, bool correctCorners = false,
 									 DMGridRefineOptions gridRefine = {})
     {
 #ifdef PRINT_DEBUG
@@ -1769,10 +1777,10 @@ namespace ZXing::DataMatrix {
 
 #ifdef __cpp_impl_coroutine
                 DetectorResult res;
-                while (res = Scan(tracer, lines), res.isValid())
+                while (res = Scan(tracer, lines, EmptyWarps()), res.isValid())
                     co_yield std::move(res);
 #else
-                if (auto res = Scan(tracer, lines, warp, tryToTraceWarp, correctCorners, gridRefine); res.isValid()) {
+                if (auto res = Scan(tracer, lines, warps, tryToTraceWarp, correctCorners, gridRefine); res.isValid()) {
                     return res;
                 }
 #endif
@@ -1861,97 +1869,47 @@ namespace ZXing::DataMatrix {
 		return a * x_abs * x_abs + b;
 	}
 
-    void createMaps(cv::Mat& mapXY, int outputSize, bool horizontal, bool inverse) {
-        mapXY.create(outputSize, outputSize, CV_32FC2);
+	static std::vector<float> BottleOffsetRow(int count, float factor)
+	{
+		std::vector<float> row(count);
+		if (count <= 0)
+			return row;
+		const float indexMul = count > 1 ? 2.0f / float(count - 1) : 0.f;
+		for (int i = 0; i < count; ++i)
+			row[i] = (very_fast_cos(std::fabs(float(i) * indexMul - 1.0f)) - 0.75f) * factor;
+		return row;
+	}
 
-        float factor = float(outputSize) / 7.6 * 0.5;
+	static Warp CreateBottleWarp(int referenceSize, bool horizontal, bool inverse, float factor)
+	{
+		auto offsetRow = BottleOffsetRow(referenceSize, factor);
+		const float inverseMul = inverse ? -1.0f : 1.0f;
 
-        static cv::Mat offsetMap;
-
-		constexpr size_t alignment = VEC_SIZE * 4;
-		constexpr size_t elements_per_vector = VEC_SIZE;
-		// auto start = std::chrono::high_resolution_clock::now();
-
-        if(offsetMap.cols != outputSize) {
-            offsetMap = cv::Mat(1, outputSize, CV_32F);
-
-            float indexMul = 2.0 / float(outputSize - 1);
-            size_t i = 0;
-			float* mapRow = offsetMap.ptr<float>(0);
-
-			while ((reinterpret_cast<uintptr_t>(mapRow + i) & (alignment - 1)) != 0 && i < outputSize) {
-				mapRow[i] = (very_fast_cos(std::fabs(float(i) * indexMul - 1.0f)) - 0.75) * factor;
-				i++;
-			}
-
-			if (i + elements_per_vector <= outputSize) {
-				const size_t aligned_size = (outputSize - i) & ~(elements_per_vector - 1);
-				float* aligned_data = static_cast<float*>(__builtin_assume_aligned(mapRow + i, alignment));
-
-				for (size_t j = 0; j < aligned_size; j+=VEC_SIZE) {
-					for(size_t jj = 0; jj < VEC_SIZE; jj++) {
-						size_t ij = j + jj;
-						aligned_data[ij] = (very_fast_cos(std::abs(float(i++) * indexMul - 1.0f)) - 0.75) * factor;
-					}
-				}
-			}
-
-			for (; i < outputSize; ++i) {
-                mapRow[i] = (very_fast_cos(std::abs(float(i) * indexMul - 1.0f)) - 0.75) * factor;
-            }
-        }
-
-
-
-        float* offsetRow = offsetMap.ptr<float>(0);
-        float inverseMul = inverse ? -1.0f : 1.0f;
-
-        cv::parallel_for_(cv::Range(0, outputSize), [&mapXY, inverseMul, offsetRow, &outputSize, horizontal, inverse](const cv::Range& range) {
-            for (int y = range.start; y < range.end; y++) {
-                float* row = mapXY.ptr<float>(y);
-                for(int x = 0; x < outputSize; ++x) {
-                    float& dx = row[x * 2];
-                    float& dy = row[x * 2 + 1];
-                    dx = static_cast<float>(x);
-                    dy = static_cast<float>(y);
-                    if(horizontal) {
-                        dx += offsetRow[y] * inverseMul;
-                    } else {
-                        dy += offsetRow[x] * inverseMul;
-                    }
-                }
-            }
-        });
-		// auto createMapsDuration = std::chrono::duration<double, std::micro>(std::chrono::high_resolution_clock::now() - start).count();
-		// std::cout << "create maps duration size " << outputSize << " time " << createMapsDuration << std::endl;
-    }
-
-	void correctBottleCv(const cv::Mat& img, cv::Mat& outImg, bool horizontal, bool inverse, bool small) {
-
-		// img.copyTo(outImg);
-
-		static std::pair<cv::Mat, cv::Mat> mapsXY[8];
-
-		if(outImg.cols <= 0 || outImg.cols != outImg.rows) {
-			throw std::invalid_argument("Output matrix must be a square");
+		Warp warp(referenceSize, referenceSize);
+		for (int i = 0; i < referenceSize; ++i) {
+			warp.xOffsets[i] = {0, 0};
+			warp.yOffsets[i] = {0, 0};
 		}
-		float outputSize = outImg.rows;
-
-		uint8_t mapMask = (inverse ? 1 : 0) | (horizontal ? 0b10 : 0) | (small ? 0b100 : 0);
-
-		auto& mapXY = mapsXY[mapMask];
-
-		if(mapXY.first.empty()) {
-			cv::Mat floatMap;
-			createMaps(floatMap, outputSize, horizontal, inverse);
-			cv::convertMaps(floatMap, {}, mapXY.first, mapXY.second, CV_16SC2, true);
-			// cv::convertMaps(floatMap, {}, mapXY.first, mapXY.second, CV_32FC2, true);
-			// cv::convertMaps(mapXY, {}, mapXY, {}, CV_16SC2);
+		if (horizontal) {
+			for (int i = 0; i < referenceSize; ++i)
+				warp.yOffsets[i] = PointF{offsetRow[i] * inverseMul, 0};
+		} else {
+			for (int i = 0; i < referenceSize; ++i)
+				warp.xOffsets[i] = PointF{0, offsetRow[i] * inverseMul};
 		}
-		
-		cv::remap(img, outImg, mapXY.first, mapXY.second, cv::InterpolationFlags::INTER_NEAREST, 0, 0);
-    }
+		warp.isFinal = true;
+		return warp;
+	}
 
+	static std::vector<Warp> CreateBottleWarps(int referenceSize, float factor)
+	{
+		return {
+			CreateBottleWarp(referenceSize, false, false, factor),
+			CreateBottleWarp(referenceSize, false, true, factor),
+			CreateBottleWarp(referenceSize, true, false, factor),
+			CreateBottleWarp(referenceSize, true, true, factor),
+		};
+	}
 
     void rotate(const BitMatrix& img, BitMatrix& outImg, const PointF& sincos) {
         int  rows, cols, r, c, r1, c1, k, s;
@@ -2197,7 +2155,7 @@ namespace ZXing::DataMatrix {
 		return cv::Mat(h, w, CV_8UC1);
 	}
 
-    static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect, Warp* warp = nullptr, bool needToTraceWarp = false, bool correctCorners = false,
+    static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect, std::vector<Warp>& warps = EmptyWarps(), bool needToTraceWarp = false, bool correctCorners = false,
 									 DMGridRefineOptions gridRefine = {}, DMCrptOptions crptOptions = {})
     {
 
@@ -2273,7 +2231,7 @@ namespace ZXing::DataMatrix {
             line3(mat, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
 			// drawDebugImage(img2,"newLine");
 
-            res = DetectNew(img2, true, true, warp, needToTraceWarp, correctCorners, gridRefine);
+            res = DetectNew(img2, true, true, warps, needToTraceWarp, correctCorners, gridRefine);
 
             if (!res.isValid()) continue;
             if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid()) return res;
@@ -2285,34 +2243,17 @@ namespace ZXing::DataMatrix {
         // BitMatrix img2;
 
 		if (crptOptions.correctBottleCv) {
-		const size_t remapSizeBig = 256;
-		const size_t remapSizeHalfThreshold = 160;
-		size_t remapSize = remapSizeBig;
-		if(std::max(image.width(), image.height()) < remapSizeHalfThreshold) {
-			remapSize /= 2;
-		}
+		constexpr int referenceSize = 144;
+		const float factor = float(std::max(image.width(), image.height())) / 7.6f * 0.5f;
+		auto bottleWarps = CreateBottleWarps(referenceSize, factor);
+		std::vector<Warp> detectWarps;
+		detectWarps.reserve(warps.size() + bottleWarps.size());
+		detectWarps.insert(detectWarps.end(), warps.begin(), warps.end());
+		detectWarps.insert(detectWarps.end(), std::make_move_iterator(bottleWarps.begin()), std::make_move_iterator(bottleWarps.end()));
 
-		img2 = BitMatrix(remapSize, remapSize);
-		auto img2Mat = img2.asMat();
-
-		cv::Mat resizedImg;
-		cv::resize(image.asMat(), resizedImg, {static_cast<int>(remapSize), static_cast<int>(remapSize)}, 0,0, cv::INTER_LINEAR);
-		cv::threshold(resizedImg, resizedImg, 127, 255, cv::THRESH_BINARY);
-		// drawDebugImage(resizedImg, "orig");
-
-		for (int i = 0; i < 4; i++) {
-            n1 = 0; n2 = 1;
-			// drawDebugImage(image, "original");
-			// auto TestImg2 = image.copy();
-            // correctBottle(image, TestImg2, i & 0b10, i & 0b01);
-			// drawDebugImage(TestImg2, "correct_bottle_old");
-			correctBottleCv(resizedImg, img2Mat, i & 0b10, i & 0b01, remapSize != remapSizeBig);
-			// drawDebugImage(img2, "correct_bottle");
-
-            res = DetectNew(img2, true, true, warp, needToTraceWarp, correctCorners, gridRefine);
-            if (!res.isValid()) continue;
-            if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid()) return res;
-        } //i
+		res = DetectNew(image, true, true, detectWarps, needToTraceWarp, correctCorners, gridRefine);
+		if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid())
+			return res;
 		}
         return res;
     }
@@ -2379,7 +2320,7 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
         co_yield std::move(r);
     else if (!isPure) { // If r.isValid() then there is no point in looking for more (no-pure) symbols
         bool found = false;
-        for (auto&& r : DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine)) {
+        for (auto&& r : DetectNew(image, tryHarder, tryRotate, EmptyWarps(), false, false, gridRefine)) {
             found = true;
             co_yield std::move(r);
         }
@@ -2392,13 +2333,13 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
     if (isPure)
         return DetectPure(image);
 
-    auto result = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine);
+    auto result = DetectNew(image, tryHarder, tryRotate, EmptyWarps(), false, false, gridRefine);
     DecoderResult outDecoderResult;
     //if (!result.isValid() && tryHarder)
     //	result = DetectPure(image);
     ResultedDefect _;
     if (!result.isValid() && tryHarder)
-        result = DetectCRPT(image, outDecoderResult, _, nullptr, false, false, gridRefine, crptOptions);
+        result = DetectCRPT(image, outDecoderResult, _, EmptyWarps(), false, false, gridRefine, crptOptions);
     return result;
 
 #endif
@@ -2411,10 +2352,11 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
 
 #ifdef __cpp_impl_coroutine
     DetectorResult detRes;
+    ResultedDefect possibleResultedDefect = ResultedDefect::Default;
     //OLD DETECTORS
     detRes = DetectNew(image, tryHarder, tryRotate);
     if (!detRes.isValid())
-        detRes = DetectCRPT(image.copy());
+        detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect);
 
     if (detRes.isValid()) {
         outDecoderResult = DecodeResult(detRes);
@@ -2425,14 +2367,15 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
     //#OLD DETECTORS
 
     //OLD DETECTORS WITH MY SAMPLE GRID
-    detRes = DetectNew(image, tryHarder, tryRotate, true, true);
+    std::vector<Warp> warps(1);
+    detRes = DetectNew(image, tryHarder, tryRotate, warps, true, true);
     if (detRes.isValid()) {
         outDecoderResult = DecodeResult(detRes);
         if (outDecoderResult.isValid()) {
             co_return detRes;
         }
     }
-    detRes = DetectCRPT(image.copy(), true, true);
+    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, warps, true, true);
 
     if (detRes.isValid()) {
         outDecoderResult = DecodeResult(detRes);
@@ -2465,12 +2408,12 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
     if (outDecoderResult.isValid()) return detRes;
 
     ResultedDefect possibleResultedDefect = ResultedDefect::Default;
-    detRes = DetectCRPT(image, outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine, crptOptions);
+    detRes = DetectCRPT(image, outDecoderResult, possibleResultedDefect, EmptyWarps(), false, false, gridRefine, crptOptions);
     SetResultCandidate();
     detRes.setResultedDefect(possibleResultedDefect);
     if (outDecoderResult.isValid()) return detRes;
 
-    detRes = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine);
+    detRes = DetectNew(image, tryHarder, tryRotate, EmptyWarps(), false, false, gridRefine);
     SetResultCandidate();
     detRes.setResultedDefect(ResultedDefect::Default);
     if (detRes.isValid()) {
@@ -2483,9 +2426,9 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
 
     //OLD DETECTORS WITH MY SAMPLE GRID
 
-    Warp warp;
+    std::vector<Warp> warps(1);
 
-    detRes = DetectNew(image, tryHarder, tryRotate, &warp, true, false, gridRefine);
+    detRes = DetectNew(image, tryHarder, tryRotate, warps, true, false, gridRefine);
     SetResultCandidate();
     if (detRes.isValid()) {
         outDecoderResult = DecodeResult(detRes);
@@ -2495,7 +2438,7 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
         }
     }
 
-    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine, crptOptions);
+    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, warps, true, false, gridRefine, crptOptions);
     SetResultCandidate();
     if (outDecoderResult.isValid()) return detRes;
     if (detRes.isValid()) {
@@ -2518,10 +2461,10 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
     DetectorResult detRes;
 
     //OLD DETECTORS
-    detRes = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine);
+    detRes = DetectNew(image, tryHarder, tryRotate, EmptyWarps(), false, false, gridRefine);
     ResultedDefect possibleResultedDefect;
     if (!detRes.isValid())
-        detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine, crptOptions);
+        detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, EmptyWarps(), false, false, gridRefine, crptOptions);
 
     if (detRes.isValid()) {
         outDecoderResult = DecodeResult(detRes);
@@ -2533,16 +2476,16 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
 
     //OLD DETECTORS WITH MY SAMPLE GRID
 
-    Warp warp;
+    std::vector<Warp> warps(1);
 
-    detRes = DetectNew(image, tryHarder, tryRotate, &warp, true, false, gridRefine);
+    detRes = DetectNew(image, tryHarder, tryRotate, warps, true, false, gridRefine);
     if (detRes.isValid()) {
         outDecoderResult = DecodeResult(detRes);
         if (outDecoderResult.isValid()) {
             return detRes;
         }
     }
-    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine, crptOptions);
+    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, warps, true, false, gridRefine, crptOptions);
 
     if (detRes.isValid()) {
         outDecoderResult = DecodeResult(detRes);

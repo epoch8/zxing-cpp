@@ -67,7 +67,7 @@ struct DMGridRefineOptions
 struct DMCrptOptions
 {
 	bool rotateCV45 = false;      ///< 45° OpenCV rotation when white-rect detection fails
-	bool correctBottleCv = false; ///< Curved-surface (bottle) correction via remap
+	bool correctBottleCv = false; ///< Curved-surface (bottle) correction via precomputed Warp offsets
 
 	constexpr bool any() const noexcept { return rotateCV45 || correctBottleCv; }
 
