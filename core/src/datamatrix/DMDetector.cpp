@@ -250,6 +250,8 @@ namespace ZXing::DataMatrix {
 	};
 
 	DoubleLineFlags testDoubleLine(const BitMatrix& img) {
+		if (img.width() < 1 || img.height() < 2)
+			return {};
 		
 		auto testStartY = [](const BitMatrix& img, int startY) -> uint8_t {
 			for(int yo = 0; yo < 2; yo++) {
@@ -588,6 +590,8 @@ namespace ZXing::DataMatrix {
 	DetectorResult SampleGridTestOffseted(const BitMatrix& image, int width, int height, PerspectiveTransform mod2pix,
 										  DMGridRefineOptions gridRefine = {}) {
         auto res = SampleGrid(image, width, height, mod2pix);
+		if (!res.isValid())
+			return res;
 		auto doubleLine = testDoubleLine(res.bits());
 
 		if(doubleLine.any()) {
@@ -1702,7 +1706,10 @@ namespace ZXing::DataMatrix {
                     } else {
                         res = SampleGridWarped(*startTracer.img, dimT, dimR, w, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
                     }
-                    if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
+                    if (res.isValid() && DecodeResult(res).isValid()) {
+                        return res;
+					}
+					if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
                         auto scoreWarp = EvaluateDecode(res.bits());
                         if (!scoreWarp.ok) {
                             PerspectiveTransform mod2pix{Rectangle(dimT, dimR, 0), sourcePoints};
@@ -1717,8 +1724,6 @@ namespace ZXing::DataMatrix {
                                 res = RefineGridWithDecoderFeedback(*startTracer.img, dimT, dimR, mod2pix, std::move(res), scoreWarp);
                         }
                     }
-                    if (res.isValid() && DecodeResult(res).isValid())
-                        return res;
                 }
                 continue;
             }
@@ -2246,12 +2251,12 @@ namespace ZXing::DataMatrix {
 		constexpr int referenceSize = 144;
 		const float factor = float(std::max(image.width(), image.height())) / 7.6f * 0.5f;
 		auto bottleWarps = CreateBottleWarps(referenceSize, factor);
-		std::vector<Warp> detectWarps;
-		detectWarps.reserve(warps.size() + bottleWarps.size());
-		detectWarps.insert(detectWarps.end(), warps.begin(), warps.end());
-		detectWarps.insert(detectWarps.end(), std::make_move_iterator(bottleWarps.begin()), std::make_move_iterator(bottleWarps.end()));
+		// std::vector<Warp> detectWarps;
+		// detectWarps.reserve(warps.size() + bottleWarps.size());
+		// detectWarps.insert(detectWarps.end(), warps.begin(), warps.end());
+		// detectWarps.insert(detectWarps.end(), std::make_move_iterator(bottleWarps.begin()), std::make_move_iterator(bottleWarps.end()));
 
-		res = DetectNew(image, true, true, detectWarps, needToTraceWarp, correctCorners, gridRefine);
+		res = DetectNew(image, true, true, bottleWarps, false, correctCorners, gridRefine);
 		if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid())
 			return res;
 		}
