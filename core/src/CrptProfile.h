@@ -124,6 +124,28 @@ struct CrptProfileCounters {
 	// DMCRPTReader fallback). decode_res_ns only covers DecodeResult() calls
 	// made from inside DMDetector, so this path was invisible.
 	uint64_t dm_decode_calls, dm_decode_ns;
+
+	// WHICH VARIANT WON. Each of these loops tries several variants and returns
+	// on the first that decodes, but they all share ONE timing counter, so the
+	// profile shows what the loop COST and never which arm earned it. A variant
+	// that never wins across a corpus is provably removable; without these you
+	// cannot tell it apart from one that wins constantly.
+	//   line   : L-marker synthesis, i=0 -> (n1,n2)=(0,1), i=1 -> (0,2)
+	//   bottle : correctBottleCv, i encodes (i & 0b10, i & 0b01)
+	//   grid   : DetectOldWithOffsets' four sequential SampleGrid attempts
+	uint64_t crpt_line_win0, crpt_line_win1;
+	uint64_t crpt_bottle_win0, crpt_bottle_win1, crpt_bottle_win2, crpt_bottle_win3;
+	uint64_t old_grid_win0, old_grid_win1, old_grid_win2, old_grid_win3;
+
+	// rotateCV45 is a RETRY, not a decode variant: DetectWhiteRect runs on the
+	// unrotated crop first and the 45deg rotation only happens when that fails.
+	// So "how often does rotate run" (crpt_rot_calls) answers nothing on its own
+	// -- it counts failures of the first attempt. These two say whether the
+	// retry is worth its ~700us:
+	//   rescued : rotation FOUND a white rect the unrotated pass missed
+	//   win     : ...and that rescued call went on to actually decode
+	// rescued without win means the rotation buys candidates that never pay off.
+	uint64_t crpt_rot_rescued, crpt_rot_win;
 };
 
 // Zero the calling thread's counters.

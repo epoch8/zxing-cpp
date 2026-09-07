@@ -1210,13 +1210,13 @@ namespace ZXing::DataMatrix {
 				res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight + DirBottomLR, *topRight + DirTopLR, dimensionTop, dimensionRight); }
 				{ CRPT_ZX_SCOPED_NS(old_decode_ns, old_decode_calls);
 				outDecoderResult = DecodeResult(res); }
-				if(outDecoderResult.isValid()) return res;
+				if(outDecoderResult.isValid()) { CRPT_ZX_COUNT(old_grid_win0); return res; }
 
 				{ CRPT_ZX_SCOPED_NS(old_grid_ns, old_grid_calls);
 				res = SampleGrid(image, *topLeft + DirLeftBT, *bottomLeft, *bottomRight, *topRight + DirRightBT, dimensionTop, dimensionRight); }
 				{ CRPT_ZX_SCOPED_NS(old_decode_ns, old_decode_calls);
 				outDecoderResult = DecodeResult(res); }
-				if(outDecoderResult.isValid()) return res;
+				if(outDecoderResult.isValid()) { CRPT_ZX_COUNT(old_grid_win1); return res; }
 
 
 				{ CRPT_ZX_SCOPED_NS(old_ctr_ns, old_ctr_calls);
@@ -1229,13 +1229,13 @@ namespace ZXing::DataMatrix {
 				res = SampleGrid(image, *topLeft - DirTopLR, *bottomLeft - DirBottomLR, *bottomRight, correctedTopRight, dimensionTop, dimensionRight); }
 				{ CRPT_ZX_SCOPED_NS(old_decode_ns, old_decode_calls);
 				outDecoderResult = DecodeResult(res); }
-				if(outDecoderResult.isValid()) return res;
+				if(outDecoderResult.isValid()) { CRPT_ZX_COUNT(old_grid_win2); return res; }
 
 				{ CRPT_ZX_SCOPED_NS(old_grid_ns, old_grid_calls);
 				res = SampleGrid(image, *topLeft, *bottomLeft - DirLeftBT, *bottomRight - DirRightBT, correctedTopRight, dimensionTop, dimensionRight); }
 				{ CRPT_ZX_SCOPED_NS(old_decode_ns, old_decode_calls);
 				outDecoderResult = DecodeResult(res); }
-				if(outDecoderResult.isValid()) return res;
+				if(outDecoderResult.isValid()) { CRPT_ZX_COUNT(old_grid_win3); return res; }
 				if(tryInvert) {
 					tryInvert = false;
 					DirTopLR = -0.5 * DirTopLR;
@@ -2248,6 +2248,8 @@ namespace ZXing::DataMatrix {
 									 DMGridRefineOptions gridRefine = {}, bool* outBailedNoWhiteRect = nullptr)
     {
         if (outBailedNoWhiteRect) *outBailedNoWhiteRect = false;
+        // set iff this call proceeded on the 45deg-rotated image
+        bool _crpt_used_rotation = false;
 
         /*ResultPoint p1(0, 0);
         ResultPoint p2(0, 0);
@@ -2285,6 +2287,10 @@ namespace ZXing::DataMatrix {
 			{
 				CRPT_ZX_SCOPED_NS(crpt_wr_ns, crpt_wr_calls);
 				_crpt_wr2 = DetectWhiteRect(newimage, pointA, pointB, pointC, pointD);
+			}
+			if (_crpt_wr2) {
+				_crpt_used_rotation = true;
+				CRPT_ZX_COUNT(crpt_rot_rescued);
 			}
 			if(!_crpt_wr2) {
 				// The early-bail path: ~92% of DetectCRPT calls end here, and it
@@ -2358,7 +2364,12 @@ namespace ZXing::DataMatrix {
                 CRPT_ZX_SCOPED_NS(crpt_decode_ns, crpt_decode_calls);
                 outDecodeResult = DecodeResult(res);
             }
-            if (outDecodeResult.isValid()) return res;
+            if (outDecodeResult.isValid()) {
+                if (i == 0) CRPT_ZX_COUNT(crpt_line_win0);
+                else        CRPT_ZX_COUNT(crpt_line_win1);
+                if (_crpt_used_rotation) CRPT_ZX_COUNT(crpt_rot_win);
+                return res;
+            }
         } //i
 
 
@@ -2404,7 +2415,16 @@ namespace ZXing::DataMatrix {
                 CRPT_ZX_SCOPED_NS(crpt_decode_ns, crpt_decode_calls);
                 outDecodeResult = DecodeResult(res);
             }
-            if (outDecodeResult.isValid()) return res;
+            if (outDecodeResult.isValid()) {
+                switch (i) {
+                    case 0: CRPT_ZX_COUNT(crpt_bottle_win0); break;
+                    case 1: CRPT_ZX_COUNT(crpt_bottle_win1); break;
+                    case 2: CRPT_ZX_COUNT(crpt_bottle_win2); break;
+                    default: CRPT_ZX_COUNT(crpt_bottle_win3); break;
+                }
+                if (_crpt_used_rotation) CRPT_ZX_COUNT(crpt_rot_win);
+                return res;
+            }
         } //i
         return res;
     }
