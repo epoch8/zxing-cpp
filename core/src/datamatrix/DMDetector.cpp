@@ -2197,9 +2197,14 @@ namespace ZXing::DataMatrix {
 		return cv::Mat(h, w, CV_8UC1);
 	}
 
+    // outBailedNoWhiteRect (optional): set true iff this call took the early
+    // "no white rect at 0deg or 45deg" path and returned {}. Lets a caller that
+    // is about to repeat the call on the SAME image skip it -- see
+    // DetectSamplegridV1.
     static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect, Warp* warp = nullptr, bool needToTraceWarp = false, bool correctCorners = false,
-									 DMGridRefineOptions gridRefine = {})
+									 DMGridRefineOptions gridRefine = {}, bool* outBailedNoWhiteRect = nullptr)
     {
+        if (outBailedNoWhiteRect) *outBailedNoWhiteRect = false;
 
         /*ResultPoint p1(0, 0);
         ResultPoint p2(0, 0);
@@ -2219,6 +2224,7 @@ namespace ZXing::DataMatrix {
 			rotateCV45(image, newimage);
 			// drawDebugImage(newimage, "rotated");
 			if(!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {
+				if (outBailedNoWhiteRect) *outBailedNoWhiteRect = true;
 				return {};
 			}
 
@@ -2461,7 +2467,8 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
     if (outDecoderResult.isValid()) return detRes;
 
     ResultedDefect possibleResultedDefect = ResultedDefect::Default;
-    detRes = DetectCRPT(image, outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine);
+    bool _crpt1_bailed = false;
+    detRes = DetectCRPT(image, outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine, &_crpt1_bailed);
     SetResultCandidate();
     detRes.setResultedDefect(possibleResultedDefect);
     if (outDecoderResult.isValid()) return detRes;
@@ -2491,7 +2498,24 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
         }
     }
 
-    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine);
+    // SKIP when call 1 already bailed. That call and this one differ only in
+    // `warp` / `needToTraceWarp`, and the bail path reads neither -- it depends
+    // only on the image, which is the same here. So this call would redo an
+    // identical copy -> DetectWhiteRect -> rotateCV45 -> DetectWhiteRect and
+    // return {} again.
+    //
+    // Ported from checking_speed_zxing b094b501, where it was verified over
+    // 2,352 paired samples with zero cases of call 2 succeeding where call 1
+    // bailed.
+    //
+    // `detRes = {}` reproduces exactly what the skipped call returned, so the
+    // code below (SetResultCandidate / isValid checks) sees what it always saw.
+    // Without it detRes would wrongly retain the DetectNew result from above.
+    if (_crpt1_bailed) {
+        detRes = {};
+    } else {
+        detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine);
+    }
     SetResultCandidate();
     if (outDecoderResult.isValid()) return detRes;
     if (detRes.isValid()) {
