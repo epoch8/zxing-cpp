@@ -1550,6 +1550,58 @@ namespace ZXing::DataMatrix {
     };
 
 
+    // ---- Scan's warped tail, as two named units ---------------------------------
+    //
+    // On this base the tail is a pipeline -- sample, then refine in place, then
+    // return the first valid grid to the caller, which decodes -- so it is not a
+    // ladder and does not go through the runner. Naming the two units is what
+    // lets a later warp-loop version (one step per warp, refine as a step whose
+    // result the runner decodes) drop in without touching the tracing above.
+
+    // Sample through a warp: resample it to the symbol's dimensions if it is
+    // not already, then sample from corrected corners when asked, else through
+    // the perspective transform of the traced quadrilateral.
+    static DetectorResult SampleScanGridWarped(const BitMatrix& img, PointF tl, PointF bl, PointF br, PointF tr, int dimT, int dimR,
+                                               const QuadrilateralF& sourcePoints, Warp& warp, bool correctCorners)
+    {
+        if (warp.xOffsets.size() != dimT || warp.yOffsets.size() != dimR) {
+            warp.Resample(dimT, dimR);
+        }
+        if (correctCorners) {
+            auto TL = tl, BL = bl, BR = br, TR = tr;
+            CorrectCorners(img, TL, BL, BR, TR, dimT);
+            return SampleGridWarped(img, TL, BL, BR, TR, dimT, dimR, warp);
+        }
+        return SampleGridWarped(img, dimT, dimR, warp, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
+    }
+
+    // The refinement Scan applies to a warped sample that does not decode
+    // cleanly: region growing from the L-corner if that scores better, then
+    // Reed-Solomon-guided resampling of the modules it flagged; each gated by
+    // gridRefine. SampleGridTestOffseted carries a near-copy of this for the
+    // unwarped path -- it scores an invalid sample differently -- so the two
+    // are not merged here.
+    static DetectorResult RefineWarpedGrid(const BitMatrix& img, int dimT, int dimR, const QuadrilateralF& sourcePoints,
+                                           DMGridRefineOptions gridRefine, DetectorResult res)
+    {
+        if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
+            auto scoreWarp = EvaluateDecode(res.bits());
+            if (!scoreWarp.ok) {
+                PerspectiveTransform mod2pix{Rectangle(dimT, dimR, 0), sourcePoints};
+                if (gridRefine.regionGrowing) {
+                    auto grown = SampleGridRegionGrowing(img, dimT, dimR, mod2pix);
+                    if (grown.isValid() && EvaluateDecode(grown.bits()).score() < scoreWarp.score()) {
+                        res = std::move(grown);
+                        scoreWarp = EvaluateDecode(res.bits());
+                    }
+                }
+                if (gridRefine.rsFeedback && !scoreWarp.errorModules.empty())
+                    res = RefineGridWithDecoderFeedback(img, dimT, dimR, mod2pix, std::move(res), scoreWarp);
+            }
+        }
+        return res;
+    }
+
     static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, Warp* warp = nullptr, bool tryToTraceWarp = false, bool correctCorners = false,
 							   DMGridRefineOptions gridRefine = {})
     {
@@ -1680,39 +1732,11 @@ namespace ZXing::DataMatrix {
             };
 
             DetectorResult res;
-            if (tryToTraceWarp && warp) {
-                if (!warp->isValid() || warp->xOffsets.size() > dimT || warp->yOffsets.size() > dimR) {
-                    *warp = ComputeWarp(*startTracer.img, tl, bl, br, tr, 5, 5, dimT);
-                }
-                // warp->Resample(dimT, dimR);
-            }
             if (warp) {
-                if (warp->xOffsets.size() != dimT || warp->yOffsets.size() != dimR) {
-                    warp->Resample(dimT, dimR);
-                }
-                if (correctCorners) {
-                    auto TL = tl, BL = bl, BR = br, TR = tr;
-                    CorrectCorners(*startTracer.img, TL, BL, BR, TR, dimT);
-                    res = SampleGridWarped(*startTracer.img, TL, BL, BR, TR, dimT, dimR, *warp);
-                }
-                else {
-                    res = SampleGridWarped(*startTracer.img, dimT, dimR, *warp, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
-                }
-				if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
-					auto scoreWarp = EvaluateDecode(res.bits());
-					if (!scoreWarp.ok) {
-						PerspectiveTransform mod2pix{Rectangle(dimT, dimR, 0), sourcePoints};
-						if (gridRefine.regionGrowing) {
-							auto grown = SampleGridRegionGrowing(*startTracer.img, dimT, dimR, mod2pix);
-							if (grown.isValid() && EvaluateDecode(grown.bits()).score() < scoreWarp.score()) {
-								res = std::move(grown);
-								scoreWarp = EvaluateDecode(res.bits());
-							}
-						}
-						if (gridRefine.rsFeedback && !scoreWarp.errorModules.empty())
-							res = RefineGridWithDecoderFeedback(*startTracer.img, dimT, dimR, mod2pix, std::move(res), scoreWarp);
-					}
-				}
+                if (tryToTraceWarp && (!warp->isValid() || warp->xOffsets.size() > dimT || warp->yOffsets.size() > dimR))
+                    *warp = ComputeWarp(*startTracer.img, tl, bl, br, tr, 5, 5, dimT);
+                res = SampleScanGridWarped(*startTracer.img, tl, bl, br, tr, dimT, dimR, sourcePoints, *warp, correctCorners);
+                res = RefineWarpedGrid(*startTracer.img, dimT, dimR, sourcePoints, gridRefine, std::move(res));
             }
             else {
                 res = SampleGridTestOffseted(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints),
