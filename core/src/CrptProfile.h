@@ -146,6 +146,54 @@ struct CrptProfileCounters {
 	//   win     : ...and that rescued call went on to actually decode
 	// rescued without win means the rotation buys candidates that never pay off.
 	uint64_t crpt_rot_rescued, crpt_rot_win;
+
+	// WHICH PHASE WON. DetectSamplegridV1 is a 6-step fallback chain and the
+	// stock Reader has two more entry paths; det_*_calls says what each COST,
+	// never which one produced the payload. These say who earned the read.
+	// Attributed per-unit by ladder_profile.h's ScopedUnit, so with BATCH_CLIP
+	// markers in the log a corpus run answers "which images did phase N win".
+	//
+	// Exactly one of these increments per successful decode, so summing them
+	// over a run equals the number of reads -- which is the check that the set
+	// is complete. In EXHAUSTIVE mode the ladder keeps going after a success,
+	// so one image can increment several of them; in production mode early
+	// stopping means the first win ends the ladder. Compare the two runs, do
+	// not pool them.
+	//   s1..s6 : DetectSamplegridV1 steps, in fallback order
+	//            s1 DetectOldWithOffsets      s4 DetectNew(&warp)
+	//            s2 DetectCRPT                s5 DetectCRPT(copy,&warp)
+	//            s3 DetectNew                 s6 decode of s5's detection
+	//   stock  : DMReader::decode -> Detect(), the ZXingStandard path
+	//   defined: Reader::decode(image,P0..P3) -> DetectDefined, unwarp corners
+	//   tail   : DetectSamplegridV1 returned a detection it had failed to
+	//            decode, and DMCRPTReader::decode decoded it on a second pass
+	uint64_t sgv1_win_s1, sgv1_win_s2, sgv1_win_s3;
+	uint64_t sgv1_win_s4, sgv1_win_s5, sgv1_win_s6;
+	uint64_t stock_win, defined_win, sgv1_tail_win;
+
+	// COST SPLIT BY OUTCOME. det_*_ns says what a detector costs on average
+	// across both outcomes, which cannot answer the ordering question: a phase
+	// that is cheap when it succeeds and ruinous when it fails belongs LATE
+	// however often it wins, and the reverse belongs early. These split the
+	// same wall time into the winning calls and the losing ones.
+	//
+	// The win counters above double as the win CALL counts -- CRPT_ZX_T1 both
+	// accumulates ns and increments its count field, so the win site passes
+	// sgv1_win_sN as that field instead of a separate CRPT_ZX_COUNT. Count and
+	// time therefore cannot drift apart.
+	//
+	// CAVEAT: these ride on LADDER_PROF, which is emitted PER DETECTION while
+	// CrptProfileReset() runs per Process(). Detections sharing a Process()
+	// report the same cumulative snapshot, so absolute totals are inflated
+	// (~1.7x measured). The win/fail RATIO within a phase is unaffected --
+	// both halves inflate equally -- and that ratio is what these are for.
+	uint64_t sgv1_s1_win_ns, sgv1_s1_fail_ns, sgv1_s1_fail_calls;
+	uint64_t sgv1_s2_win_ns, sgv1_s2_fail_ns, sgv1_s2_fail_calls;
+	uint64_t sgv1_s3_win_ns, sgv1_s3_fail_ns, sgv1_s3_fail_calls;
+	uint64_t sgv1_s4_win_ns, sgv1_s4_fail_ns, sgv1_s4_fail_calls;
+	uint64_t sgv1_s5_win_ns, sgv1_s5_fail_ns, sgv1_s5_fail_calls;
+	uint64_t sgv1_s6_win_ns, sgv1_s6_fail_ns, sgv1_s6_fail_calls;
+	uint64_t stock_win_ns,   stock_fail_ns,   stock_fail_calls;
 };
 
 // Zero the calling thread's counters.

@@ -15,6 +15,8 @@
 #include "GridSampler.h"
 
 #include "BitMatrix.h"
+#include "../CrptTrace.h"
+#include "../DetectorResult.h"
 #include "BitMatrixCursor.h"
 #include "ByteMatrix.h"
 #include "DetectorResult.h"
@@ -2248,6 +2250,7 @@ namespace ZXing::DataMatrix {
 									 DMGridRefineOptions gridRefine = {}, bool* outBailedNoWhiteRect = nullptr)
     {
         if (outBailedNoWhiteRect) *outBailedNoWhiteRect = false;
+        CRPT_T("crpt_enter", image.width(), image.height());
         // set iff this call proceeded on the 45deg-rotated image
         bool _crpt_used_rotation = false;
 
@@ -2288,6 +2291,7 @@ namespace ZXing::DataMatrix {
 				CRPT_ZX_SCOPED_NS(crpt_wr_ns, crpt_wr_calls);
 				_crpt_wr2 = DetectWhiteRect(newimage, pointA, pointB, pointC, pointD);
 			}
+			CRPT_T("wr2", _crpt_wr2 ? 1 : 0);
 			if (_crpt_wr2) {
 				_crpt_used_rotation = true;
 				CRPT_ZX_COUNT(crpt_rot_rescued);
@@ -2296,6 +2300,7 @@ namespace ZXing::DataMatrix {
 				// The early-bail path: ~92% of DetectCRPT calls end here, and it
 				// was previously untimed because the setup timer never stopped.
 				CRPT_ZX_T1(_t_setup, crpt_bail_ns, crpt_bail_calls);
+				CRPT_T("bail_no_white_rect");
 				if (outBailedNoWhiteRect) *outBailedNoWhiteRect = true;
 				return {};
 			}
@@ -2359,11 +2364,13 @@ namespace ZXing::DataMatrix {
                 res = DetectNew(img2, true, true, warp, needToTraceWarp, correctCorners, gridRefine);
             }
 
-            if (!res.isValid()) continue;
+            if (!res.isValid()) { CRPT_T("grid_invalid", i); continue; }
+            CRPT_T("grid_ok", i, res.bits().width());
             {   // if-with-initialiser rewritten so the decode can be timed alone
                 CRPT_ZX_SCOPED_NS(crpt_decode_ns, crpt_decode_calls);
                 outDecodeResult = DecodeResult(res);
             }
+            CRPT_T("decode", i, outDecodeResult.isValid() ? 1 : 0);
             if (outDecodeResult.isValid()) {
                 if (i == 0) CRPT_ZX_COUNT(crpt_line_win0);
                 else        CRPT_ZX_COUNT(crpt_line_win1);
@@ -2410,11 +2417,13 @@ namespace ZXing::DataMatrix {
                 CRPT_ZX_SCOPED_NS(det_new_nested_ns, det_new_nested_calls);
                 res = DetectNew(img2, true, true, warp, needToTraceWarp, correctCorners, gridRefine);
             }
-            if (!res.isValid()) continue;
+            if (!res.isValid()) { CRPT_T("grid_invalid", i); continue; }
+            CRPT_T("grid_ok", i, res.bits().width());
             {
                 CRPT_ZX_SCOPED_NS(crpt_decode_ns, crpt_decode_calls);
                 outDecodeResult = DecodeResult(res);
             }
+            CRPT_T("decode_bottle", i, outDecodeResult.isValid() ? 1 : 0);
             if (outDecodeResult.isValid()) {
                 switch (i) {
                     case 0: CRPT_ZX_COUNT(crpt_bottle_win0); break;
@@ -2488,19 +2497,23 @@ static DetectorResult DetectPure(const BitMatrix& image)
 
 DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DMGridRefineOptions gridRefine)
 {
+        CRPT_T("stock_enter", image.width(), image.height());
 #ifdef __cpp_impl_coroutine
     // First try the very fast DetectPure() path. Also because DetectNew() generally fails with pure module size 1 symbols
 // TODO: implement a tryRotate version of DetectPure, see #590.
-    if (auto r = DetectPure(image); r.isValid())
+    CRPT_T("stock_try_pure");
+        if (auto r = DetectPure(image); r.isValid())
         co_yield std::move(r);
     else if (!isPure) { // If r.isValid() then there is no point in looking for more (no-pure) symbols
         bool found = false;
         for (auto&& r : DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine)) {
+			CRPT_T("stock_new_yield");
             found = true;
             co_yield std::move(r);
         }
         if (!found && tryHarder) {
-            if (auto r = DetectOld(image); r.isValid())
+            CRPT_T("stock_try_old");
+			if (auto r = DetectOld(image); r.isValid())
                 co_yield std::move(r);
         }
     }
@@ -2513,12 +2526,19 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
         return DetectPure(image);
 
     auto result = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine);
+    CRPT_T("stock_new_done", result.isValid() ? 1 : 0);
+    if (result.isValid()) { CRPT_Q("stock_new_quad", result.position(), image.width(), image.height());
+                            CRPT_REGION("stock_new", image, result.position()); }
     DecoderResult outDecoderResult;
     //if (!result.isValid() && tryHarder)
     //	result = DetectPure(image);
     ResultedDefect _;
     if (!result.isValid() && tryHarder)
+        { CRPT_T("stock_fallback_crpt");
         result = DetectCRPT(image, outDecoderResult, _, nullptr, false, false, gridRefine);
+        CRPT_T("stock_after_crpt", result.isValid() ? 1 : 0);
+        if (result.isValid()) { CRPT_Q("stock_crpt_quad", result.position(), image.width(), image.height());
+                                CRPT_REGION("stock_crpt", image, result.position()); } }
     return result;
 
 #endif
@@ -2599,22 +2619,33 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
 
     // OLD DETECTORS
     bool correctedOffset = false;
+    CRPT_ZX_T0(_t_s1);
     CRPT_ZX_COUNT(detect_calls);
     { CRPT_ZX_SCOPED_NS(det_old_ns, det_old_calls);
     detRes = DetectOldWithOffsets(image, outDecoderResult, correctedOffset, gridRefine); }
     SetResultCandidate();
     detRes.setResultedDefect(correctedOffset ? ResultedDefect::MissingSync : ResultedDefect::Default);
-    if (outDecoderResult.isValid()) return detRes;
+    if (detRes.isValid())
+        CRPT_REGION_PAY("sgv1s1", image, detRes.position(),
+                        (long)(outDecoderResult.isValid() ? outDecoderResult.content().bytes.size() : 0));
+    if (outDecoderResult.isValid()) { CRPT_ZX_T1(_t_s1, sgv1_s1_win_ns, sgv1_win_s1); return detRes; }
+    CRPT_ZX_T1(_t_s1, sgv1_s1_fail_ns, sgv1_s1_fail_calls);
 
     ResultedDefect possibleResultedDefect = ResultedDefect::Default;
+    CRPT_ZX_T0(_t_s2);
     CRPT_ZX_COUNT(detect_calls);
     bool _crpt1_bailed = false;
     { CRPT_ZX_SCOPED_NS(det_crpt_ns, det_crpt_calls);
     detRes = DetectCRPT(image, outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine, &_crpt1_bailed); }
     SetResultCandidate();
     detRes.setResultedDefect(possibleResultedDefect);
-    if (outDecoderResult.isValid()) return detRes;
+    if (detRes.isValid())
+        CRPT_REGION_PAY("sgv1s2", image, detRes.position(),
+                        (long)(outDecoderResult.isValid() ? outDecoderResult.content().bytes.size() : 0));
+    if (outDecoderResult.isValid()) { CRPT_ZX_T1(_t_s2, sgv1_s2_win_ns, sgv1_win_s2); return detRes; }
+    CRPT_ZX_T1(_t_s2, sgv1_s2_fail_ns, sgv1_s2_fail_calls);
 
+    CRPT_ZX_T0(_t_s3);
     CRPT_ZX_COUNT(detect_calls);
     { CRPT_ZX_SCOPED_NS(det_new_ns, det_new_calls);
     detRes = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine); }
@@ -2624,16 +2655,21 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
         CRPT_ZX_COUNT(decode_calls);
             { CRPT_ZX_SCOPED_NS(decode_res_ns, decode_res_calls);
             outDecoderResult = DecodeResult(detRes); }
+        CRPT_REGION_PAY("sgv1s3", image, detRes.position(),
+                        (long)(outDecoderResult.isValid() ? outDecoderResult.content().bytes.size() : 0));
         if (outDecoderResult.isValid()) {
+            CRPT_ZX_T1(_t_s3, sgv1_s3_win_ns, sgv1_win_s3);
             return detRes;
         }
     }
+    CRPT_ZX_T1(_t_s3, sgv1_s3_fail_ns, sgv1_s3_fail_calls);
     //#OLD DETECTORS
 
     //OLD DETECTORS WITH MY SAMPLE GRID
 
     Warp warp;
 
+    CRPT_ZX_T0(_t_s4);
     CRPT_ZX_COUNT(detect_calls);
     { CRPT_ZX_SCOPED_NS(det_new_ns, det_new_calls);
     detRes = DetectNew(image, tryHarder, tryRotate, &warp, true, false, gridRefine); }
@@ -2643,11 +2679,16 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
             { CRPT_ZX_SCOPED_NS(decode_res_ns, decode_res_calls);
             outDecoderResult = DecodeResult(detRes); }
         detRes.setResultedDefect(ResultedDefect::PrintShift);
+        CRPT_REGION_PAY("sgv1s4", image, detRes.position(),
+                        (long)(outDecoderResult.isValid() ? outDecoderResult.content().bytes.size() : 0));
         if (outDecoderResult.isValid()) {
+            CRPT_ZX_T1(_t_s4, sgv1_s4_win_ns, sgv1_win_s4);
             return detRes;
         }
     }
+    CRPT_ZX_T1(_t_s4, sgv1_s4_fail_ns, sgv1_s4_fail_calls);
 
+    CRPT_ZX_T0(_t_s5);
     // SKIP when call 1 already bailed. That call and this one differ only in
     // `warp` / `needToTraceWarp`, and the bail path reads NEITHER -- the first
     // read of any differing param is 31 lines past the bail's `return {}`. So
@@ -2672,16 +2713,25 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
         detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine); }
     }
     SetResultCandidate();
-    if (outDecoderResult.isValid()) return detRes;
+    if (detRes.isValid())
+        CRPT_REGION_PAY("sgv1s5", image, detRes.position(),
+                        (long)(outDecoderResult.isValid() ? outDecoderResult.content().bytes.size() : 0));
+    if (outDecoderResult.isValid()) { CRPT_ZX_T1(_t_s5, sgv1_s5_win_ns, sgv1_win_s5); return detRes; }
+    CRPT_ZX_T1(_t_s5, sgv1_s5_fail_ns, sgv1_s5_fail_calls);
+    CRPT_ZX_T0(_t_s6);
     if (detRes.isValid()) {
         detRes.setResultedDefect(ResultedDefect::PrintShift);
         CRPT_ZX_COUNT(decode_calls);
             { CRPT_ZX_SCOPED_NS(decode_res_ns, decode_res_calls);
             outDecoderResult = DecodeResult(detRes); }
+        CRPT_REGION_PAY("sgv1s6", image, detRes.position(),
+                        (long)(outDecoderResult.isValid() ? outDecoderResult.content().bytes.size() : 0));
         if (outDecoderResult.isValid()) {
+            CRPT_ZX_T1(_t_s6, sgv1_s6_win_ns, sgv1_win_s6);
             return detRes;
         }
     }
+    CRPT_ZX_T1(_t_s6, sgv1_s6_fail_ns, sgv1_s6_fail_calls);
     //#OLD DETECTORS WITH MY SAMPLE GRID
     return DetectorResults({}, std::move(resultCandidate));
 #endif

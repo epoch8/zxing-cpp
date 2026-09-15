@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "ReadBarcode.h"
+#include "CrptTrace.h"
 #include "CrptProfile.h"
 
 #include "DecodeHints.h"
@@ -19,6 +20,12 @@
 #include <climits>
 #include <memory>
 #include <stdexcept>
+
+namespace crpt_trace {
+// Defined here so there is exactly one instance, in the library, with default
+// visibility -- see the note in CrptTrace.h.
+__attribute__((visibility("default"))) void SetFrameExported(long long v) { SetFrame(v); }
+}  // namespace crpt_trace
 
 namespace ZXing {
 

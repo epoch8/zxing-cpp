@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "DMReader.h"
+#include "../CrptTrace.h"
 #include "CrptProfile.h"
 
 #include "BinaryBitmap.h"
@@ -35,9 +36,15 @@ Result Reader::decode(const BinaryBitmap& image) const
 	if (binImg == nullptr)
 		return {};
 
+	// Timed from BEFORE Detect() so the fail figure includes a detection that
+	// found nothing -- the common case, and the one that decides whether stock
+	// can be moved earlier in the ladder.
+	CRPT_ZX_T0(_t_stock);
 	auto detectorResult = Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine());
-	if (!detectorResult.isValid())
+	if (!detectorResult.isValid()) {
+		CRPT_ZX_T1(_t_stock, stock_fail_ns, stock_fail_calls);
 		return {};
+	}
 
 	// C7 on the reader side: decode_res_ns only covers DecodeResult() calls made
 	// from inside DMDetector, so this Reed-Solomon pass was invisible.
@@ -46,6 +53,13 @@ Result Reader::decode(const BinaryBitmap& image) const
 		CRPT_ZX_SCOPED_NS(dm_decode_ns, dm_decode_calls);
 		decoderResult = Decode(detectorResult.bits());
 	}
+	if (detectorResult.isValid())
+		CRPT_REGION_PAY("crptreader", *binImg, detectorResult.position(),
+		                (long)(decoderResult.isValid() ? decoderResult.content().bytes.size() : 0));
+	if (decoderResult.isValid())
+		CRPT_ZX_T1(_t_stock, stock_win_ns, stock_win);
+	else
+		CRPT_ZX_T1(_t_stock, stock_fail_ns, stock_fail_calls);
 	Result res = Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 	res.setResultedDefect(detectorResult.resultedDefect());
 	return res;
@@ -68,6 +82,7 @@ Result Reader::decode(const BinaryBitmap& image, const PointF& P0, const PointF&
 
 	if (!detectorResult.isValid()) return {};
 
+	if (decoderResult.isValid()) CRPT_ZX_COUNT(defined_win);
 	return Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 }
 
@@ -81,6 +96,10 @@ Results Reader::decode(const BinaryBitmap& image, int maxSymbols) const
 	Results results;
 	for (auto&& detRes : Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine())) {
 		auto decRes = Decode(detRes.bits());
+		CRPT_REGION_PAY("stockreader", *binImg, detRes.position(),
+		                (long)(decRes.isValid() ? decRes.content().bytes.size() : 0));
+		CRPT_T("reader_decode", decRes.isValid(_hints.returnErrors()) ? 1 : 0,
+		       detRes.bits().width());
 		if (decRes.isValid(_hints.returnErrors())) {
 			results.emplace_back(std::move(decRes), std::move(detRes).position(), BarcodeFormat::DataMatrix);
 			if (maxSymbols > 0 && Size(results) >= maxSymbols)
@@ -110,8 +129,14 @@ Result DMCRPTReader::decode(const BinaryBitmap& image) const
 											 _hints.dmGridRefine());
 
 	if (!decoderResult.isValid() && detectorResult.isValid()) {
-		CRPT_ZX_SCOPED_NS(dm_decode_ns, dm_decode_calls);
-		decoderResult = Decode(detectorResult.bits());
+		{
+			CRPT_ZX_SCOPED_NS(dm_decode_ns, dm_decode_calls);
+			decoderResult = Decode(detectorResult.bits());
+		}
+		// No sgv1_win_s* fired for this one: DetectSamplegridV1 handed back a
+		// detection whose decode it had already failed, and this second attempt
+		// succeeded. Counted separately so the win set stays exhaustive.
+		if (decoderResult.isValid()) CRPT_ZX_COUNT(sgv1_tail_win);
 	}
 
 	Result res = Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
