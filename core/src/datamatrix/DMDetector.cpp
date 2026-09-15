@@ -2188,120 +2188,129 @@ namespace ZXing::DataMatrix {
 		return cv::Mat(h, w, CV_8UC1);
 	}
 
+    // ---- DetectCRPT as a sub-ladder ---------------------------------------------
+    //
+    // Setup finds the white rectangle (retrying at 45 degrees) and measures the
+    // transitions along its sides. That is a precondition, not a variant, so it
+    // stays in DetectCRPT and bails the way it always did. What follows are the
+    // variants -- the two L-marker drawings, then the bottle unwarp in four
+    // orientations behind one preparation step -- each a step run by the same
+    // runner as the entry-point plans. Per-variant attribution falls out of the
+    // runner instead of out of hand-placed counters.
+
+    struct CrptContext : ladder::State
+    {
+        const BitMatrix& image;
+        Warp* warp;
+        bool needToTraceWarp;
+        bool correctCorners;
+        DMGridRefineOptions gridRefine;
+
+        // Setup's products. The transitions point INTO the four ResultPoints,
+        // so those live here rather than as setup locals.
+        BitMatrix newimage;
+        ResultPoint pointA, pointB, pointC, pointD;
+        std::array<ResultPointsAndTransitions, 4> transitions;
+
+        // Scratch the variants draw into. One BitMatrix for both phases, as
+        // before: the L-marker variants copy newimage into it, the bottle
+        // preparation reallocates it square and keeps a cv::Mat view of it.
+        BitMatrix img2;
+        cv::Mat img2Mat;
+        cv::Mat resizedImg;
+        size_t remapSize = 0;
+    };
+
+    using CrptStep = ladder::Step<CrptContext>;
+
+    // The rectangle's two sides with the fewest transitions (side 0 and side n2),
+    // drawn onto a copy of the image so the tracer sees an L-marker, then
+    // DetectNew on that.
+    static DetectorResult CrptLMarker(CrptContext& c, int n2)
+    {
+        c.newimage.copyTo(c.img2);
+        auto mat = c.img2.asMat();
+        line3(mat, c.transitions[0].from->x(), c.transitions[0].from->y(), c.transitions[0].to->x(), c.transitions[0].to->y());
+        line3(mat, c.transitions[n2].from->x(), c.transitions[n2].from->y(), c.transitions[n2].to->x(), c.transitions[n2].to->y());
+        return DetectNew(c.img2, true, true, c.warp, c.needToTraceWarp, c.correctCorners, c.gridRefine);
+    }
+    static DetectorResult CrptLMarker0(CrptContext& c, bool&) { return CrptLMarker(c, 1); }
+    static DetectorResult CrptLMarker1(CrptContext& c, bool&) { return CrptLMarker(c, 2); }
+
+    // The bottle unwarp's shared input: the ORIGINAL image resized to a fixed
+    // square (256, or 128 for small crops) and re-binarised. Detects nothing
+    // itself; the four orientations that follow read what it prepared.
+    static DetectorResult CrptBottlePrepare(CrptContext& c, bool&)
+    {
+        const size_t remapSizeBig = 256;
+        const size_t remapSizeHalfThreshold = 160;
+        c.remapSize = remapSizeBig;
+        if(std::max(c.image.width(), c.image.height()) < remapSizeHalfThreshold) {
+            c.remapSize /= 2;
+        }
+
+        c.img2 = BitMatrix(c.remapSize, c.remapSize);
+        c.img2Mat = c.img2.asMat();
+
+        cv::resize(c.image.asMat(), c.resizedImg, {static_cast<int>(c.remapSize), static_cast<int>(c.remapSize)}, 0,0, cv::INTER_LINEAR);
+        cv::threshold(c.resizedImg, c.resizedImg, 127, 255, cv::THRESH_BINARY);
+        return {};
+    }
+
+    // One bottle orientation: unwarp the prepared square into img2, then DetectNew.
+    static DetectorResult CrptBottle(CrptContext& c, int i)
+    {
+        correctBottleCv(c.resizedImg, c.img2Mat, i & 0b10, i & 0b01, c.remapSize != 256);
+        return DetectNew(c.img2, true, true, c.warp, c.needToTraceWarp, c.correctCorners, c.gridRefine);
+    }
+    static DetectorResult CrptBottle0(CrptContext& c, bool&) { return CrptBottle(c, 0); }
+    static DetectorResult CrptBottle1(CrptContext& c, bool&) { return CrptBottle(c, 1); }
+    static DetectorResult CrptBottle2(CrptContext& c, bool&) { return CrptBottle(c, 2); }
+    static DetectorResult CrptBottle3(CrptContext& c, bool&) { return CrptBottle(c, 3); }
+
+    static const CrptStep kCrptPlan[] = {
+        {"lmarker[0]",    CrptLMarker0},
+        {"lmarker[1]",    CrptLMarker1},
+        {"bottlePrepare", CrptBottlePrepare},
+        {"bottle[0]",     CrptBottle0},
+        {"bottle[1]",     CrptBottle1},
+        {"bottle[2]",     CrptBottle2},
+        {"bottle[3]",     CrptBottle3},
+    };
+
     static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect, Warp* warp = nullptr, bool needToTraceWarp = false, bool correctCorners = false,
 									 DMGridRefineOptions gridRefine = {})
     {
+        CrptContext c{{outDecodeResult}, image, warp, needToTraceWarp, correctCorners, gridRefine};
 
-        /*ResultPoint p1(0, 0);
-        ResultPoint p2(0, 0);
-        ResultPoint p3(0, 0);
-        ResultPoint p4(0, 0);
-        createBitmapFromBitMatrix(image, p1, p2, p3, p4);*/
-
-
-
-        // BitMatrix newimage = CreateSnapped(image);
-        // BitMatrix newimage();
-		BitMatrix newimage = image.copy();
-        ResultPoint pointA, pointB, pointC, pointD;
-
-        if (!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {
-			// drawDebugImage(newimage, "unrotated");
-			rotateCV45(image, newimage);
-			// drawDebugImage(newimage, "rotated");
-			if(!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {
+        c.newimage = image.copy();
+        if (!DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD)) {
+			rotateCV45(image, c.newimage);
+			if(!DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD)) {
 				return {};
 			}
-
-            // for (const auto& rot : rotateEasy) {
-			// 	rotateNew(image, newimage, rot);
-
-			// 	// rotateNew2(image, newimage, rot);
-			// 	// drawDebugImage(newimage, "rotNew");
-            //     if (DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) break;
-            // }
         }
 
-
-        std::array transitions = {
-                TransitionsBetween(newimage, pointA, pointB),
-                TransitionsBetween(newimage, pointA, pointC),
-                TransitionsBetween(newimage, pointB, pointD),
-                TransitionsBetween(newimage, pointC, pointD),
+        c.transitions = {
+                TransitionsBetween(c.newimage, c.pointA, c.pointB),
+                TransitionsBetween(c.newimage, c.pointA, c.pointC),
+                TransitionsBetween(c.newimage, c.pointB, c.pointD),
+                TransitionsBetween(c.newimage, c.pointC, c.pointD),
         };
-
-        std::sort(transitions.begin(), transitions.end(),
+        std::sort(c.transitions.begin(), c.transitions.end(),
                   [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
 
-
-        DetectorResult res;
-        int n1, n2;
-
-        if (transitions[0].transitions > 4) {
+        if (c.transitions[0].transitions > 4) {
             possibleResultedDefect = ResultedDefect::LMarker;
         }
 
-        //���������� L �� ���� ��������� �� image � ������� DetectNew ��� ������� (��� � ������ L ���� ����������� � ���� �����)
-
-		BitMatrix img2;
-
-		for (int i = 0; i < 2; i++) {
-            if (i == 0) { n1 = 0; n2 = 1; }
-            if (i == 1) { n1 = 0; n2 = 2; }
-
-			newimage.copyTo(img2);
-			// img2 = BitMatrix(newimage.width(), newimage.height());
-            // line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
-            // line2(img2, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
-
-			// drawDebugImage(img2,"oldLine");
-			// newimage.copyTo(img2);
-            // img2 = BitMatrix(newimage.width(), newimage.height());
-			auto mat = img2.asMat();
-            line3(mat, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
-            line3(mat, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
-			// drawDebugImage(img2,"newLine");
-
-            res = DetectNew(img2, true, true, warp, needToTraceWarp, correctCorners, gridRefine);
-
-            if (!res.isValid()) continue;
-            if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid()) return res;
-        } //i
-
-
-        //������������ �������������� �������� �������, 4 ��������: �����������/���������+��������
-        //� ���� ����� ������������ ���3, L1, ������� � �.�, �������� ����������� �� � ��������
-        // BitMatrix img2;
-
-		const size_t remapSizeBig = 256;
-		const size_t remapSizeHalfThreshold = 160;
-		size_t remapSize = remapSizeBig;
-		if(std::max(image.width(), image.height()) < remapSizeHalfThreshold) {
-			remapSize /= 2;
-		}
-
-		img2 = BitMatrix(remapSize, remapSize);
-		auto img2Mat = img2.asMat();
-
-		cv::Mat resizedImg;
-		cv::resize(image.asMat(), resizedImg, {static_cast<int>(remapSize), static_cast<int>(remapSize)}, 0,0, cv::INTER_LINEAR);
-		cv::threshold(resizedImg, resizedImg, 127, 255, cv::THRESH_BINARY);
-		// drawDebugImage(resizedImg, "orig");
-
-		for (int i = 0; i < 4; i++) {
-            n1 = 0; n2 = 1;
-			// drawDebugImage(image, "original");
-			// auto TestImg2 = image.copy();
-            // correctBottle(image, TestImg2, i & 0b10, i & 0b01);
-			// drawDebugImage(TestImg2, "correct_bottle_old");
-			correctBottleCv(resizedImg, img2Mat, i & 0b10, i & 0b01, remapSize != remapSizeBig);
-			// drawDebugImage(img2, "correct_bottle");
-
-            res = DetectNew(img2, true, true, warp, needToTraceWarp, correctCorners, gridRefine);
-            if (!res.isValid()) continue;
-            if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid()) return res;
-        } //i
-        return res;
+        // Every caller arrives with outDecodeResult invalid -- the previous
+        // phase's decode failed, or it would have returned -- so the runner's
+        // "dec valid after a step" is exactly the per-variant
+        // `if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid())`
+        // this replaces. LastDetection: what came out of the final variant,
+        // valid or not, is what DetectCRPT has always handed back.
+        return ladder::RunLadder(kCrptPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
     }
 
 
@@ -2496,17 +2505,19 @@ static DetectorResult StepCrptWarpRedecode(ladder::Context& ctx, bool& /*decoded
 
 // ---- Plans -----------------------------------------------------------------------
 
+using OuterStep = ladder::Step<ladder::Context>;
+
 // The stock reader: DetectNew, then DetectCRPT only when tryHarder and only if
 // DetectNew found nothing. Wins on the first valid DETECTION -- the reader
 // decodes -- so the decoder result DetectCRPT produces on the way is thrown
 // away, exactly as it always was.
-static const ladder::Step kStockPlan[] = {
+static const OuterStep kStockPlan[] = {
     {"newPlain", PhaseNewPlain},
     {"crpt",     PhaseCrpt, WhenTryHarder},
 };
 
 // The CRPT ladder.
-static const ladder::Step kSamplegridV1Plan[] = {
+static const OuterStep kSamplegridV1Plan[] = {
     {"oldWithOffsets",   StepOldWithOffsets},
     {"crpt",             StepCrpt},
     {"newPlain",         StepNewPlain},
@@ -2518,7 +2529,7 @@ static const ladder::Step kSamplegridV1Plan[] = {
 // A caller-located symbol: the ladder's middle four phases (DetectCRPT only if
 // DetectNew found nothing), then the supplied quadrilateral at every size.
 // No defects: this entry point's reader never reads them.
-static const ladder::Step kDefinedPlan[] = {
+static const OuterStep kDefinedPlan[] = {
     {"newPlain",    PhaseNewPlain},
     {"crpt",        PhaseCrpt, WhenNothingDetectedYet},
     {"newWarp",     PhaseNewWarp},
@@ -2534,21 +2545,21 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
         return DetectPure(image);
 
     DecoderResult discarded;
-    ladder::Context ctx{image, tryHarder, tryRotate, gridRefine, discarded};
+    ladder::Context ctx{{discarded}, image, tryHarder, tryRotate, gridRefine};
     return ladder::RunLadder(kStockPlan, ctx, ladder::Policy::FirstValidDetection);
 }
 
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
 								   DMGridRefineOptions gridRefine)
 {
-    ladder::Context ctx{image, tryHarder, tryRotate, gridRefine, outDecoderResult};
+    ladder::Context ctx{{outDecoderResult}, image, tryHarder, tryRotate, gridRefine};
     return ladder::RunLadder(kSamplegridV1Plan, ctx);
 }
 
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
 							  DMGridRefineOptions gridRefine)
 {
-    ladder::Context ctx{image, tryHarder, tryRotate, gridRefine, outDecoderResult};
+    ladder::Context ctx{{outDecoderResult}, image, tryHarder, tryRotate, gridRefine};
     ctx.corners = { P0, P1, P2, P3 };
     return ladder::RunLadder(kDefinedPlan, ctx);
 }
