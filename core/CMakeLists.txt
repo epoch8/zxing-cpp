@@ -268,6 +268,7 @@ if (BUILD_READERS)
             src/datamatrix/DMDecoder.cpp
             src/datamatrix/DMDetector.h
             src/datamatrix/DMDetector.cpp
+            src/datamatrix/DMLadder.h
             src/datamatrix/DMReader.h
             src/datamatrix/DMReader.cpp
     )

@@ -8,6 +8,7 @@
 
 
 #include "DMDetector.h"
+#include "DMLadder.h"
 
 #include "DMDecoder.h"
 #include "DecoderResult.h"
@@ -2373,74 +2374,88 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 }
 
 //    const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
-DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
+// ---- DetectSamplegridV1 as a plan ------------------------------------------
+//
+// The six phases of the CRPT ladder, one function each, sequenced by
+// ladder::RunLadder. Every step keeps exactly the statements it had when it was
+// inline here -- which ResultedDefect it applies, and whether its detector
+// decodes for itself -- and the locals two or more phases shared now live in
+// ladder::Context. The DetectWhiteRect call that used to open the function
+// computed four points nothing read; it is gone.
+
+// s1: the offset-tolerant legacy detector. Decodes internally.
+static DetectorResult StepOldWithOffsets(ladder::Context& ctx, bool& decodedInside)
+{
+    bool correctedOffset = false;
+    DetectorResult det = DetectOldWithOffsets(ctx.image, ctx.dec, correctedOffset, ctx.gridRefine);
+    det.setResultedDefect(correctedOffset ? ResultedDefect::MissingSync : ResultedDefect::Default);
+    decodedInside = true;
+    return det;
+}
+
+// s2: DetectCRPT on the plain image. Decodes internally. Its defect comes back
+// through ctx.crptDefect, applied here and handed on unchanged to s5.
+static DetectorResult StepCrpt(ladder::Context& ctx, bool& decodedInside)
+{
+    DetectorResult det = DetectCRPT(ctx.image, ctx.dec, ctx.crptDefect, nullptr, false, false, ctx.gridRefine);
+    det.setResultedDefect(ctx.crptDefect);
+    decodedInside = true;
+    return det;
+}
+
+// s3: the edge-tracing detector, no warp. The runner decodes.
+static DetectorResult StepNewPlain(ladder::Context& ctx, bool& /*decodedInside*/)
+{
+    DetectorResult det = DetectNew(ctx.image, ctx.tryHarder, ctx.tryRotate, nullptr, false, false, ctx.gridRefine);
+    det.setResultedDefect(ResultedDefect::Default);
+    return det;
+}
+
+// s4: the edge-tracing detector, tracing a warp into ctx.warp for s5. The
+// runner decodes. PrintShift goes on a valid detection only, as before.
+static DetectorResult StepNewWarp(ladder::Context& ctx, bool& /*decodedInside*/)
+{
+    DetectorResult det = DetectNew(ctx.image, ctx.tryHarder, ctx.tryRotate, &ctx.warp, true, false, ctx.gridRefine);
+    if (det.isValid())
+        det.setResultedDefect(ResultedDefect::PrintShift);
+    return det;
+}
+
+// s5: DetectCRPT with s4's warp. Decodes internally. Unlike s2, the inline
+// code never applied ctx.crptDefect to this detection; neither does this.
+static DetectorResult StepCrptWarp(ladder::Context& ctx, bool& decodedInside)
+{
+    DetectorResult det = DetectCRPT(ctx.image.copy(), ctx.dec, ctx.crptDefect, &ctx.warp, true, false, ctx.gridRefine);
+    decodedInside = true;
+    return det;
+}
+
+// s6: s5's detection again, marked PrintShift, decoded by the runner. The bits
+// are the ones s5 already decoded, so this has never been seen to win; it is
+// kept so the plan IS the original sequence and removing it becomes a plan
+// edit rather than a code change.
+static DetectorResult StepCrptWarpRedecode(ladder::Context& ctx, bool& /*decodedInside*/)
+{
+    DetectorResult det = std::move(ctx.last);
+    if (det.isValid())
+        det.setResultedDefect(ResultedDefect::PrintShift);
+    return det;
+}
+
+static const ladder::Step kSamplegridV1Plan[] = {
+    {"oldWithOffsets",   StepOldWithOffsets},
+    {"crpt",             StepCrpt},
+    {"newPlain",         StepNewPlain},
+    {"newWarp",          StepNewWarp},
+    {"crptWarp",         StepCrptWarp},
+    {"crptWarpRedecode", StepCrptWarpRedecode},
+};
+
+DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
 								   DMGridRefineOptions gridRefine)
 {
-
-    QuadrilateralI resultCandidate;
-    DetectorResult detRes;
-
-    auto SetResultCandidate = [&]() {
-        if (detRes.isValid()) {
-            resultCandidate = detRes.position();
-        }
-    };
-
-	ResultPoint whiteRectPoints[4];
-	if (!DetectWhiteRect(image, whiteRectPoints[0], whiteRectPoints[1], whiteRectPoints[2], whiteRectPoints[3]));
-
-	// double TEST = FindMaxIslandArea(image, whiteRectPoints[0], whiteRectPoints[1], whiteRectPoints[2], whiteRectPoints[3]);
-
-    // OLD DETECTORS
-    bool correctedOffset = false;
-    detRes = DetectOldWithOffsets(image, outDecoderResult, correctedOffset, gridRefine);
-    SetResultCandidate();
-    detRes.setResultedDefect(correctedOffset ? ResultedDefect::MissingSync : ResultedDefect::Default);
-    if (outDecoderResult.isValid()) return detRes;
-
-    ResultedDefect possibleResultedDefect = ResultedDefect::Default;
-    detRes = DetectCRPT(image, outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine);
-    SetResultCandidate();
-    detRes.setResultedDefect(possibleResultedDefect);
-    if (outDecoderResult.isValid()) return detRes;
-
-    detRes = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine);
-    SetResultCandidate();
-    detRes.setResultedDefect(ResultedDefect::Default);
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            return detRes;
-        }
-    }
-    //#OLD DETECTORS
-
-    //OLD DETECTORS WITH MY SAMPLE GRID
-
-    Warp warp;
-
-    detRes = DetectNew(image, tryHarder, tryRotate, &warp, true, false, gridRefine);
-    SetResultCandidate();
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        detRes.setResultedDefect(ResultedDefect::PrintShift);
-        if (outDecoderResult.isValid()) {
-            return detRes;
-        }
-    }
-
-    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine);
-    SetResultCandidate();
-    if (outDecoderResult.isValid()) return detRes;
-    if (detRes.isValid()) {
-        detRes.setResultedDefect(ResultedDefect::PrintShift);
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            return detRes;
-        }
-    }
-    //#OLD DETECTORS WITH MY SAMPLE GRID
-    return DetectorResults({}, std::move(resultCandidate));
+    ladder::Context ctx{image, tryHarder, tryRotate, gridRefine, outDecoderResult};
+    return ladder::RunLadder(kSamplegridV1Plan, ctx);
 }
 
 const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
