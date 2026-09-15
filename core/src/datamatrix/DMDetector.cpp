@@ -1054,16 +1054,119 @@ namespace ZXing::DataMatrix {
     //     }
 	// }
 
+    // ---- DetectOldWithOffsets as a sub-ladder ------------------------------------
+    //
+    // Setup finds the white rectangle, picks the two sides with the fewest
+    // transitions as the L, orients the corners and sizes the symbol from the
+    // transitions -- three bails on the way. Those are decisions, and they now
+    // sit in the context where an attribution hook can read them. What follows
+    // are the attempts: four grids at one-module offsets (a corner correction
+    // between the second and third), then the offset-testing sampler. Each is a
+    // step run by the same runner as everything else.
+
+    struct OldContext : ladder::State
+    {
+        const BitMatrix& image;
+        DMGridRefineOptions gridRefine;
+        /// The caller's flag: true if an offset grid wins, false once the
+        /// offset-testing sampler is reached -- exactly the original's timing.
+        bool& correctedOffset;
+
+        // Setup's decisions. The corner pointers point into DetectOldWithOffsets's
+        // four local ResultPoints -- deliberately locals, not members: setup orders
+        // two of them through a std::map keyed on their ADDRESSES, and on an exact
+        // tie between the L's sides that order decides which end is bottom-right.
+        // Keeping them where the original declared them keeps that as it was.
+        const ResultPoint* topLeft = nullptr;
+        const ResultPoint* bottomLeft = nullptr;
+        const ResultPoint* bottomRight = nullptr;
+        const ResultPoint* topRight = nullptr;
+        int dimension = 0;
+        int dimensionTop = 0;
+        int dimensionRight = 0;
+        float dimInv = 0;
+        PointF DirTopLR, DirBottomLR, DirRightBT, DirLeftBT;
+
+        // Produced by the correctTopRight step for the two grids after it.
+        ResultPoint correctedTopRight;
+    };
+
+    using OldStep = ladder::Step<OldContext>;
+
+    // The original decoded every grid, valid or not, into the out-parameter --
+    // Decode() on empty bits yields "Empty DM", not a throw -- and returned on
+    // success. Kept as is so the out-parameter's content matches exactly;
+    // letting the runner skip empty grids is a later, measured tightening.
+    static DetectorResult OldGridDecoded(OldContext& c, DetectorResult res, bool& decodedInside)
+    {
+        decodedInside = true;
+        c.dec = DecodeResult(res);
+        return res;
+    }
+
+    // grid[0]: bottom-right and top-right pushed out one module along the bottom and top.
+    static DetectorResult OldGrid0(OldContext& c, bool& decodedInside)
+    {
+        return OldGridDecoded(c, SampleGrid(c.image, *c.topLeft, *c.bottomLeft, *c.bottomRight + c.DirBottomLR, *c.topRight + c.DirTopLR, c.dimensionTop, c.dimensionRight), decodedInside);
+    }
+
+    // grid[1]: top-left and top-right pushed up one module along the sides.
+    static DetectorResult OldGrid1(OldContext& c, bool& decodedInside)
+    {
+        return OldGridDecoded(c, SampleGrid(c.image, *c.topLeft + c.DirLeftBT, *c.bottomLeft, *c.bottomRight, *c.topRight + c.DirRightBT, c.dimensionTop, c.dimensionRight), decodedInside);
+    }
+
+    // Re-derive the top-right corner from the L, and the two directions that
+    // depend on it, for the grids that follow. Detects nothing.
+    static DetectorResult OldCorrectTopRight(OldContext& c, bool&)
+    {
+        c.correctedTopRight = CorrectTopRight(c.image, *c.bottomLeft, *c.bottomRight, *c.topLeft, *c.topRight, c.dimension);
+        c.DirTopLR = c.dimInv * (c.correctedTopRight - *c.topLeft);
+        c.DirRightBT = c.dimInv * (c.correctedTopRight - *c.bottomRight);
+        return {};
+    }
+
+    // grid[2]: corrected top-right; top-left and bottom-left pulled back one module along the top and bottom.
+    static DetectorResult OldGrid2(OldContext& c, bool& decodedInside)
+    {
+        return OldGridDecoded(c, SampleGrid(c.image, *c.topLeft - c.DirTopLR, *c.bottomLeft - c.DirBottomLR, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight), decodedInside);
+    }
+
+    // grid[3]: corrected top-right; bottom-left and bottom-right pulled down one module along the sides.
+    static DetectorResult OldGrid3(OldContext& c, bool& decodedInside)
+    {
+        return OldGridDecoded(c, SampleGrid(c.image, *c.topLeft, *c.bottomLeft - c.DirLeftBT, *c.bottomRight - c.DirRightBT, c.correctedTopRight, c.dimensionTop, c.dimensionRight), decodedInside);
+    }
+
+    // The plain corners with the corrected top-right, through the offset-testing
+    // sampler (which refines on its own). Its decode result is handed back
+    // whatever it is; reaching this step is what clears correctedOffset.
+    static DetectorResult OldTestOffsetGrid(OldContext& c, bool& decodedInside)
+    {
+        c.correctedOffset = false;
+        return OldGridDecoded(c, SampleGridTestOffseted(c.image, *c.topLeft, *c.bottomLeft, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight,
+                                                        c.gridRefine), decodedInside);
+    }
+
+    static const OldStep kOldPlan[] = {
+        {"grid[0]",         OldGrid0},
+        {"grid[1]",         OldGrid1},
+        {"correctTopRight", OldCorrectTopRight},
+        {"grid[2]",         OldGrid2},
+        {"grid[3]",         OldGrid3},
+        {"testOffsetGrid",  OldTestOffsetGrid},
+    };
+
     static DetectorResult DetectOldWithOffsets(const BitMatrix& image, DecoderResult& outDecoderResult, bool& correctedOffset,
 											   DMGridRefineOptions gridRefine = {})
     {
+        OldContext c{{outDecoderResult}, image, gridRefine, correctedOffset};
+
         ResultPoint pointA, pointB, pointC, pointD;
         if (!DetectWhiteRect(image, pointA, pointB, pointC, pointD))
             return {};
 
-        // Point A and D are across the diagonal from one another,
-        // as are B and C. Figure out which are the solid black lines
-        // by counting transitions
+        // The transitions point into pointA..D, which is why those are members.
         std::array transitions = {
                 TransitionsBetween(image, pointA, pointB),
                 TransitionsBetween(image, pointA, pointC),
@@ -1073,178 +1176,82 @@ namespace ZXing::DataMatrix {
         std::sort(transitions.begin(), transitions.end(),
                   [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
 
-        // Sort by number of transitions. First two will be the two solid sides; last two
-        // will be the two alternating black/white sides
+        // The two sides with the fewest transitions are the L.
         const auto& lSideOne = transitions[0];
         const auto& lSideTwo = transitions[1];
 
-        // We accept at most 4 transisions inside the L pattern (i.e. 2 corruptions) to reduce false positive FormatErrors
         if (lSideTwo.transitions > 8)
             return {};
 
-        // Figure out which point is their intersection by tallying up the number of times we see the
-        // endpoints in the four endpoints. One will show up twice.
+        // The corner both L sides share is bottom-left; the other two ends are
+        // bottom-right and top-left, in the order the map yields them.
         std::map<const ResultPoint*, int> pointCount;
         pointCount[lSideOne.from] += 1;
         pointCount[lSideOne.to] += 1;
         pointCount[lSideTwo.from] += 1;
         pointCount[lSideTwo.to] += 1;
 
-        const ResultPoint* bottomRight = nullptr;
-        const ResultPoint* bottomLeft = nullptr;
-        const ResultPoint* topLeft = nullptr;
         for (const auto& [point, count] : pointCount) {
             if (count == 2) {
-                bottomLeft = point; // this is definitely the bottom left, then -- end of two L sides
+                c.bottomLeft = point; // this is definitely the bottom left, then -- end of two L sides
             }
             else {
-                // Otherwise it's either top left or bottom right -- just assign the two arbitrarily now
-                if (bottomRight == nullptr) {
-                    bottomRight = point;
+                if (c.bottomRight == nullptr) {
+                    c.bottomRight = point;
                 }
                 else {
-                    topLeft = point;
+                    c.topLeft = point;
                 }
             }
         }
 
-        if (bottomRight == nullptr || bottomLeft == nullptr || topLeft == nullptr)
+        if (c.bottomRight == nullptr || c.bottomLeft == nullptr || c.topLeft == nullptr)
             return {};
 
-        // Bottom left is correct but top left and bottom right might be switched
-        // Use the dot product trick to sort them out
-        OrderByBestPatterns(bottomRight, bottomLeft, topLeft);
+        OrderByBestPatterns(c.bottomRight, c.bottomLeft, c.topLeft);
 
-        // Which point didn't we find in relation to the "L" sides? that's the top right corner
-        const ResultPoint* topRight;
+        // Top-right is whichever point the L did not touch.
         if (pointCount.find(&pointA) == pointCount.end()) {
-            topRight = &pointA;
+            c.topRight = &pointA;
         }
         else if (pointCount.find(&pointB) == pointCount.end()) {
-            topRight = &pointB;
+            c.topRight = &pointB;
         }
         else if (pointCount.find(&pointC) == pointCount.end()) {
-            topRight = &pointC;
+            c.topRight = &pointC;
         }
         else {
-            topRight = &pointD;
+            c.topRight = &pointD;
         }
 
-        // Next determine the dimension by tracing along the top or right side and counting black/white
-        // transitions. Since we start inside a black module, we should see a number of transitions
-        // equal to 1 less than the code dimension. Well, actually 2 less, because we are going to
-        // end on a black module:
+        // Symbol size from the transitions along the top and right, rounded up
+        // to even and plus the two finder modules.
+        c.dimensionTop = TransitionsBetween(image, *c.topLeft, *c.topRight).transitions;
+        c.dimensionRight = TransitionsBetween(image, *c.bottomRight, *c.topRight).transitions;
 
-        // The top right point is actually the corner of a module, which is one of the two black modules
-        // adjacent to the white module at the top right. Tracing to that corner from either the top left
-        // or bottom right should work here.
-
-        int dimensionTop = TransitionsBetween(image, *topLeft, *topRight).transitions;
-        int dimensionRight = TransitionsBetween(image, *bottomRight, *topRight).transitions;
-
-
-        if ((dimensionTop & 0x01) == 1) {
-            // it can't be odd, so, round... up?
-            dimensionTop++;
+        if ((c.dimensionTop & 0x01) == 1) {
+            c.dimensionTop++;
         }
-        dimensionTop += 2;
+        c.dimensionTop += 2;
 
-        if ((dimensionRight & 0x01) == 1) {
-            // it can't be odd, so, round... up?
-            dimensionRight++;
+        if ((c.dimensionRight & 0x01) == 1) {
+            c.dimensionRight++;
         }
-        dimensionRight += 2;
+        c.dimensionRight += 2;
 
-        if (dimensionTop < 10 || dimensionTop > 144 || dimensionRight < 8 || dimensionRight > 144)
+        if (c.dimensionTop < 10 || c.dimensionTop > 144 || c.dimensionRight < 8 || c.dimensionRight > 144)
             return {};
 
+        c.dimension = std::max(c.dimensionRight, c.dimensionTop);
+        c.dimInv = 1.0 / float(c.dimension);
+        c.DirTopLR = c.dimInv * (*c.topRight - *c.topLeft);
+        c.DirBottomLR = c.dimInv * (*c.bottomRight - *c.bottomLeft);
+        c.DirRightBT = c.dimInv * (*c.topRight - *c.bottomRight);
+        c.DirLeftBT = c.dimInv * (*c.topLeft - *c.bottomLeft);
+        c.dimensionTop = c.dimensionRight = c.dimension;
 
-		
-
-        ResultPoint correctedTopRight;
-        {
-            // The matrix is square
-
-            int dimension = std::max(dimensionRight, dimensionTop);
-
-            // ResultPoint topRightCorrected = *topRight;
-            // ResultPoint bottomRightCorrected = *bottomRight;
-            // ResultPoint topLeftCorrected = *topLeft;
-            // ResultPoint bottomLeftCorrected = *bottomLeft;
-            DetectorResult res;
-            float dimInv = 1.0 / float(dimension);
-            PointF DirTopLR = dimInv * (*topRight - *topLeft);
-            PointF DirBottomLR = dimInv * (*bottomRight - *bottomLeft);
-
-            PointF DirRightBT = dimInv * (*topRight - *bottomRight);
-            PointF DirLeftBT = dimInv * (*topLeft - *bottomLeft);
-
-            dimensionTop = dimensionRight = dimension;
-
-            auto sgDebug = [&](const BitMatrix& image, const ResultPoint& topLeft, const ResultPoint& bottomLeft, const ResultPoint& bottomRight, const ResultPoint& topRight, int width, int height) {
-                // drawDebugImageWithLines(image, "test3", {topLeft.x(), topLeft.y(), topRight.x(), topRight.y(),
-                // bottomRight.x(), bottomRight.y(), bottomLeft.x(), bottomLeft.y()});
-                return SampleGrid(image, topLeft, bottomLeft, bottomRight, topRight, dimensionTop, dimensionRight);
-            };
-
-            correctedOffset = true;
-			bool tryInvert = false;
-			for(int i = 1; i--; ) {
-				res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight + DirBottomLR, *topRight + DirTopLR, dimensionTop, dimensionRight);
-				if(outDecoderResult = DecodeResult(res); outDecoderResult.isValid()) return res;
-
-				res = SampleGrid(image, *topLeft + DirLeftBT, *bottomLeft, *bottomRight, *topRight + DirRightBT, dimensionTop, dimensionRight);
-				if(outDecoderResult = DecodeResult(res); outDecoderResult.isValid()) return res;
-
-
-				correctedTopRight = CorrectTopRight(image, *bottomLeft, *bottomRight, *topLeft, *topRight, dimension);
-
-				DirTopLR = dimInv * (correctedTopRight - *topLeft);
-				DirRightBT = dimInv * (correctedTopRight - *bottomRight);
-
-				res = SampleGrid(image, *topLeft - DirTopLR, *bottomLeft - DirBottomLR, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
-				if(outDecoderResult = DecodeResult(res); outDecoderResult.isValid()) return res;
-
-				res = SampleGrid(image, *topLeft, *bottomLeft - DirLeftBT, *bottomRight - DirRightBT, correctedTopRight, dimensionTop, dimensionRight);
-				if(outDecoderResult = DecodeResult(res); outDecoderResult.isValid()) return res;
-				if(tryInvert) {
-					tryInvert = false;
-					DirTopLR = -0.5 * DirTopLR;
-					DirBottomLR = -0.5 * DirBottomLR;
-
-					DirRightBT = -0.5 * DirRightBT;
-					DirLeftBT = -0.5 * DirLeftBT;
-				}
-			}
-
-            // ExtendSide(image, *bottomLeft, bottomRightCorrected, *topLeft, topRightCorrected, dimension);
-            // correct top right point to match the white module
-            // correctedTopRight = CorrectTopRight(image, *bottomLeft, *bottomRight, *topLeft, *topRight, dimension);
-            // correctedTopRight = CorrectTopRight(image, *bottomLeft, bottomRightCorrected, *topLeft, topRightCorrected, dimension);
-
-            // Redetermine the dimension using the corrected top right point
-            // int dimensionCorrected = std::max(TransitionsBetween(image, *topLeft, correctedTopRight).transitions,
-            //                                   TransitionsBetween(image, *bottomRight, correctedTopRight).transitions);
-            // int dimensionCorrected = dimension;
-
-            // int dimensionCorrected = std::max(TransitionsBetween(image, *topLeft, topRightCorrected).transitions,
-            //                                   TransitionsBetween(image, bottomRightCorrected, correctedTopRight).transitions);
-            // dimensionCorrected++;
-            // if ((dimensionCorrected & 0x01) == 1) {
-            //     dimensionCorrected++;
-            // }
-            correctedOffset = false;
-			res = SampleGridTestOffseted(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight,
-										 gridRefine);
-            // res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
-			// auto testValue = testCenterLineBiOffset(res.bits());
-            outDecoderResult = DecodeResult(res);
-            return res;
-        }
-
-        // DetectorResult res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
-
-        return {};
+        correctedOffset = true;
+        return ladder::RunLadder(kOldPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
     }
 
 
