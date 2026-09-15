@@ -10,10 +10,6 @@
 #include "DecodeHints.h"
 #include "GridSampler.h"
 
-#ifdef __cpp_impl_coroutine
-#include <Generator.h>
-#include <DetectorResult.h>
-#endif
 
 namespace ZXing {
 
@@ -22,11 +18,7 @@ class DetectorResult;
 
 namespace DataMatrix {
 
-#ifdef __cpp_impl_coroutine
-using DetectorResults = Generator<DetectorResult>;
-#else
 using DetectorResults = DetectorResult;
-#endif
 
 DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure,
 					   DMGridRefineOptions gridRefine = {});

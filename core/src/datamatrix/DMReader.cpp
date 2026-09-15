@@ -20,9 +20,6 @@ namespace ZXing::DataMatrix {
 
 Result Reader::decode(const BinaryBitmap& image) const
 {
-#ifdef __cpp_impl_coroutine
-	return FirstOrDefault(decode(image, 1));
-#else
 	auto binImg = image.getBitMatrix();
 	if (binImg == nullptr)
 		return {};
@@ -35,7 +32,6 @@ Result Reader::decode(const BinaryBitmap& image) const
 	Result res = Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 	res.setResultedDefect(detectorResult.resultedDefect());
 	return res;
-#endif
 }
 
 Result Reader::decode(const BinaryBitmap& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3)
@@ -53,26 +49,6 @@ Result Reader::decode(const BinaryBitmap& image, const PointF& P0, const PointF&
 	return Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 }
 
-#ifdef __cpp_impl_coroutine
-Results Reader::decode(const BinaryBitmap& image, int maxSymbols) const
-{
-	auto binImg = image.getBitMatrix();
-	if (binImg == nullptr)
-		return {};
-
-	Results results;
-	for (auto&& detRes : Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine())) {
-		auto decRes = Decode(detRes.bits());
-		if (decRes.isValid(_hints.returnErrors())) {
-			results.emplace_back(std::move(decRes), std::move(detRes).position(), BarcodeFormat::DataMatrix);
-			if (maxSymbols > 0 && Size(results) >= maxSymbols)
-				break;
-		}
-	}
-
-	return results;
-}
-#endif
 
 
 Result DMCRPTReader::decode(const BinaryBitmap& image) const
@@ -93,20 +69,4 @@ Result DMCRPTReader::decode(const BinaryBitmap& image) const
 	res.setResultedDefect(detectorResult.resultedDefect());
 	return res;
 }
-#ifdef __cpp_impl_coroutine
-Result DMCRPTReader::decode(const BinaryBitmap& image, int maxSymbols) const
-{
-	auto binImg = image.getBitMatrix();
-	if (binImg == nullptr)
-		return {};
-
-	DecoderResult decoderResult;
-	auto detectorResult = DetectSamplegridV1(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult,
-											 _hints.dmGridRefine());
-
-	if (!detectorResult.isValid()) return {};
-
-	return Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
-}
-#endif
 } // namespace ZXing::DataMatrix

@@ -1735,9 +1735,7 @@ namespace ZXing::DataMatrix {
 #endif
 
         // disable expensive multi-line scan to detect off-center symbols for now
-#ifndef __cpp_impl_coroutine
         tryHarder = false;
-#endif
 
         //ResultPoint p1;
         //createBitmapFromBitMatrix(image,p1,p1,p1,p1);
@@ -1767,15 +1765,9 @@ namespace ZXing::DataMatrix {
                 if (!tracer.isIn())
                     break;
 
-#ifdef __cpp_impl_coroutine
-                DetectorResult res;
-                while (res = Scan(tracer, lines), res.isValid())
-                    co_yield std::move(res);
-#else
                 if (auto res = Scan(tracer, lines, warp, tryToTraceWarp, correctCorners, gridRefine); res.isValid()) {
                     return res;
                 }
-#endif
 
                 if (!tryHarder)
                     break; // only test center lines
@@ -1785,9 +1777,7 @@ namespace ZXing::DataMatrix {
                 break; // only test left direction
         }
 
-#ifndef __cpp_impl_coroutine
         return {};
-#endif
     }
 
 
@@ -2368,23 +2358,6 @@ static DetectorResult DetectPure(const BitMatrix& image)
 
 DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DMGridRefineOptions gridRefine)
 {
-#ifdef __cpp_impl_coroutine
-    // First try the very fast DetectPure() path. Also because DetectNew() generally fails with pure module size 1 symbols
-// TODO: implement a tryRotate version of DetectPure, see #590.
-    if (auto r = DetectPure(image); r.isValid())
-        co_yield std::move(r);
-    else if (!isPure) { // If r.isValid() then there is no point in looking for more (no-pure) symbols
-        bool found = false;
-        for (auto&& r : DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine)) {
-            found = true;
-            co_yield std::move(r);
-        }
-        if (!found && tryHarder) {
-            if (auto r = DetectOld(image); r.isValid())
-                co_yield std::move(r);
-        }
-    }
-#else
     if (isPure)
         return DetectPure(image);
 
@@ -2397,7 +2370,6 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
         result = DetectCRPT(image, outDecoderResult, _, nullptr, false, false, gridRefine);
     return result;
 
-#endif
 }
 
 //    const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
@@ -2405,40 +2377,6 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
 								   DMGridRefineOptions gridRefine)
 {
 
-#ifdef __cpp_impl_coroutine
-    DetectorResult detRes;
-    //OLD DETECTORS
-    detRes = DetectNew(image, tryHarder, tryRotate);
-    if (!detRes.isValid())
-        detRes = DetectCRPT(image.copy());
-
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            co_return detRes;
-        }
-    }
-    //#OLD DETECTORS
-
-    //OLD DETECTORS WITH MY SAMPLE GRID
-    detRes = DetectNew(image, tryHarder, tryRotate, true, true);
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            co_return detRes;
-        }
-    }
-    detRes = DetectCRPT(image.copy(), true, true);
-
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            co_return detRes;
-        }
-    }
-    //OLD DETECTORS WITH MY SAMPLE GRID
-    co_return{};
-#else
     QuadrilateralI resultCandidate;
     DetectorResult detRes;
 
@@ -2503,7 +2441,6 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
     }
     //#OLD DETECTORS WITH MY SAMPLE GRID
     return DetectorResults({}, std::move(resultCandidate));
-#endif
 }
 
 const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
