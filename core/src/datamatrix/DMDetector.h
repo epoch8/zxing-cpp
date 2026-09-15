@@ -9,6 +9,7 @@
 #include <DecoderResult.h>
 #include "DecodeHints.h"
 #include "GridSampler.h"
+#include "DMLadderSpec.h"
 
 
 namespace ZXing {
@@ -21,13 +22,14 @@ namespace DataMatrix {
 using DetectorResults = DetectorResult;
 
 DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure,
-					   DMGridRefineOptions gridRefine = {});
+					   DMGridRefineOptions gridRefine = {}, const ladder::Spec& spec = ladder::Spec{});
 
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
-								   DMGridRefineOptions gridRefine = {});
+								   DMGridRefineOptions gridRefine = {}, const ladder::Spec& spec = ladder::Spec{});
 
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder,
-							  bool tryRotate, bool isPure, DecoderResult& outDecoderResult, DMGridRefineOptions gridRefine = {});
+							  bool tryRotate, bool isPure, DecoderResult& outDecoderResult, DMGridRefineOptions gridRefine = {},
+							  const ladder::Spec& spec = ladder::Spec{});
 
 } // DataMatrix
 } // ZXing

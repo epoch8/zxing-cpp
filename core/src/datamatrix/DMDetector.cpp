@@ -2570,29 +2570,44 @@ static const OuterStep kDefinedPlan[] = {
 
 // ---- Entry points ----------------------------------------------------------------
 
-DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DMGridRefineOptions gridRefine)
+// The entry point's job before running its plan: put the effective features
+// in force for this decode (the caller's flags, with the spec's overrides on
+// top), and derive the DMGridRefineOptions the detectors still take from them,
+// so a flag flipped in the string reaches every phase the same way the setter
+// would have.
+static ladder::Context MakeContext(const BitMatrix& image, bool tryHarder, bool tryRotate, DMGridRefineOptions gridRefine,
+                                   const ladder::Spec& spec, DecoderResult& dec)
+{
+    ladder::CurrentFeatures() = spec.apply(ladder::FeaturesFrom(gridRefine));
+    ladder::Context ctx{{dec}, image, tryHarder, tryRotate, gridRefine};
+    ctx.gridRefine = {ctx.on(ladder::Feat::regionGrowing), ctx.on(ladder::Feat::rsFeedback)};
+    return ctx;
+}
+
+DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DMGridRefineOptions gridRefine,
+                       const ladder::Spec& spec)
 {
     if (isPure)
         return DetectPure(image);
 
     DecoderResult discarded;
-    ladder::Context ctx{{discarded}, image, tryHarder, tryRotate, gridRefine};
-    return ladder::RunLadder(kStockPlan, ctx, ladder::Policy::FirstValidDetection);
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, discarded);
+    return ladder::RunLadder(kStockPlan, spec, ctx, ladder::Policy::FirstValidDetection);
 }
 
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
-								   DMGridRefineOptions gridRefine)
+								   DMGridRefineOptions gridRefine, const ladder::Spec& spec)
 {
-    ladder::Context ctx{{outDecoderResult}, image, tryHarder, tryRotate, gridRefine};
-    return ladder::RunLadder(kSamplegridV1Plan, ctx);
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, outDecoderResult);
+    return ladder::RunLadder(kSamplegridV1Plan, spec, ctx);
 }
 
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
-							  DMGridRefineOptions gridRefine)
+							  DMGridRefineOptions gridRefine, const ladder::Spec& spec)
 {
-    ladder::Context ctx{{outDecoderResult}, image, tryHarder, tryRotate, gridRefine};
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, outDecoderResult);
     ctx.corners = { P0, P1, P2, P3 };
-    return ladder::RunLadder(kDefinedPlan, ctx);
+    return ladder::RunLadder(kDefinedPlan, spec, ctx);
 }
 } // namespace ZXing::DataMatrix
 

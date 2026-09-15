@@ -1,0 +1,14 @@
+// The feature registry -- the ONLY place a gate is declared.
+//
+//   CRPT_FEATURE(name, default)
+//
+// To add a gate: one line here, then `if (ctx.on(Feat::name))` where it
+// applies. Nothing else changes: not DecodeHints, not the vendored copy of
+// it, not any signature, not the calculators. A gate is switched from the
+// ladder string ("+name" / "-name"); an unknown name there is a hard error.
+//
+// The two below are the DMGridRefineOptions flags. Their defaults are what
+// DecodeHints::dmGridRefine() carries, so the registry default is what
+// applies when the caller set nothing; the setter still works and wins.
+CRPT_FEATURE(regionGrowing, false)
+CRPT_FEATURE(rsFeedback,    false)

@@ -10,15 +10,33 @@
 #include "DecoderResult.h"
 #include "DetectorResult.h"
 #include "DMDecoder.h"
+#include "DMLadderSpec.h"
 #include "GridSampler.h"
 #include "Point.h"
 #include "Quadrilateral.h"
 
 #include <array>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace ZXing::DataMatrix::ladder {
+
+/// The feature set in force for the decode in progress, set by the entry
+/// point before it builds its context. Thread-local because decodes run on
+/// worker threads; read once per context construction, never on a hot path.
+inline Features& CurrentFeatures() noexcept
+{
+	thread_local Features f;
+	return f;
+}
+
+/// The two DMGridRefineOptions flags as features, over the registry defaults.
+inline Features FeaturesFrom(DMGridRefineOptions g) noexcept
+{
+	return Features::Defaults().set(Feat::regionGrowing, g.regionGrowing).set(Feat::rsFeedback, g.rsFeedback);
+}
 
 /**
  * What the runner itself reads and writes. Every context a plan runs over
@@ -39,6 +57,13 @@ struct State
 	/// than detecting anew, for `when` rules that ask whether anything has
 	/// been found yet, and for plans that fall back to it.
 	DetectorResult last;
+
+	/// The effective feature set. Every context, sub-ladders included, picks
+	/// it up from the thread-local the entry point set, so a gate anywhere
+	/// below is `if (ctx.on(Feat::x))` and nothing is threaded to reach it.
+	Features features = CurrentFeatures();
+
+	bool on(Feat f) const noexcept { return features.on(f); }
 };
 
 /**
@@ -106,11 +131,14 @@ enum class Fallback : uint8_t
 	LastDetection,
 };
 
+/// A plan names at most this many steps; the resolved sequence lives on the stack.
+constexpr size_t kMaxPlanSteps = 16;
+
 /**
- * Run a plan to its first win. This is the only place that decides what a
- * phase's outcome means, and therefore the only place attribution needs to
- * hook -- calls, time, skips, and which step won are all observable right
- * here.
+ * Run a sequence of steps to its first win. This is the only place that
+ * decides what a phase's outcome means, and therefore the only place
+ * attribution needs to hook -- calls, time, skips, and which step won are all
+ * observable right here.
  *
  * Per step, in order: skip it if its `when` says so; remember the position
  * if the detection is valid; under DecodeToWin, decode it once unless the
@@ -118,11 +146,11 @@ enum class Fallback : uint8_t
  * return any valid detection as is. A step that did not win leaves its
  * detection in ctx.last for the next one.
  */
-template <class Ctx, size_t N>
-DetectorResult RunLadder(const Step<Ctx> (&plan)[N], Ctx& ctx, Policy policy = Policy::DecodeToWin,
-                         Fallback fallback = Fallback::EmptyWithCandidate)
+template <class Ctx>
+DetectorResult RunSteps(const Step<Ctx>* const* first, const Step<Ctx>* const* last, Ctx& ctx, Policy policy, Fallback fallback)
 {
-	for (const Step<Ctx>& step : plan) {
+	for (; first != last; ++first) {
+		const Step<Ctx>& step = **first;
 		if (step.when && !step.when(ctx))
 			continue;
 
@@ -146,6 +174,48 @@ DetectorResult RunLadder(const Step<Ctx> (&plan)[N], Ctx& ctx, Policy policy = P
 	if (fallback == Fallback::LastDetection)
 		return std::move(ctx.last);
 	return DetectorResult({}, std::move(ctx.candidate));
+}
+
+/// Run a plan in its built-in order.
+template <class Ctx, size_t N>
+DetectorResult RunLadder(const Step<Ctx> (&plan)[N], Ctx& ctx, Policy policy = Policy::DecodeToWin,
+                         Fallback fallback = Fallback::EmptyWithCandidate)
+{
+	static_assert(N <= kMaxPlanSteps, "plan longer than kMaxPlanSteps");
+	const Step<Ctx>* seq[N];
+	for (size_t i = 0; i < N; ++i)
+		seq[i] = &plan[i];
+	return RunSteps(seq, seq + N, ctx, policy, fallback);
+}
+
+/**
+ * Run a plan in the order a Spec names, or its built-in order when the Spec
+ * names no steps. A name the plan does not have is a hard error: a typo in a
+ * schedule fails the run rather than silently running something else.
+ */
+template <class Ctx, size_t N>
+DetectorResult RunLadder(const Step<Ctx> (&plan)[N], const Spec& spec, Ctx& ctx, Policy policy = Policy::DecodeToWin,
+                         Fallback fallback = Fallback::EmptyWithCandidate)
+{
+	if (spec.steps.empty())
+		return RunLadder(plan, ctx, policy, fallback);
+	if (spec.steps.size() > kMaxPlanSteps)
+		throw std::invalid_argument("ladder spec names more than " + std::to_string(kMaxPlanSteps) + " steps");
+
+	const Step<Ctx>* seq[kMaxPlanSteps];
+	size_t n = 0;
+	for (const std::string& name : spec.steps) {
+		const Step<Ctx>* found = nullptr;
+		for (const Step<Ctx>& step : plan)
+			if (name == step.name) {
+				found = &step;
+				break;
+			}
+		if (!found)
+			throw std::invalid_argument("unknown ladder step: " + name);
+		seq[n++] = found;
+	}
+	return RunSteps(seq, seq + n, ctx, policy, fallback);
 }
 
 } // namespace ZXing::DataMatrix::ladder
