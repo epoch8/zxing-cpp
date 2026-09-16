@@ -2611,6 +2611,48 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
 }
 } // namespace ZXing::DataMatrix
 
+namespace ZXing {
+
+// Declared in ReadBarcode.h. Lives here because only this file knows the
+// plans; ladder::RunLadder throws on the same names at run time as a backstop,
+// but a caller that swallows exceptions around decoding (the calculators do)
+// needs the answer before the first frame.
+std::string ValidateDMLadderSpec(std::string_view spec, std::string_view plan)
+{
+    using namespace DataMatrix;
+    ladder::Spec parsed;
+    try {
+        parsed = ladder::ParseSpec(spec);
+    } catch (const std::invalid_argument& e) {
+        return e.what();
+    }
+    if (parsed.steps.empty())
+        return {};
+
+    auto check = [&](const auto& steps) -> std::string {
+        for (const std::string& name : parsed.steps) {
+            bool known = false;
+            for (const auto& step : steps)
+                if (name == step.name) {
+                    known = true;
+                    break;
+                }
+            if (!known)
+                return "unknown ladder step \"" + name + "\" for plan \"" + std::string(plan) + "\"";
+        }
+        return {};
+    };
+    if (plan == "samplegridv1")
+        return check(kSamplegridV1Plan);
+    if (plan == "stock")
+        return check(kStockPlan);
+    if (plan == "defined")
+        return check(kDefinedPlan);
+    return "unknown ladder plan \"" + std::string(plan) + "\"";
+}
+
+} // namespace ZXing
+
 //DEBUG DRAW
 
 // auto postfix = std::to_string(dim);
