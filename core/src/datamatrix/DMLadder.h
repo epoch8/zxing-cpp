@@ -11,6 +11,7 @@
 #include "DetectorResult.h"
 #include "DMDecoder.h"
 #include "DMLadderSpec.h"
+#include "DMLadderStats.h"
 #include "GridSampler.h"
 #include "Point.h"
 #include "Quadrilateral.h"
@@ -137,37 +138,56 @@ constexpr size_t kMaxPlanSteps = 16;
 /**
  * Run a sequence of steps to its first win. This is the only place that
  * decides what a phase's outcome means, and therefore the only place
- * attribution needs to hook -- calls, time, skips, and which step won are all
- * observable right here.
+ * attribution hooks -- calls, time, skips, and which step won are all
+ * observable right here (DMLadderStats.h; compiled out without
+ * CRPT_ZXING_PROFILING).
  *
  * Per step, in order: skip it if its `when` says so; remember the position
  * if the detection is valid; under DecodeToWin, decode it once unless the
  * step already did and return it on success; under FirstValidDetection,
  * return any valid detection as is. A step that did not win leaves its
  * detection in ctx.last for the next one.
+ *
+ * `plan` names the plan and `base` is its array: a step is attributed to the
+ * plan's name and its index in that array, so a reordered sequence still
+ * reports each step under its own name.
  */
 template <class Ctx>
-DetectorResult RunSteps(const Step<Ctx>* const* first, const Step<Ctx>* const* last, Ctx& ctx, Policy policy, Fallback fallback)
+DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>* const* first, const Step<Ctx>* const* last,
+                        Ctx& ctx, Policy policy, Fallback fallback)
 {
 	for (; first != last; ++first) {
 		const Step<Ctx>& step = **first;
-		if (step.when && !step.when(ctx))
+		[[maybe_unused]] const size_t index = static_cast<size_t>(&step - base);
+		if (step.when && !step.when(ctx)) {
+			CRPT_LADDER_RECORD(plan, index, step.name, Outcome::Skipped);
 			continue;
+		}
 
+		CRPT_LADDER_ENTER(plan, index, step.name);
+		[[maybe_unused]] const auto t0 = CRPT_LADDER_CLOCK();
 		bool decodedInside = false;
 		DetectorResult det = step.run(ctx, decodedInside);
+		[[maybe_unused]] Outcome outcome = Outcome::NoDetection;
 
 		if (det.isValid()) {
 			ctx.candidate = det.position();
-			if (policy == Policy::FirstValidDetection)
+			outcome = Outcome::Candidate;
+			if (policy == Policy::FirstValidDetection) {
+				// The caller decodes; it settles won or candidate (DMReader.cpp).
+				CRPT_LADDER_LEAVE(Outcome::Detected, t0);
 				return det;
+			}
 			if (!decodedInside)
 				ctx.dec = Decode(det.bits());
 		}
 
-		if (policy == Policy::DecodeToWin && ctx.dec.isValid())
+		if (policy == Policy::DecodeToWin && ctx.dec.isValid()) {
+			CRPT_LADDER_LEAVE(Outcome::Won, t0);
 			return det;
+		}
 
+		CRPT_LADDER_LEAVE(outcome, t0);
 		ctx.last = std::move(det);
 	}
 
@@ -176,16 +196,17 @@ DetectorResult RunSteps(const Step<Ctx>* const* first, const Step<Ctx>* const* l
 	return DetectorResult({}, std::move(ctx.candidate));
 }
 
-/// Run a plan in its built-in order.
+/// Run a plan in its built-in order. `name` is what attribution reports it
+/// under: an entry plan's name starts every path, a sub-plan's is not in the path.
 template <class Ctx, size_t N>
-DetectorResult RunLadder(const Step<Ctx> (&plan)[N], Ctx& ctx, Policy policy = Policy::DecodeToWin,
+DetectorResult RunLadder(const char* name, const Step<Ctx> (&plan)[N], Ctx& ctx, Policy policy = Policy::DecodeToWin,
                          Fallback fallback = Fallback::EmptyWithCandidate)
 {
 	static_assert(N <= kMaxPlanSteps, "plan longer than kMaxPlanSteps");
 	const Step<Ctx>* seq[N];
 	for (size_t i = 0; i < N; ++i)
 		seq[i] = &plan[i];
-	return RunSteps(seq, seq + N, ctx, policy, fallback);
+	return RunSteps(name, plan, seq, seq + N, ctx, policy, fallback);
 }
 
 /**
@@ -194,11 +215,11 @@ DetectorResult RunLadder(const Step<Ctx> (&plan)[N], Ctx& ctx, Policy policy = P
  * schedule fails the run rather than silently running something else.
  */
 template <class Ctx, size_t N>
-DetectorResult RunLadder(const Step<Ctx> (&plan)[N], const Spec& spec, Ctx& ctx, Policy policy = Policy::DecodeToWin,
+DetectorResult RunLadder(const char* name, const Step<Ctx> (&plan)[N], const Spec& spec, Ctx& ctx, Policy policy = Policy::DecodeToWin,
                          Fallback fallback = Fallback::EmptyWithCandidate)
 {
 	if (spec.steps.empty())
-		return RunLadder(plan, ctx, policy, fallback);
+		return RunLadder(name, plan, ctx, policy, fallback);
 	if (spec.steps.size() > kMaxPlanSteps)
 		throw std::invalid_argument("ladder spec names more than " + std::to_string(kMaxPlanSteps) + " steps");
 
@@ -215,7 +236,7 @@ DetectorResult RunLadder(const Step<Ctx> (&plan)[N], const Spec& spec, Ctx& ctx,
 			throw std::invalid_argument("unknown ladder step: " + name);
 		seq[n++] = found;
 	}
-	return RunSteps(seq, seq + n, ctx, policy, fallback);
+	return RunSteps(name, plan, seq, seq + n, ctx, policy, fallback);
 }
 
 } // namespace ZXing::DataMatrix::ladder

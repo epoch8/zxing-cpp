@@ -1162,9 +1162,13 @@ namespace ZXing::DataMatrix {
     {
         OldContext c{{outDecoderResult}, image, gridRefine, correctedOffset};
 
+        // Each `return {}` in setup is noted as a bail on the step hosting this
+        // detector: its cost then reads as setup failing, not grids failing.
         ResultPoint pointA, pointB, pointC, pointD;
-        if (!DetectWhiteRect(image, pointA, pointB, pointC, pointD))
+        if (!DetectWhiteRect(image, pointA, pointB, pointC, pointD)) {
+            CRPT_LADDER_NOTE(Bail);
             return {};
+        }
 
         // The transitions point into pointA..D, which is why those are members.
         std::array transitions = {
@@ -1180,8 +1184,10 @@ namespace ZXing::DataMatrix {
         const auto& lSideOne = transitions[0];
         const auto& lSideTwo = transitions[1];
 
-        if (lSideTwo.transitions > 8)
+        if (lSideTwo.transitions > 8) {
+            CRPT_LADDER_NOTE(Bail);
             return {};
+        }
 
         // The corner both L sides share is bottom-left; the other two ends are
         // bottom-right and top-left, in the order the map yields them.
@@ -1205,8 +1211,10 @@ namespace ZXing::DataMatrix {
             }
         }
 
-        if (c.bottomRight == nullptr || c.bottomLeft == nullptr || c.topLeft == nullptr)
+        if (c.bottomRight == nullptr || c.bottomLeft == nullptr || c.topLeft == nullptr) {
+            CRPT_LADDER_NOTE(Bail);
             return {};
+        }
 
         OrderByBestPatterns(c.bottomRight, c.bottomLeft, c.topLeft);
 
@@ -1239,8 +1247,10 @@ namespace ZXing::DataMatrix {
         }
         c.dimensionRight += 2;
 
-        if (c.dimensionTop < 10 || c.dimensionTop > 144 || c.dimensionRight < 8 || c.dimensionRight > 144)
+        if (c.dimensionTop < 10 || c.dimensionTop > 144 || c.dimensionRight < 8 || c.dimensionRight > 144) {
+            CRPT_LADDER_NOTE(Bail);
             return {};
+        }
 
         c.dimension = std::max(c.dimensionRight, c.dimensionTop);
         c.dimInv = 1.0 / float(c.dimension);
@@ -1251,7 +1261,7 @@ namespace ZXing::DataMatrix {
         c.dimensionTop = c.dimensionRight = c.dimension;
 
         correctedOffset = true;
-        return ladder::RunLadder(kOldPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
+        return ladder::RunLadder("old", kOldPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
     }
 
 
@@ -2318,6 +2328,9 @@ namespace ZXing::DataMatrix {
         if (!DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD)) {
 			rotateCV45(image, c.newimage);
 			if(!DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD)) {
+				// The bail that makes a second DetectCRPT on the same image
+				// redundant: noted on the hosting step (sgv1/crpt, sgv1/crptWarp).
+				CRPT_LADDER_NOTE(Bail);
 				return {};
 			}
         }
@@ -2341,7 +2354,7 @@ namespace ZXing::DataMatrix {
         // `if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid())`
         // this replaces. LastDetection: what came out of the final variant,
         // valid or not, is what DetectCRPT has always handed back.
-        return ladder::RunLadder(kCrptPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
+        return ladder::RunLadder("crpt", kCrptPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
     }
 
 
@@ -2592,14 +2605,14 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
 
     DecoderResult discarded;
     ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, discarded);
-    return ladder::RunLadder(kStockPlan, spec, ctx, ladder::Policy::FirstValidDetection);
+    return ladder::RunLadder("stock", kStockPlan, spec, ctx, ladder::Policy::FirstValidDetection);
 }
 
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
 								   DMGridRefineOptions gridRefine, const ladder::Spec& spec)
 {
     ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, outDecoderResult);
-    return ladder::RunLadder(kSamplegridV1Plan, spec, ctx);
+    return ladder::RunLadder("sgv1", kSamplegridV1Plan, spec, ctx);
 }
 
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
@@ -2607,7 +2620,7 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
 {
     ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, outDecoderResult);
     ctx.corners = { P0, P1, P2, P3 };
-    return ladder::RunLadder(kDefinedPlan, spec, ctx);
+    return ladder::RunLadder("defined", kDefinedPlan, spec, ctx);
 }
 } // namespace ZXing::DataMatrix
 

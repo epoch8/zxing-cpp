@@ -9,6 +9,7 @@
 #include "BinaryBitmap.h"
 #include "DMDecoder.h"
 #include "DMDetector.h"
+#include "DMLadderStats.h"
 #include "DecodeHints.h"
 #include "DecoderResult.h"
 #include "DetectorResult.h"
@@ -29,6 +30,8 @@ Result Reader::decode(const BinaryBitmap& image) const
 		return {};
 
 	DecoderResult decoderResult = Decode(detectorResult.bits());
+	// The stock plan wins on a detection; whether it read is decided here.
+	CRPT_LADDER_SETTLE(decoderResult.isValid());
 	Result res = Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 	res.setResultedDefect(detectorResult.resultedDefect());
 	return res;

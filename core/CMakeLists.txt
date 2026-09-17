@@ -164,6 +164,7 @@ if (BUILD_READERS)
             src/Reader.h
             src/ReadBarcode.h
             src/ReadBarcode.cpp
+            src/CrptLadderStats.h
             src/ReedSolomonDecoder.h
             src/ReedSolomonDecoder.cpp
             src/Result.h
@@ -270,6 +271,8 @@ if (BUILD_READERS)
             src/datamatrix/DMDetector.cpp
             src/datamatrix/DMLadder.h
             src/datamatrix/DMLadderSpec.h
+            src/datamatrix/DMLadderStats.h
+            src/datamatrix/DMLadderStats.cpp
             src/datamatrix/DMReader.h
             src/datamatrix/DMReader.cpp
     )
@@ -563,6 +566,13 @@ if (COMPILER_NEEDS_FLOAT_STORE)
     target_compile_options(ZXing PRIVATE
             -ffloat-store   # same floating point precision in all optimization levels
     )
+endif()
+
+# Ladder attribution (src/CrptLadderStats.h). OFF by default: the shipping
+# libZXing.so records nothing and its C entry points are inert.
+option(CRPT_ZXING_PROFILING "Build ZXing with DataMatrix ladder attribution" OFF)
+if (CRPT_ZXING_PROFILING)
+    target_compile_definitions(ZXing PUBLIC CRPT_ZXING_PROFILING)
 endif()
 
 target_compile_features(ZXing PUBLIC cxx_std_17)
