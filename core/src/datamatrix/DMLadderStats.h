@@ -75,6 +75,23 @@ private:
 /// Attach a note to the innermost open step.
 void AddNote(Note note) noexcept;
 
+/// A named piece of work inside a step -- the white-rect search, the 45-degree
+/// rotation, the transition measurements. Times its scope and charges it to the
+/// hosting step under "<step path>#<name>". `name` must be a string literal:
+/// it is the probe's identity, registered process-wide on first use.
+class Probe
+{
+public:
+	explicit Probe(const char* name) noexcept;
+	~Probe();
+	Probe(const Probe&) = delete;
+	Probe& operator=(const Probe&) = delete;
+
+private:
+	const char* _name;
+	TimePoint _t0;
+};
+
 /// The caller's verdict on the detection parked by the last Detected leave.
 void Settle(bool decoded) noexcept;
 
@@ -85,6 +102,10 @@ void Settle(bool decoded) noexcept;
 #define CRPT_LADDER_ENTER(plan, index, step) ::ZXing::DataMatrix::ladder::stats::Frame crptLadderFrame_(plan, index, step)
 #define CRPT_LADDER_LEAVE(outcome, t0) crptLadderFrame_.leave(outcome, t0)
 #define CRPT_LADDER_NOTE(note) ::ZXing::DataMatrix::ladder::stats::AddNote(::ZXing::DataMatrix::ladder::Note::note)
+#define CRPT_LADDER_PROBE_CAT_(a, b) a##b
+#define CRPT_LADDER_PROBE_CAT(a, b) CRPT_LADDER_PROBE_CAT_(a, b)
+#define CRPT_LADDER_PROBE(name) \
+	::ZXing::DataMatrix::ladder::stats::Probe CRPT_LADDER_PROBE_CAT(crptLadderProbe_, __LINE__)(name)
 #define CRPT_LADDER_SETTLE(decoded) ::ZXing::DataMatrix::ladder::stats::Settle(decoded)
 
 #else // !CRPT_ZXING_PROFILING
@@ -94,6 +115,7 @@ void Settle(bool decoded) noexcept;
 #define CRPT_LADDER_ENTER(plan, index, step) ((void)0)
 #define CRPT_LADDER_LEAVE(outcome, t0) ((void)0)
 #define CRPT_LADDER_NOTE(note) ((void)0)
+#define CRPT_LADDER_PROBE(name) ((void)0)
 #define CRPT_LADDER_SETTLE(decoded) ((void)0)
 
 #endif // CRPT_ZXING_PROFILING

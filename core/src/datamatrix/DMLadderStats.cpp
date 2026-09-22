@@ -22,6 +22,8 @@ namespace {
 constexpr size_t kEntries = CRPT_LADDER_ENTRY_PLANS;
 constexpr size_t kSteps = CRPT_LADDER_PLAN_STEPS;
 constexpr size_t kSpan = 1 + kSteps; // slots per (entry, step): itself + its sub-plan's steps
+constexpr size_t kStepSlots = CRPT_LADDER_STEP_SLOTS;
+constexpr size_t kProbeNames = CRPT_LADDER_PROBE_NAMES;
 constexpr size_t kSlots = CRPT_LADDER_SLOTS;
 constexpr size_t kMaxDepth = 4;
 
@@ -34,6 +36,8 @@ struct Names
 	std::atomic<const char*> step[kEntries * kSteps];
 	std::atomic<const char*> subPlan[kEntries * kSteps];
 	std::atomic<const char*> subStep[kEntries * kSteps * kSteps];
+	std::atomic<const char*> probe[kProbeNames]; // probe names are global: the same
+	                                             // "whiteRect" in any step is one name
 	std::mutex pathLock;
 	std::string path[kSlots];
 };
@@ -195,6 +199,46 @@ void Frame::leave(Outcome outcome, TimePoint t0) noexcept
 	t.pendingT0 = t0.time_since_epoch().count();
 }
 
+namespace {
+
+// The probe-name index, assigned process-wide on first use like an entry plan.
+int ProbeIndex(const char* name) noexcept
+{
+	for (size_t i = 0; i < kProbeNames; ++i)
+		if (Same(Claim(N().probe[i], name), name))
+			return static_cast<int>(i);
+	return -1;
+}
+
+// Probes are charged to the TOP-LEVEL step in the open path, so a probe inside
+// a sub-plan step lands on the step that hosts the sub-plan.
+int ProbeSlot(const char* name) noexcept
+{
+	if (t.depth == 0 || t.frame[0] <= 0)
+		return -1;
+	int probeIdx = ProbeIndex(name);
+	if (probeIdx < 0)
+		return -1;
+	size_t es = static_cast<size_t>(t.frame[0] - 1) / kSpan; // (entry, step)
+	return static_cast<int>(kStepSlots + es * kProbeNames + static_cast<size_t>(probeIdx));
+}
+
+} // namespace
+
+Probe::Probe(const char* name) noexcept : _name(name), _t0(Now()) {}
+
+Probe::~Probe()
+{
+	uint64_t ns = Since(_t0);
+	int slot = ProbeSlot(_name);
+	if (slot < 0) {
+		++t.dropped;
+		return;
+	}
+	++t.table[slot].calls;
+	t.table[slot].nsLost += ns; // probe rows carry their total time here
+}
+
 void AddNote(Note note) noexcept
 {
 	int slot = (t.depth > 0 && t.depth <= kMaxDepth) ? t.frame[t.depth - 1] - 1 : -1;
@@ -242,6 +286,25 @@ extern "C" const char* CrptLadderNames(size_t i)
 	if (i >= kSlots)
 		return nullptr;
 	Names& names = N();
+	if (i >= kStepSlots) { // a probe: "<entry>/<step>#<probe>"
+		size_t p = i - kStepSlots;
+		size_t es = p / kProbeNames;
+		const char* entry = names.entry[es / kSteps].load(std::memory_order_acquire);
+		const char* step = names.step[es].load(std::memory_order_acquire);
+		const char* probe = names.probe[p % kProbeNames].load(std::memory_order_acquire);
+		if (!entry || !step || !probe)
+			return nullptr;
+		std::lock_guard<std::mutex> lock(names.pathLock);
+		std::string& path = names.path[i];
+		if (path.empty()) {
+			path = entry;
+			path += '/';
+			path += step;
+			path += '#';
+			path += probe;
+		}
+		return path.c_str();
+	}
 	size_t es = i / kSpan;
 	size_t sub = i % kSpan;
 	const char* entry = names.entry[es / kSteps].load(std::memory_order_acquire);

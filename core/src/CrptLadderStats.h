@@ -35,7 +35,17 @@ extern "C" {
 // Entry plans x steps per plan x (the step itself + one per sub-plan step).
 #define CRPT_LADDER_ENTRY_PLANS 4
 #define CRPT_LADDER_PLAN_STEPS 16
-#define CRPT_LADDER_SLOTS (CRPT_LADDER_ENTRY_PLANS * CRPT_LADDER_PLAN_STEPS * (1 + CRPT_LADDER_PLAN_STEPS))
+#define CRPT_LADDER_STEP_SLOTS (CRPT_LADDER_ENTRY_PLANS * CRPT_LADDER_PLAN_STEPS * (1 + CRPT_LADDER_PLAN_STEPS))
+
+// Probes: named pieces of work INSIDE a step, e.g. the white-rect search in
+// DetectCRPT's setup. They are addressed by the step that hosts them plus a
+// name -- "sgv1/crpt#whiteRect" -- and live in slots after the step slots, so
+// one snapshot returns both and a reader needs no second call. A probe fired
+// while a sub-plan step is open is charged to its top-level step.
+#define CRPT_LADDER_PROBE_NAMES 8
+#define CRPT_LADDER_PROBE_SLOTS (CRPT_LADDER_ENTRY_PLANS * CRPT_LADDER_PLAN_STEPS * CRPT_LADDER_PROBE_NAMES)
+
+#define CRPT_LADDER_SLOTS (CRPT_LADDER_STEP_SLOTS + CRPT_LADDER_PROBE_SLOTS)
 
 // One step, at one path, since the last CrptLadderReset().
 struct CrptLadderStepStat
@@ -49,6 +59,12 @@ struct CrptLadderStepStat
 	uint64_t nsWon;       // time of the calls that won, decode included
 	uint64_t nsLost;      // time of the calls that did not
 };
+
+// PROBE ROWS (path contains '#') use the same struct but only two fields:
+// `calls` is how often the probe ran and `nsLost` is the total time it took.
+// The outcome counters and nsWon stay 0 -- a probe has no outcome of its own,
+// it is a piece of the step above it. So `calls == noDetection + candidate +
+// won` holds for step rows only.
 
 // Zero the calling thread's table.
 void CrptLadderReset(void);

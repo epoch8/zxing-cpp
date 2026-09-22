@@ -1165,20 +1165,31 @@ namespace ZXing::DataMatrix {
         // Each `return {}` in setup is noted as a bail on the step hosting this
         // detector: its cost then reads as setup failing, not grids failing.
         ResultPoint pointA, pointB, pointC, pointD;
-        if (!DetectWhiteRect(image, pointA, pointB, pointC, pointD)) {
+        bool whiteRect;
+        {
+            CRPT_LADDER_PROBE("whiteRect");
+            whiteRect = DetectWhiteRect(image, pointA, pointB, pointC, pointD);
+        }
+        if (!whiteRect) {
             CRPT_LADDER_NOTE(Bail);
             return {};
         }
 
         // The transitions point into pointA..D, which is why those are members.
-        std::array transitions = {
-                TransitionsBetween(image, pointA, pointB),
-                TransitionsBetween(image, pointA, pointC),
-                TransitionsBetween(image, pointB, pointD),
-                TransitionsBetween(image, pointC, pointD),
-        };
-        std::sort(transitions.begin(), transitions.end(),
-                  [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+        // IIFE: `transitions` must outlive the probe, so the probe cannot simply
+        // be declared next to it -- it would time the rest of the function.
+        std::array transitions = [&] {
+            CRPT_LADDER_PROBE("transitions");
+            std::array t = {
+                    TransitionsBetween(image, pointA, pointB),
+                    TransitionsBetween(image, pointA, pointC),
+                    TransitionsBetween(image, pointB, pointD),
+                    TransitionsBetween(image, pointC, pointD),
+            };
+            std::sort(t.begin(), t.end(),
+                      [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+            return t;
+        }();
 
         // The two sides with the fewest transitions are the L.
         const auto& lSideOne = transitions[0];
@@ -1216,7 +1227,10 @@ namespace ZXing::DataMatrix {
             return {};
         }
 
-        OrderByBestPatterns(c.bottomRight, c.bottomLeft, c.topLeft);
+        {
+            CRPT_LADDER_PROBE("order");
+            OrderByBestPatterns(c.bottomRight, c.bottomLeft, c.topLeft);
+        }
 
         // Top-right is whichever point the L did not touch.
         if (pointCount.find(&pointA) == pointCount.end()) {
@@ -2324,10 +2338,25 @@ namespace ZXing::DataMatrix {
     {
         CrptContext c{{outDecodeResult}, image, warp, needToTraceWarp, correctCorners, gridRefine};
 
-        c.newimage = image.copy();
-        if (!DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD)) {
-			rotateCV45(image, c.newimage);
-			if(!DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD)) {
+        {
+            CRPT_LADDER_PROBE("copy");
+            c.newimage = image.copy();
+        }
+        bool whiteRect;
+        {
+            CRPT_LADDER_PROBE("whiteRect");
+            whiteRect = DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD);
+        }
+        if (!whiteRect) {
+			{
+				CRPT_LADDER_PROBE("rotate45");
+				rotateCV45(image, c.newimage);
+			}
+			{
+				CRPT_LADDER_PROBE("whiteRect");
+				whiteRect = DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD);
+			}
+			if(!whiteRect) {
 				// The bail that makes a second DetectCRPT on the same image
 				// redundant: noted on the hosting step (sgv1/crpt, sgv1/crptWarp).
 				CRPT_LADDER_NOTE(Bail);
@@ -2335,14 +2364,17 @@ namespace ZXing::DataMatrix {
 			}
         }
 
-        c.transitions = {
-                TransitionsBetween(c.newimage, c.pointA, c.pointB),
-                TransitionsBetween(c.newimage, c.pointA, c.pointC),
-                TransitionsBetween(c.newimage, c.pointB, c.pointD),
-                TransitionsBetween(c.newimage, c.pointC, c.pointD),
-        };
-        std::sort(c.transitions.begin(), c.transitions.end(),
-                  [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+        {
+            CRPT_LADDER_PROBE("transitions");
+            c.transitions = {
+                    TransitionsBetween(c.newimage, c.pointA, c.pointB),
+                    TransitionsBetween(c.newimage, c.pointA, c.pointC),
+                    TransitionsBetween(c.newimage, c.pointB, c.pointD),
+                    TransitionsBetween(c.newimage, c.pointC, c.pointD),
+            };
+            std::sort(c.transitions.begin(), c.transitions.end(),
+                      [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+        }
 
         if (c.transitions[0].transitions > 4) {
             possibleResultedDefect = ResultedDefect::LMarker;
