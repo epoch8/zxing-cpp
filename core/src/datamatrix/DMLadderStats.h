@@ -92,6 +92,26 @@ private:
 	TimePoint _t0;
 };
 
+/// One pass of ReadBarcode.cpp's binarization walk: which binarizer, which
+/// pyramid layer (0 = full resolution), closed, inverted. The walk tells it how
+/// many results the pass added (addResults), so the walk row says which pass
+/// produced the result that came back -- for any format, not only DataMatrix.
+class Pass
+{
+public:
+	Pass(int binarizer, int layer, bool close, bool invert) noexcept;
+	~Pass();
+	Pass(const Pass&) = delete;
+	Pass& operator=(const Pass&) = delete;
+
+	void addResults(uint32_t n) noexcept { _results += n; }
+
+private:
+	int _slot; // -1: no slot (a layer or binarizer beyond the table)
+	uint32_t _results = 0;
+	TimePoint _t0;
+};
+
 /// The caller's verdict on the detection parked by the last Detected leave.
 void Settle(bool decoded) noexcept;
 
@@ -107,6 +127,16 @@ void Settle(bool decoded) noexcept;
 #define CRPT_LADDER_PROBE(name) \
 	::ZXing::DataMatrix::ladder::stats::Probe CRPT_LADDER_PROBE_CAT(crptLadderProbe_, __LINE__)(name)
 #define CRPT_LADDER_SETTLE(decoded) ::ZXing::DataMatrix::ladder::stats::Settle(decoded)
+#define CRPT_LADDER_PASS(binarizer, layer, close, invert) \
+	::ZXing::DataMatrix::ladder::stats::Pass crptLadderPass_(static_cast<int>(binarizer), static_cast<int>(layer), close, invert)
+/// After the pass's body: credit it with the valid results it appended to `results` past index `before`.
+#define CRPT_LADDER_PASS_RESULTS(results, before) \
+	do { \
+		uint32_t crptLadderN_ = 0; \
+		for (size_t crptLadderI_ = (before); crptLadderI_ < (results).size(); ++crptLadderI_) \
+			crptLadderN_ += (results)[crptLadderI_].isValid() ? 1 : 0; \
+		crptLadderPass_.addResults(crptLadderN_); \
+	} while (0)
 
 #else // !CRPT_ZXING_PROFILING
 
@@ -117,6 +147,8 @@ void Settle(bool decoded) noexcept;
 #define CRPT_LADDER_NOTE(note) ((void)0)
 #define CRPT_LADDER_PROBE(name) ((void)0)
 #define CRPT_LADDER_SETTLE(decoded) ((void)0)
+#define CRPT_LADDER_PASS(binarizer, layer, close, invert) ((void)0)
+#define CRPT_LADDER_PASS_RESULTS(results, before) ((void)0)
 
 #endif // CRPT_ZXING_PROFILING
 

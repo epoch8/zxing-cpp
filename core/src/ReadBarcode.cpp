@@ -12,6 +12,7 @@
 #include "Pattern.h"
 #include "ThresholdBinarizer.h"
 
+#include "datamatrix/DMLadderStats.h"
 #include "datamatrix/DMReader.h"
 #include "Point.h"
 
@@ -172,7 +173,8 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 
 	Results results;
 	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
-	for (auto&& layer : pyramid.layers) {
+	for (size_t layerIndex = 0; layerIndex < pyramid.layers.size(); ++layerIndex) {
+		auto&& layer = pyramid.layers[layerIndex];
 		auto bitmap = CreateBitmap(hints.binarizer(), layer);
 		for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
 			if (close)
@@ -183,7 +185,16 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 				if (invert)
 					bitmap->invert();
 
-				if (body(*bitmap, layer, close != 0, closedReader.get(), results, maxSymbols))
+				// Ladder attribution: name the pass each returned result came from
+				// (DMLadderStats.h). Compiled out without CRPT_ZXING_PROFILING.
+				bool done;
+				{
+					CRPT_LADDER_PASS(hints.binarizer(), layerIndex, close != 0, invert != 0);
+					[[maybe_unused]] size_t resultsBefore = results.size();
+					done = body(*bitmap, layer, close != 0, closedReader.get(), results, maxSymbols);
+					CRPT_LADDER_PASS_RESULTS(results, resultsBefore);
+				}
+				if (done)
 					return results;
 				if (maxSymbols <= 0)
 					return results;

@@ -24,6 +24,10 @@ constexpr size_t kSteps = CRPT_LADDER_PLAN_STEPS;
 constexpr size_t kSpan = 1 + kSteps; // slots per (entry, step): itself + its sub-plan's steps
 constexpr size_t kStepSlots = CRPT_LADDER_STEP_SLOTS;
 constexpr size_t kProbeNames = CRPT_LADDER_PROBE_NAMES;
+constexpr size_t kProbeSlots = CRPT_LADDER_PROBE_SLOTS;
+constexpr size_t kWalkBase = kStepSlots + kProbeSlots;
+constexpr size_t kWalkBinarizers = CRPT_LADDER_WALK_BINARIZERS;
+constexpr size_t kWalkLayers = CRPT_LADDER_WALK_LAYERS;
 constexpr size_t kSlots = CRPT_LADDER_SLOTS;
 constexpr size_t kMaxDepth = 4;
 
@@ -225,6 +229,37 @@ int ProbeSlot(const char* name) noexcept
 
 } // namespace
 
+namespace {
+
+int WalkSlot(int binarizer, int layer, bool close, bool invert) noexcept
+{
+	if (binarizer < 0 || static_cast<size_t>(binarizer) >= kWalkBinarizers || layer < 0 ||
+		static_cast<size_t>(layer) >= kWalkLayers)
+		return -1;
+	size_t i = ((static_cast<size_t>(binarizer) * kWalkLayers + static_cast<size_t>(layer)) * 2 + close) * 2 + invert;
+	return static_cast<int>(kWalkBase + i);
+}
+
+} // namespace
+
+Pass::Pass(int binarizer, int layer, bool close, bool invert) noexcept
+	: _slot(WalkSlot(binarizer, layer, close, invert)), _t0(Now())
+{
+	if (_slot < 0)
+		++t.dropped;
+}
+
+Pass::~Pass()
+{
+	if (_slot < 0)
+		return;
+	uint64_t ns = Since(_t0);
+	CrptLadderStepStat& s = t.table[_slot];
+	++s.calls;
+	s.won += _results;
+	(_results ? s.nsWon : s.nsLost) += ns;
+}
+
 Probe::Probe(const char* name) noexcept : _name(name), _t0(Now()) {}
 
 Probe::~Probe()
@@ -286,6 +321,23 @@ extern "C" const char* CrptLadderNames(size_t i)
 	if (i >= kSlots)
 		return nullptr;
 	Names& names = N();
+	if (i >= kWalkBase) { // a walk pass: "@<binarizer>:L<layer>[+close][+inv]"
+		static const char* const kBinarizers[kWalkBinarizers] = {"LocalAverage", "GlobalHistogram",
+																 "FixedThreshold", "BoolCast"};
+		std::lock_guard<std::mutex> lock(names.pathLock);
+		std::string& path = names.path[i];
+		if (path.empty()) {
+			size_t w = i - kWalkBase;
+			bool invert = w % 2, close = (w / 2) % 2;
+			size_t layer = (w / 4) % kWalkLayers, binarizer = w / 4 / kWalkLayers;
+			path = std::string("@") + kBinarizers[binarizer] + ":L" + std::to_string(layer);
+			if (close)
+				path += "+close";
+			if (invert)
+				path += "+inv";
+		}
+		return path.c_str();
+	}
 	if (i >= kStepSlots) { // a probe: "<entry>/<step>#<probe>"
 		size_t p = i - kStepSlots;
 		size_t es = p / kProbeNames;

@@ -45,7 +45,17 @@ extern "C" {
 #define CRPT_LADDER_PROBE_NAMES 8
 #define CRPT_LADDER_PROBE_SLOTS (CRPT_LADDER_ENTRY_PLANS * CRPT_LADDER_PLAN_STEPS * CRPT_LADDER_PROBE_NAMES)
 
-#define CRPT_LADDER_SLOTS (CRPT_LADDER_STEP_SLOTS + CRPT_LADDER_PROBE_SLOTS)
+// Walk passes: ReadBarcode.cpp's WalkBinarizations runs its reader once per
+// (pyramid layer x close x invert) pass of one binarizer, so one decode call can
+// run the DataMatrix ladder several times, and the step rows sum those runs. A
+// walk row names the pass -- "@LocalAverage:L0", "@LocalAverage:L0+inv",
+// "@LocalAverage:L1+close" -- whatever the format. Layer 0 is full resolution;
+// each further layer is downscaled by the hints' factor.
+#define CRPT_LADDER_WALK_BINARIZERS 4 // the DecodeHints Binarizer enum
+#define CRPT_LADDER_WALK_LAYERS 8
+#define CRPT_LADDER_WALK_SLOTS (CRPT_LADDER_WALK_BINARIZERS * CRPT_LADDER_WALK_LAYERS * 2 * 2)
+
+#define CRPT_LADDER_SLOTS (CRPT_LADDER_STEP_SLOTS + CRPT_LADDER_PROBE_SLOTS + CRPT_LADDER_WALK_SLOTS)
 
 // One step, at one path, since the last CrptLadderReset().
 struct CrptLadderStepStat
@@ -60,11 +70,21 @@ struct CrptLadderStepStat
 	uint64_t nsLost;      // time of the calls that did not
 };
 
-// PROBE ROWS (path contains '#') use the same struct but only two fields:
-// `calls` is how often the probe ran and `nsLost` is the total time it took.
-// The outcome counters and nsWon stay 0 -- a probe has no outcome of its own,
-// it is a piece of the step above it. So `calls == noDetection + candidate +
-// won` holds for step rows only.
+// Three kinds of row share the struct; tell them apart by the path.
+//
+// STEP rows ("sgv1/crpt", "sgv1/crpt/lmarker[0]") use every field, and
+// `calls == noDetection + candidate + won` holds for them.
+//
+// PROBE rows (path contains '#') use two fields: `calls` is how often the probe
+// ran and `nsLost` is the total time it took. A probe has no outcome of its own;
+// it is a piece of the step above it.
+//
+// WALK rows (path starts with '@') use four: `calls` is how many times the pass
+// ran, `won` how many results it added to what the walk returns (valid ones,
+// after the walk's dedup -- so a symbol decoded again on a later pass counts
+// once, on the pass that found it first), and nsWon / nsLost the time of the
+// passes that did / did not add one. That time is the pass's whole body: the
+// reader, plus the binarization on a layer's first pass.
 
 // Zero the calling thread's table.
 void CrptLadderReset(void);
