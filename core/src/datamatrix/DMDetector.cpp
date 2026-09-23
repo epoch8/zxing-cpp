@@ -2280,6 +2280,60 @@ namespace ZXing::DataMatrix {
     // runner as the entry-point plans. Per-variant attribution falls out of the
     // runner instead of out of hand-placed counters.
 
+    // ---- Locator "crptWhiteRect": DetectCRPT's setup, as a stage ------------------
+    //
+    // Find the white rectangle round the symbol on a copy of the image; failing
+    // that, on the copy rotated by 45 degrees. Its product: the image the
+    // rectangle was found on, the four corners, and the four sides' transition
+    // counts sorted fewest first. The transitions point INTO the corners, so a
+    // CrptSetup never moves or copies; everything downstream refers to it.
+    struct CrptSetup
+    {
+        bool found = false;
+        BitMatrix image;
+        ResultPoint pointA, pointB, pointC, pointD;
+        std::array<ResultPointsAndTransitions, 4> transitions;
+
+        CrptSetup() = default;
+        CrptSetup(const CrptSetup&) = delete;
+        CrptSetup& operator=(const CrptSetup&) = delete;
+    };
+
+    static void LocateCrptWhiteRect(const BitMatrix& image, CrptSetup& s)
+    {
+        {
+            CRPT_LADDER_PROBE("copy");
+            s.image = image.copy();
+        }
+        {
+            CRPT_LADDER_PROBE("whiteRect");
+            s.found = DetectWhiteRect(s.image, s.pointA, s.pointB, s.pointC, s.pointD);
+        }
+        if (!s.found) {
+            {
+                CRPT_LADDER_PROBE("rotate45");
+                rotateCV45(image, s.image);
+            }
+            {
+                CRPT_LADDER_PROBE("whiteRect");
+                s.found = DetectWhiteRect(s.image, s.pointA, s.pointB, s.pointC, s.pointD);
+            }
+            if (!s.found)
+                return;
+        }
+        {
+            CRPT_LADDER_PROBE("transitions");
+            s.transitions = {
+                    TransitionsBetween(s.image, s.pointA, s.pointB),
+                    TransitionsBetween(s.image, s.pointA, s.pointC),
+                    TransitionsBetween(s.image, s.pointB, s.pointD),
+                    TransitionsBetween(s.image, s.pointC, s.pointD),
+            };
+            std::sort(s.transitions.begin(), s.transitions.end(),
+                      [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+        }
+    }
+
     struct CrptContext : ladder::State
     {
         const BitMatrix& image;
@@ -2288,11 +2342,8 @@ namespace ZXing::DataMatrix {
         bool correctCorners;
         DMGridRefineOptions gridRefine;
 
-        // Setup's products. The transitions point INTO the four ResultPoints,
-        // so those live here rather than as setup locals.
-        BitMatrix newimage;
-        ResultPoint pointA, pointB, pointC, pointD;
-        std::array<ResultPointsAndTransitions, 4> transitions;
+        // The locator's product: the rectangle, its image, its sides.
+        const CrptSetup& setup;
 
         // Scratch the variants draw into. One BitMatrix for both phases, as
         // before: the L-marker variants copy newimage into it, the bottle
@@ -2310,10 +2361,11 @@ namespace ZXing::DataMatrix {
     // DetectNew on that.
     static DetectorResult CrptLMarker(CrptContext& c, int n2)
     {
-        c.newimage.copyTo(c.img2);
+        c.setup.image.copyTo(c.img2);
         auto mat = c.img2.asMat();
-        line3(mat, c.transitions[0].from->x(), c.transitions[0].from->y(), c.transitions[0].to->x(), c.transitions[0].to->y());
-        line3(mat, c.transitions[n2].from->x(), c.transitions[n2].from->y(), c.transitions[n2].to->x(), c.transitions[n2].to->y());
+        const auto& t = c.setup.transitions;
+        line3(mat, t[0].from->x(), t[0].from->y(), t[0].to->x(), t[0].to->y());
+        line3(mat, t[n2].from->x(), t[n2].from->y(), t[n2].to->x(), t[n2].to->y());
         return DetectNew(c.img2, true, true, c.warp, c.needToTraceWarp, c.correctCorners, c.gridRefine);
     }
     static DetectorResult CrptLMarker0(CrptContext& c, bool&) { return CrptLMarker(c, 1); }
@@ -2363,47 +2415,17 @@ namespace ZXing::DataMatrix {
     static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect, Warp* warp = nullptr, bool needToTraceWarp = false, bool correctCorners = false,
 									 DMGridRefineOptions gridRefine = {})
     {
-        CrptContext c{{outDecodeResult}, image, warp, needToTraceWarp, correctCorners, gridRefine};
+        CrptSetup setup;
+        LocateCrptWhiteRect(image, setup);
+        if (!setup.found) {
+            // The bail that makes a second DetectCRPT on the same image
+            // redundant: noted on the hosting step (sgv1/crpt, sgv1/crptWarp).
+            CRPT_LADDER_NOTE(Bail);
+            return {};
+        }
+        CrptContext c{{outDecodeResult}, image, warp, needToTraceWarp, correctCorners, gridRefine, setup};
 
-        {
-            CRPT_LADDER_PROBE("copy");
-            c.newimage = image.copy();
-        }
-        bool whiteRect;
-        {
-            CRPT_LADDER_PROBE("whiteRect");
-            whiteRect = DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD);
-        }
-        if (!whiteRect) {
-			{
-				CRPT_LADDER_PROBE("rotate45");
-				rotateCV45(image, c.newimage);
-			}
-			{
-				CRPT_LADDER_PROBE("whiteRect");
-				whiteRect = DetectWhiteRect(c.newimage, c.pointA, c.pointB, c.pointC, c.pointD);
-			}
-			if(!whiteRect) {
-				// The bail that makes a second DetectCRPT on the same image
-				// redundant: noted on the hosting step (sgv1/crpt, sgv1/crptWarp).
-				CRPT_LADDER_NOTE(Bail);
-				return {};
-			}
-        }
-
-        {
-            CRPT_LADDER_PROBE("transitions");
-            c.transitions = {
-                    TransitionsBetween(c.newimage, c.pointA, c.pointB),
-                    TransitionsBetween(c.newimage, c.pointA, c.pointC),
-                    TransitionsBetween(c.newimage, c.pointB, c.pointD),
-                    TransitionsBetween(c.newimage, c.pointC, c.pointD),
-            };
-            std::sort(c.transitions.begin(), c.transitions.end(),
-                      [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
-        }
-
-        if (c.transitions[0].transitions > 4) {
+        if (setup.transitions[0].transitions > 4) {
             possibleResultedDefect = ResultedDefect::LMarker;
         }
 
