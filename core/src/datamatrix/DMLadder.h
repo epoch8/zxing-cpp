@@ -19,10 +19,15 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+
+namespace ZXing::DataMatrix {
+struct CrptSetup; // DMDetector.cpp: the product of the locator crptWhiteRect
+}
 
 namespace ZXing::DataMatrix::ladder {
 
@@ -251,6 +256,10 @@ struct Context : State
 	/// The caller-supplied symbol quadrilateral, for plans that have one
 	/// (DetectDefined). Unused otherwise.
 	std::array<PointF, 4> corners{};
+	/// The locator crptWhiteRect's product for `image`, computed by the plan's
+	/// first DetectCRPT step and reused by the next one (crpt, then crptWarp):
+	/// both locate on the same pixels, and the locator is a pure function of them.
+	std::shared_ptr<CrptSetup> crptSetup;
 };
 
 /**

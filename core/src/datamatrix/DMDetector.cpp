@@ -2289,6 +2289,7 @@ namespace ZXing::DataMatrix {
     // CrptSetup never moves or copies; everything downstream refers to it.
     struct CrptSetup
     {
+        const BitMatrix* source = nullptr; ///< the image it was located on: what a reuse must match
         bool found = false;
         BitMatrix image;
         ResultPoint pointA, pointB, pointC, pointD;
@@ -2301,6 +2302,7 @@ namespace ZXing::DataMatrix {
 
     static void LocateCrptWhiteRect(const BitMatrix& image, CrptSetup& s)
     {
+        s.source = &image;
         {
             CRPT_LADDER_PROBE("copy");
             s.image = image.copy();
@@ -2412,11 +2414,19 @@ namespace ZXing::DataMatrix {
         {"bottle[3]",     CrptBottle3},
     };
 
-    static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect, Warp* warp = nullptr, bool needToTraceWarp = false, bool correctCorners = false,
-									 DMGridRefineOptions gridRefine = {})
+    // `located` is the plan's memo of the locator (ladder::Context::crptSetup):
+    // the first DetectCRPT of a plan run fills it, a later one on the same image
+    // reuses it -- a bail included, which is the "skip the redundant DetectCRPT"
+    // of checking_speed / variant 1, here as a consequence rather than a rule.
+    static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect,
+                                     std::shared_ptr<CrptSetup>& located, Warp* warp = nullptr, bool needToTraceWarp = false,
+                                     bool correctCorners = false, DMGridRefineOptions gridRefine = {})
     {
-        CrptSetup setup;
-        LocateCrptWhiteRect(image, setup);
+        if (!located || located->source != &image) {
+            located = std::make_shared<CrptSetup>();
+            LocateCrptWhiteRect(image, *located);
+        }
+        const CrptSetup& setup = *located;
         if (!setup.found) {
             // The bail that makes a second DetectCRPT on the same image
             // redundant: noted on the hosting step (sgv1/crpt, sgv1/crptWarp).
@@ -2518,15 +2528,16 @@ static DetectorResult PhaseNewWarp(ladder::Context& ctx, bool& /*decodedInside*/
 static DetectorResult PhaseCrpt(ladder::Context& ctx, bool& decodedInside)
 {
     decodedInside = true;
-    return DetectCRPT(ctx.image, ctx.dec, ctx.crptDefect, nullptr, false, false, ctx.gridRefine);
+    return DetectCRPT(ctx.image, ctx.dec, ctx.crptDefect, ctx.crptSetup, nullptr, false, false, ctx.gridRefine);
 }
 
-// DetectCRPT on a copy, with the warp the preceding PhaseNewWarp traced.
-// Decodes internally.
+// DetectCRPT with the warp the preceding PhaseNewWarp traced. On ctx.image
+// itself, not a copy as it used to be: DetectCRPT only reads its image, and the
+// same image is what lets it reuse the locator PhaseCrpt already ran.
 static DetectorResult PhaseCrptWarp(ladder::Context& ctx, bool& decodedInside)
 {
     decodedInside = true;
-    return DetectCRPT(ctx.image.copy(), ctx.dec, ctx.crptDefect, &ctx.warp, true, false, ctx.gridRefine);
+    return DetectCRPT(ctx.image, ctx.dec, ctx.crptDefect, ctx.crptSetup, &ctx.warp, true, false, ctx.gridRefine);
 }
 
 const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
