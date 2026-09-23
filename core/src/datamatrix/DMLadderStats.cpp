@@ -28,6 +28,7 @@ constexpr size_t kProbeSlots = CRPT_LADDER_PROBE_SLOTS;
 constexpr size_t kWalkBase = kStepSlots + kProbeSlots;
 constexpr size_t kWalkBinarizers = CRPT_LADDER_WALK_BINARIZERS;
 constexpr size_t kWalkLayers = CRPT_LADDER_WALK_LAYERS;
+constexpr size_t kWalkSetupBase = kWalkBase + CRPT_LADDER_WALK_SLOTS;
 constexpr size_t kSlots = CRPT_LADDER_SLOTS;
 constexpr size_t kMaxDepth = 4;
 
@@ -235,6 +236,14 @@ Pass::~Pass()
 	(_results ? s.nsWon : s.nsLost) += ns;
 }
 
+WalkSetupProbe::~WalkSetupProbe()
+{
+	uint64_t ns = Since(_t0);
+	CrptLadderStepStat& s = t.table[kWalkSetupBase + static_cast<size_t>(_what)];
+	++s.calls;
+	s.nsLost += ns; // a probe row: its whole time here
+}
+
 Probe::Probe(const char* name) noexcept : _name(name), _t0(Now()) {}
 
 Probe::~Probe()
@@ -285,6 +294,11 @@ extern "C" const char* CrptLadderNames(size_t i)
 	if (i >= kSlots)
 		return nullptr;
 	Names& names = N();
+	if (i >= kWalkSetupBase) { // walk setup: "@setup#<what>", in WalkSetup order
+		static const char* const kSetup[CRPT_LADDER_WALK_SETUP_SLOTS] = {"@setup#lum", "@setup#pyramid", "@setup#close",
+																		 "@setup#invert"};
+		return kSetup[i - kWalkSetupBase];
+	}
 	if (i >= kWalkBase) { // a walk pass: "@<binarizer>:L<layer>[+close][+inv]"
 		static const char* const kBinarizers[kWalkBinarizers] = {"LocalAverage", "GlobalHistogram",
 																 "FixedThreshold", "BoolCast"};

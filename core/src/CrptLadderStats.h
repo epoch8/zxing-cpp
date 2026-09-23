@@ -55,7 +55,13 @@ extern "C" {
 #define CRPT_LADDER_WALK_LAYERS 8
 #define CRPT_LADDER_WALK_SLOTS (CRPT_LADDER_WALK_BINARIZERS * CRPT_LADDER_WALK_LAYERS * 2 * 2)
 
-#define CRPT_LADDER_SLOTS (CRPT_LADDER_STEP_SLOTS + CRPT_LADDER_PROBE_SLOTS + CRPT_LADDER_WALK_SLOTS)
+// Walk setup: the work ReadBarcodes does around its passes rather than in them
+// -- "@setup#lum" (the input to luminance, once per call), "@setup#pyramid"
+// (the downscaled layers, once per call), "@setup#close" and "@setup#invert"
+// (the bitmap operations between passes). Probe rows: calls and nsLost only.
+#define CRPT_LADDER_WALK_SETUP_SLOTS 4
+
+#define CRPT_LADDER_SLOTS (CRPT_LADDER_STEP_SLOTS + CRPT_LADDER_PROBE_SLOTS + CRPT_LADDER_WALK_SLOTS + CRPT_LADDER_WALK_SETUP_SLOTS)
 
 // One step, at one path, since the last CrptLadderReset().
 struct CrptLadderStepStat

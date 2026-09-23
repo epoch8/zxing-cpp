@@ -109,6 +109,29 @@ private:
 	TimePoint _t0;
 };
 
+/// Work the binarization walk does outside its passes (CrptLadderStats.h,
+/// "@setup#..."): timed like a probe, but it needs no hosting step.
+enum class WalkSetup : uint8_t
+{
+	Lum,
+	Pyramid,
+	Close,
+	Invert,
+};
+
+class WalkSetupProbe
+{
+public:
+	explicit WalkSetupProbe(WalkSetup what) noexcept : _what(what), _t0(Now()) {}
+	~WalkSetupProbe();
+	WalkSetupProbe(const WalkSetupProbe&) = delete;
+	WalkSetupProbe& operator=(const WalkSetupProbe&) = delete;
+
+private:
+	WalkSetup _what;
+	TimePoint _t0;
+};
+
 } // namespace stats
 
 #define CRPT_LADDER_CLOCK() ::ZXing::DataMatrix::ladder::stats::Now()
@@ -120,6 +143,9 @@ private:
 #define CRPT_LADDER_PROBE_CAT(a, b) CRPT_LADDER_PROBE_CAT_(a, b)
 #define CRPT_LADDER_PROBE(name) \
 	::ZXing::DataMatrix::ladder::stats::Probe CRPT_LADDER_PROBE_CAT(crptLadderProbe_, __LINE__)(name)
+#define CRPT_LADDER_WALK_SETUP(what) \
+	::ZXing::DataMatrix::ladder::stats::WalkSetupProbe CRPT_LADDER_PROBE_CAT(crptLadderWalkSetup_, __LINE__)( \
+		::ZXing::DataMatrix::ladder::stats::WalkSetup::what)
 #define CRPT_LADDER_PASS(binarizer, layer, close, invert) \
 	::ZXing::DataMatrix::ladder::stats::Pass crptLadderPass_(static_cast<int>(binarizer), static_cast<int>(layer), close, invert)
 /// After the pass's body: credit it with the valid results it appended to `results` past index `before`.
@@ -139,6 +165,7 @@ private:
 #define CRPT_LADDER_LEAVE(outcome, t0) ((void)0)
 #define CRPT_LADDER_NOTE(note) ((void)0)
 #define CRPT_LADDER_PROBE(name) ((void)0)
+#define CRPT_LADDER_WALK_SETUP(what) ((void)0)
 #define CRPT_LADDER_PASS(binarizer, layer, close, invert) ((void)0)
 #define CRPT_LADDER_PASS_RESULTS(results, before) ((void)0)
 

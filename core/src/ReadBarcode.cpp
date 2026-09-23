@@ -169,7 +169,10 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 		closedReader = std::make_unique<MultiFormatReader>(closedHints);
 	}
 
-	LumImagePyramid pyramid(iv, hints.downscaleThreshold() * hints.tryDownscale(), hints.downscaleFactor());
+	LumImagePyramid pyramid = [&] {
+		CRPT_LADDER_WALK_SETUP(Pyramid);
+		return LumImagePyramid(iv, hints.downscaleThreshold() * hints.tryDownscale(), hints.downscaleFactor());
+	}();
 
 	Results results;
 	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
@@ -177,13 +180,17 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 		auto&& layer = pyramid.layers[layerIndex];
 		auto bitmap = CreateBitmap(hints.binarizer(), layer);
 		for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
-			if (close)
+			if (close) {
+				CRPT_LADDER_WALK_SETUP(Close);
 				bitmap->close();
+			}
 
 			// TODO: check if closing after invert would be beneficial
 			for (int invert = 0; invert <= static_cast<int>(hints.tryInvert() && !close); ++invert) {
-				if (invert)
+				if (invert) {
+					CRPT_LADDER_WALK_SETUP(Invert);
 					bitmap->invert();
+				}
 
 				// Ladder attribution: name the pass each returned result came from
 				// (DMLadderStats.h). Compiled out without CRPT_ZXING_PROFILING.
@@ -210,7 +217,10 @@ Results ReadBarcodes(const ImageView& _iv, const DecodeHints& hints)
 	ThrowIfTooLarge(_iv, hints);
 
 	LumImage lum;
-	ImageView iv = SetupLumImageView(_iv, lum, hints);
+	ImageView iv = [&] {
+		CRPT_LADDER_WALK_SETUP(Lum);
+		return SetupLumImageView(_iv, lum, hints);
+	}();
 	MultiFormatReader reader(hints);
 
 	if (hints.isPure())
@@ -236,7 +246,10 @@ Results readbarcodescrpt_detector_v1_samplegridv1(const ImageView& _iv, const Po
 	ThrowIfTooLarge(_iv, hints);
 
 	LumImage lum;
-	ImageView iv = SetupLumImageView(_iv, lum, hints);
+	ImageView iv = [&] {
+		CRPT_LADDER_WALK_SETUP(Lum);
+		return SetupLumImageView(_iv, lum, hints);
+	}();
 
 	auto reader = std::make_unique<ZXing::DataMatrix::Reader>(hints);
 
@@ -268,7 +281,10 @@ Results readbarcodescrpt_samplegridv1(const ImageView& _iv, const DecodeHints& h
 	ThrowIfTooLarge(_iv, hints);
 
 	LumImage lum;
-	ImageView iv = SetupLumImageView(_iv, lum, hints);
+	ImageView iv = [&] {
+		CRPT_LADDER_WALK_SETUP(Lum);
+		return SetupLumImageView(_iv, lum, hints);
+	}();
 
 	auto reader = std::make_unique<ZXing::DataMatrix::DMCRPTReader>(hints);
 
