@@ -21,7 +21,7 @@ namespace DataMatrix {
 
 using DetectorResults = DetectorResult;
 
-DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure,
+DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
 					   DMGridRefineOptions gridRefine = {}, const ladder::Spec& spec = ladder::Spec{});
 
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,

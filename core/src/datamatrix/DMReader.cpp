@@ -7,9 +7,7 @@
 #include "DMReader.h"
 
 #include "BinaryBitmap.h"
-#include "DMDecoder.h"
 #include "DMDetector.h"
-#include "DMLadderStats.h"
 #include "DecodeHints.h"
 #include "DecoderResult.h"
 #include "DetectorResult.h"
@@ -25,13 +23,13 @@ Result Reader::decode(const BinaryBitmap& image) const
 	if (binImg == nullptr)
 		return {};
 
-	auto detectorResult = Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine(), ladder::ParseSpec(_hints.dmLadder()));
+	// The stock plan decodes the detection it ends on (FirstValidDetection), so
+	// the reader only wraps what comes back.
+	DecoderResult decoderResult;
+	auto detectorResult = Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult, _hints.dmGridRefine(),
+								 ladder::ParseSpec(_hints.dmLadder()));
 	if (!detectorResult.isValid())
 		return {};
-
-	DecoderResult decoderResult = Decode(detectorResult.bits());
-	// The stock plan wins on a detection; whether it read is decided here.
-	CRPT_LADDER_SETTLE(decoderResult.isValid());
 	Result res = Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 	res.setResultedDefect(detectorResult.resultedDefect());
 	return res;
@@ -64,9 +62,9 @@ Result DMCRPTReader::decode(const BinaryBitmap& image) const
 	auto detectorResult = DetectSamplegridV1(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult,
 											 _hints.dmGridRefine(), ladder::ParseSpec(_hints.dmLadder()));
 
-	if (!decoderResult.isValid() && detectorResult.isValid()) {
-		decoderResult = Decode(detectorResult.bits());
-	}
+	// No re-decode: the plan decodes what it returns valid (DecodeToWin), and
+	// when nothing wins it returns empty bits (EmptyWithCandidate), so a valid
+	// detection with an undecoded result cannot come back from it.
 
 	Result res = Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 	res.setResultedDefect(detectorResult.resultedDefect());

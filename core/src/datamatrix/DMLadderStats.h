@@ -30,9 +30,6 @@ enum class Outcome : uint8_t
 	NoDetection, ///< ran, nothing valid came back
 	Candidate,   ///< a valid detection that did not decode
 	Won,         ///< decoded
-	/// A valid detection under FirstValidDetection: the caller decodes it, so
-	/// won or candidate is only known once the caller settles it.
-	Detected,
 };
 
 /// Something a detector knows about the step hosting it that the runner does not.
@@ -112,9 +109,6 @@ private:
 	TimePoint _t0;
 };
 
-/// The caller's verdict on the detection parked by the last Detected leave.
-void Settle(bool decoded) noexcept;
-
 } // namespace stats
 
 #define CRPT_LADDER_CLOCK() ::ZXing::DataMatrix::ladder::stats::Now()
@@ -126,7 +120,6 @@ void Settle(bool decoded) noexcept;
 #define CRPT_LADDER_PROBE_CAT(a, b) CRPT_LADDER_PROBE_CAT_(a, b)
 #define CRPT_LADDER_PROBE(name) \
 	::ZXing::DataMatrix::ladder::stats::Probe CRPT_LADDER_PROBE_CAT(crptLadderProbe_, __LINE__)(name)
-#define CRPT_LADDER_SETTLE(decoded) ::ZXing::DataMatrix::ladder::stats::Settle(decoded)
 #define CRPT_LADDER_PASS(binarizer, layer, close, invert) \
 	::ZXing::DataMatrix::ladder::stats::Pass crptLadderPass_(static_cast<int>(binarizer), static_cast<int>(layer), close, invert)
 /// After the pass's body: credit it with the valid results it appended to `results` past index `before`.
@@ -146,7 +139,6 @@ void Settle(bool decoded) noexcept;
 #define CRPT_LADDER_LEAVE(outcome, t0) ((void)0)
 #define CRPT_LADDER_NOTE(note) ((void)0)
 #define CRPT_LADDER_PROBE(name) ((void)0)
-#define CRPT_LADDER_SETTLE(decoded) ((void)0)
 #define CRPT_LADDER_PASS(binarizer, layer, close, invert) ((void)0)
 #define CRPT_LADDER_PASS_RESULTS(results, before) ((void)0)
 

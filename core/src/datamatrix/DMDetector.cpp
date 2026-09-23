@@ -455,11 +455,6 @@ namespace ZXing::DataMatrix {
                           { Rectangle(width, height, 0.5), {topLeft, topRight, bottomRight, bottomLeft} });
     }
 
-	static DecoderResult DecodeResult(const DetectorResult& det)
-	{
-		return Decode(det.bits());
-	}
-
 	/**
 	 * Targeted grid refine using Reed-Solomon error locations.
 	 * Mis-sampled modules (from corrected codewords) are re-sampled with a small shared
@@ -1093,27 +1088,21 @@ namespace ZXing::DataMatrix {
 
     using OldStep = ladder::Step<OldContext>;
 
-    // The original decoded every grid, valid or not, into the out-parameter --
-    // Decode() on empty bits yields "Empty DM", not a throw -- and returned on
-    // success. Kept as is so the out-parameter's content matches exactly;
-    // letting the runner skip empty grids is a later, measured tightening.
-    static DetectorResult OldGridDecoded(OldContext& c, DetectorResult res, bool& decodedInside)
-    {
-        decodedInside = true;
-        c.dec = DecodeResult(res);
-        return res;
-    }
+    // The grid steps return their sample; the runner decodes it. (The original
+    // decoded every grid itself, empty ones too -- Decode() on empty bits yields
+    // "Empty DM" -- which only set the error text of a read that failed anyway,
+    // and nothing downstream reads that.)
 
     // grid[0]: bottom-right and top-right pushed out one module along the bottom and top.
-    static DetectorResult OldGrid0(OldContext& c, bool& decodedInside)
+    static DetectorResult OldGrid0(OldContext& c, bool&)
     {
-        return OldGridDecoded(c, SampleGrid(c.image, *c.topLeft, *c.bottomLeft, *c.bottomRight + c.DirBottomLR, *c.topRight + c.DirTopLR, c.dimensionTop, c.dimensionRight), decodedInside);
+        return SampleGrid(c.image, *c.topLeft, *c.bottomLeft, *c.bottomRight + c.DirBottomLR, *c.topRight + c.DirTopLR, c.dimensionTop, c.dimensionRight);
     }
 
     // grid[1]: top-left and top-right pushed up one module along the sides.
-    static DetectorResult OldGrid1(OldContext& c, bool& decodedInside)
+    static DetectorResult OldGrid1(OldContext& c, bool&)
     {
-        return OldGridDecoded(c, SampleGrid(c.image, *c.topLeft + c.DirLeftBT, *c.bottomLeft, *c.bottomRight, *c.topRight + c.DirRightBT, c.dimensionTop, c.dimensionRight), decodedInside);
+        return SampleGrid(c.image, *c.topLeft + c.DirLeftBT, *c.bottomLeft, *c.bottomRight, *c.topRight + c.DirRightBT, c.dimensionTop, c.dimensionRight);
     }
 
     // Re-derive the top-right corner from the L, and the two directions that
@@ -1127,25 +1116,25 @@ namespace ZXing::DataMatrix {
     }
 
     // grid[2]: corrected top-right; top-left and bottom-left pulled back one module along the top and bottom.
-    static DetectorResult OldGrid2(OldContext& c, bool& decodedInside)
+    static DetectorResult OldGrid2(OldContext& c, bool&)
     {
-        return OldGridDecoded(c, SampleGrid(c.image, *c.topLeft - c.DirTopLR, *c.bottomLeft - c.DirBottomLR, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight), decodedInside);
+        return SampleGrid(c.image, *c.topLeft - c.DirTopLR, *c.bottomLeft - c.DirBottomLR, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight);
     }
 
     // grid[3]: corrected top-right; bottom-left and bottom-right pulled down one module along the sides.
-    static DetectorResult OldGrid3(OldContext& c, bool& decodedInside)
+    static DetectorResult OldGrid3(OldContext& c, bool&)
     {
-        return OldGridDecoded(c, SampleGrid(c.image, *c.topLeft, *c.bottomLeft - c.DirLeftBT, *c.bottomRight - c.DirRightBT, c.correctedTopRight, c.dimensionTop, c.dimensionRight), decodedInside);
+        return SampleGrid(c.image, *c.topLeft, *c.bottomLeft - c.DirLeftBT, *c.bottomRight - c.DirRightBT, c.correctedTopRight, c.dimensionTop, c.dimensionRight);
     }
 
     // The plain corners with the corrected top-right, through the offset-testing
     // sampler (which refines on its own). Its decode result is handed back
     // whatever it is; reaching this step is what clears correctedOffset.
-    static DetectorResult OldTestOffsetGrid(OldContext& c, bool& decodedInside)
+    static DetectorResult OldTestOffsetGrid(OldContext& c, bool&)
     {
         c.correctedOffset = false;
-        return OldGridDecoded(c, SampleGridTestOffseted(c.image, *c.topLeft, *c.bottomLeft, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight,
-                                                        c.gridRefine), decodedInside);
+        return SampleGridTestOffseted(c.image, *c.topLeft, *c.bottomLeft, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight,
+                                                        c.gridRefine);
     }
 
     static const OldStep kOldPlan[] = {
@@ -2505,7 +2494,7 @@ static DetectorResult PhaseDefinedGrid(ladder::Context& ctx, bool& decodedInside
         auto warp = ComputeWarp(image, TL, BL, BR, TR, dim, dim, dim);
         detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim, warp);
         if (detRes.isValid()) {
-            ctx.dec = DecodeResult(detRes);
+            ctx.dec = ctx.decode(detRes.bits());
             if (ctx.dec.isValid()) {
                 return detRes;
             }
@@ -2629,14 +2618,19 @@ static ladder::Context MakeContext(const BitMatrix& image, bool tryHarder, bool 
     return ctx;
 }
 
-DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DMGridRefineOptions gridRefine,
-                       const ladder::Spec& spec)
+DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
+                       DMGridRefineOptions gridRefine, const ladder::Spec& spec)
 {
-    if (isPure)
-        return DetectPure(image);
+    if (isPure) {
+        // One detector, nothing competing: not a plan. Decoded through the same
+        // Decoder stage the plans use, so every entry point returns its decode.
+        DetectorResult det = DetectPure(image);
+        if (det.isValid())
+            outDecoderResult = ladder::CurrentDecoder()(det.bits());
+        return det;
+    }
 
-    DecoderResult discarded;
-    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, discarded);
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, outDecoderResult);
     return ladder::RunLadder("stock", kStockPlan, spec, ctx, ladder::Policy::FirstValidDetection);
 }
 

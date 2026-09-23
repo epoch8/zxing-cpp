@@ -52,16 +52,13 @@ Names& N()
 	return names;
 }
 
-// Per thread, and all-zero initialised so it costs no constructor: slots and
-// pending are stored +1, with 0 meaning none.
+// Per thread, and all-zero initialised so it costs no constructor: slots are
+// stored +1, with 0 meaning none.
 struct ThreadState
 {
 	CrptLadderStepStat table[kSlots];
 	int frame[kMaxDepth]; // slot + 1 of each open step, outermost first
 	uint32_t depth;       // open steps, including any beyond kMaxDepth
-	int pending;          // slot + 1 of a Detected run awaiting Settle
-	uint64_t pendingNs;
-	int64_t pendingT0;
 	uint32_t dropped;
 	const char* lastPlan; // the last entry plan looked up, and its index + 1
 	int lastEntry;
@@ -142,7 +139,6 @@ void Add(int slot, Outcome outcome, uint64_t ns) noexcept
 	case Outcome::Skipped: ++s.skipped; return;
 	case Outcome::NoDetection: ++s.noDetection; break;
 	case Outcome::Candidate: ++s.candidate; break;
-	case Outcome::Detected: ++s.candidate; break; // only reached through a flush
 	case Outcome::Won:
 		++s.calls;
 		++s.won;
@@ -151,15 +147,6 @@ void Add(int slot, Outcome outcome, uint64_t ns) noexcept
 	}
 	++s.calls;
 	s.nsLost += ns;
-}
-
-// A Detected run nobody settled counts as a candidate, timed to its detection.
-void FlushPending() noexcept
-{
-	if (t.pending) {
-		Add(t.pending - 1, Outcome::Candidate, t.pendingNs);
-		t.pending = 0;
-	}
 }
 
 } // namespace
@@ -188,19 +175,7 @@ void Frame::leave(Outcome outcome, TimePoint t0) noexcept
 	_open = false;
 	--t.depth;
 	int slot = t.depth < kMaxDepth ? t.frame[t.depth] - 1 : -1;
-	uint64_t ns = Since(t0);
-	if (outcome != Outcome::Detected) {
-		Add(slot, outcome, ns);
-		return;
-	}
-	FlushPending();
-	if (slot < 0) {
-		++t.dropped;
-		return;
-	}
-	t.pending = slot + 1;
-	t.pendingNs = ns;
-	t.pendingT0 = t0.time_since_epoch().count();
+	Add(slot, outcome, Since(t0));
 }
 
 namespace {
@@ -286,15 +261,6 @@ void AddNote(Note note) noexcept
 	}
 }
 
-void Settle(bool decoded) noexcept
-{
-	if (!t.pending)
-		return;
-	TimePoint t0{TimePoint::duration(t.pendingT0)};
-	Add(t.pending - 1, decoded ? Outcome::Won : Outcome::Candidate, Since(t0));
-	t.pending = 0;
-}
-
 } // namespace ZXing::DataMatrix::ladder::stats
 
 using namespace ZXing::DataMatrix::ladder::stats;
@@ -302,7 +268,6 @@ using namespace ZXing::DataMatrix::ladder::stats;
 extern "C" void CrptLadderReset(void)
 {
 	std::memset(t.table, 0, sizeof(t.table));
-	t.pending = 0;
 	t.dropped = 0;
 }
 
@@ -310,7 +275,6 @@ extern "C" size_t CrptLadderSnapshot(struct CrptLadderStepStat* out, size_t n)
 {
 	if (!out)
 		return 0;
-	FlushPending();
 	size_t k = n < kSlots ? n : kSlots;
 	std::memcpy(out, t.table, k * sizeof(*out));
 	return k;

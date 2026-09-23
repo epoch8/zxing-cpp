@@ -33,6 +33,20 @@ inline Features& CurrentFeatures() noexcept
 	return f;
 }
 
+/// The Decoder stage: the module bits a sampler produced -> content. Swappable
+/// per decode, like the feature set: the entry point installs one (the
+/// standard DataMatrix decoder unless a recipe names another), every context
+/// picks it up, and every decode under the runner -- the runner's own and the
+/// ones a variant loop makes -- goes through it. Swap it here and it is
+/// swapped everywhere below.
+using DecodeFn = DecoderResult (*)(const BitMatrix& bits);
+
+inline DecodeFn& CurrentDecoder() noexcept
+{
+	thread_local DecodeFn d = &Decode;
+	return d;
+}
+
 /// The two DMGridRefineOptions flags as features, over the registry defaults.
 inline Features FeaturesFrom(DMGridRefineOptions g) noexcept
 {
@@ -45,9 +59,10 @@ inline Features FeaturesFrom(DMGridRefineOptions g) noexcept
  */
 struct State
 {
-	/// The caller's out-parameter. A step whose detector decodes internally
-	/// writes it directly; for every other step the runner decodes into it
-	/// once. Valid after a step means: that step won.
+	/// The caller's out-parameter, the decode of the detection the plan
+	/// returns. The runner writes it; a step hosting a nested plan lets that
+	/// plan's runner write it (decodedInside). Valid after a step means: that
+	/// step won.
 	DecoderResult& dec;
 
 	/// Position of the most recent valid detection. What comes back, with
@@ -65,6 +80,12 @@ struct State
 	Features features = CurrentFeatures();
 
 	bool on(Feat f) const noexcept { return features.on(f); }
+
+	/// The Decoder stage in force (CurrentDecoder). Nothing under the runner
+	/// calls Decode directly.
+	DecodeFn decoder = CurrentDecoder();
+
+	DecoderResult decode(const BitMatrix& bits) const { return decoder(bits); }
 };
 
 /**
@@ -95,9 +116,10 @@ struct Context : State
 
 /**
  * One phase of a plan over context type Ctx. `run` returns the phase's
- * detection and sets `decodedInside` when its detector has already written
- * ctx.dec for that detection; otherwise the runner decodes a valid detection
- * exactly once. A step applies its own ResultedDefect (or none) before
+ * detection; the runner decodes a valid one exactly once, through ctx.decode.
+ * A step that hosts a nested plan sets `decodedInside`: that plan's runner has
+ * already decoded the detection it returns into ctx.dec. No step decodes on
+ * its own. A step applies its own ResultedDefect (or none) before
  * returning, because which defect, and whether one is applied at all, differs
  * per phase and per plan. `when`, if set, gates the step on the context; a
  * step whose rule says no is skipped, not run.
@@ -113,11 +135,12 @@ struct Step
 /// What it takes for a step to end the plan.
 enum class Policy : uint8_t
 {
-	/// The step's detection decoded. Steps whose detector decodes for itself
-	/// report that through decodedInside; the runner decodes the rest.
+	/// The step's detection decoded; one that does not hands on to the next step.
 	DecodeToWin,
-	/// The step produced a valid detection at all. Nothing is decoded here;
-	/// that is the caller's, as it is for the stock DataMatrix reader.
+	/// The step produced a valid detection at all: the plan ends there. It is
+	/// still decoded here, once, so the step is won or a candidate on the spot
+	/// -- the stock reader's rule, with the decode it used to do after the
+	/// ladder moved inside it.
 	FirstValidDetection,
 };
 
@@ -142,11 +165,11 @@ constexpr size_t kMaxPlanSteps = 16;
  * observable right here (DMLadderStats.h; compiled out without
  * CRPT_ZXING_PROFILING).
  *
- * Per step, in order: skip it if its `when` says so; remember the position
- * if the detection is valid; under DecodeToWin, decode it once unless the
- * step already did and return it on success; under FirstValidDetection,
- * return any valid detection as is. A step that did not win leaves its
- * detection in ctx.last for the next one.
+ * Per step, in order: skip it if its `when` says so; if the detection is
+ * valid, remember its position and decode it once (unless a nested plan did);
+ * under DecodeToWin return it if that decode is valid, under
+ * FirstValidDetection return it either way. A step that did not end the plan
+ * leaves its detection in ctx.last for the next one.
  *
  * `plan` names the plan and `base` is its array: a step is attributed to the
  * plan's name and its index in that array, so a reordered sequence still
@@ -173,13 +196,12 @@ DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>
 		if (det.isValid()) {
 			ctx.candidate = det.position();
 			outcome = Outcome::Candidate;
+			if (!decodedInside)
+				ctx.dec = ctx.decode(det.bits());
 			if (policy == Policy::FirstValidDetection) {
-				// The caller decodes; it settles won or candidate (DMReader.cpp).
-				CRPT_LADDER_LEAVE(Outcome::Detected, t0);
+				CRPT_LADDER_LEAVE(ctx.dec.isValid() ? Outcome::Won : Outcome::Candidate, t0);
 				return det;
 			}
-			if (!decodedInside)
-				ctx.dec = Decode(det.bits());
 		}
 
 		if (policy == Policy::DecodeToWin && ctx.dec.isValid()) {
