@@ -46,6 +46,20 @@ enum class TextMode : unsigned char // see above
 	Escaped, ///< Use the EscapeNonGraphical() function (e.g. ASCII 29 will be transcoded to "<GS>")
 };
 
+/**
+ * DataMatrix grid correction stages for crumpled / locally distorted symbols.
+ * Default: all off. Enable individually or via All().
+ */
+struct DMGridRefineOptions
+{
+	bool regionGrowing = false;  ///< Grow module grid from L-corner with per-module snap
+	bool rsFeedback = false;     ///< Regional offsets guided by Reed-Solomon decode quality
+
+	constexpr bool any() const noexcept { return regionGrowing || rsFeedback; }
+
+	static constexpr DMGridRefineOptions All() noexcept { return {true, true}; }
+};
+
 class DecodeHints
 {
 	bool _tryHarder                : 1;
@@ -69,6 +83,7 @@ class DecodeHints
 	uint8_t _maxNumberOfSymbols  = 0xff;
 	uint16_t _downscaleThreshold = 500;
 	BarcodeFormats _formats      = BarcodeFormat::None;
+	DMGridRefineOptions _dmGridRefine{};
 
 public:
 	// bitfields don't get default initialized to 0 before c++20
@@ -149,6 +164,9 @@ public:
 
 	/// If true, return the barcodes with errors as well (e.g. checksum errors, see @Result::error())
 	ZX_PROPERTY(bool, returnErrors, setReturnErrors)
+
+	/// DataMatrix: per-stage grid correction (snap / region growing / RS feedback). Default all off.
+	ZX_PROPERTY(DMGridRefineOptions, dmGridRefine, setDMGridRefine)
 
 	/// Specify whether to ignore, read or require EAN-2/5 add-on symbols while scanning EAN/UPC codes
 	ZX_PROPERTY(EanAddOnSymbol, eanAddOnSymbol, setEanAddOnSymbol)
