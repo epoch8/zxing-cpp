@@ -575,8 +575,28 @@ namespace ZXing::DataMatrix {
 		return bestRes;
 	}
 
-	DetectorResult SampleGridTestOffseted(const BitMatrix& image, int width, int height, PerspectiveTransform mod2pix,
-										  DMGridRefineOptions gridRefine = {}) {
+	// ---- The Sampling stage: samplers and refinements (DMLadder.h) ----------------
+
+	// Sampler "plain": the grid through the geometry's transform, nothing else.
+	static ladder::ModuleGrid SamplePlain(const BitMatrix& image, const ladder::Geometry& g)
+	{
+		return {SampleGrid(image, g.width, g.height, g.mod2pix), g};
+	}
+
+	// Sampler "warped": the grid through the transform and the geometry's warp.
+	static ladder::ModuleGrid SampleWarped(const BitMatrix& image, const ladder::Geometry& g)
+	{
+		return {SampleGridWarped(image, g.width, g.height, *g.warp, g.mod2pix), g};
+	}
+
+	// Sampler "testOffseted": sample; if a border line came out doubled, pull that
+	// side's corners in and sample again; if the centre lines say the grid sits half
+	// a module off, resample through a one-step warp. The geometry it hands on has
+	// the corners moved but not that warp -- what its refinement has always used.
+	static ladder::ModuleGrid SampleTestOffseted(const BitMatrix& image, const ladder::Geometry& g)
+	{
+		const int width = g.width, height = g.height;
+		PerspectiveTransform mod2pix = g.mod2pix;
         auto res = SampleGrid(image, width, height, mod2pix);
 		auto doubleLine = testDoubleLine(res.bits());
 
@@ -621,8 +641,19 @@ namespace ZXing::DataMatrix {
 			res = SampleGridWarped(image, width, height, w, mod2pix);
 		}
 
+		return {std::move(res), {width, height, mod2pix, g.warp}};
+	}
+
+	// Refinement "testOffseted": when the sample does not decode cleanly -- an invalid
+	// sample counts as not clean -- region growing from the L-corner if that scores
+	// better, then Reed-Solomon-guided resampling. Each gated by its feature.
+	static DetectorResult RefineTestOffseted(const BitMatrix& image, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+											 DetectorResult res)
+	{
 		if (!gridRefine.any())
 			return res;
+		const int width = g.width, height = g.height;
+		const PerspectiveTransform& mod2pix = g.mod2pix;
 
 		// 1) Region-growing grid from the L-corner if still not cleanly decodable.
 		if (gridRefine.regionGrowing) {
@@ -650,14 +681,16 @@ namespace ZXing::DataMatrix {
 		return res;
 	}
 
+	static const ladder::Sampling kSamplingPlain{"plain", SamplePlain};
+	static const ladder::Sampling kSamplingWarped{"warped", SampleWarped};
+	static const ladder::Sampling kSamplingTestOffseted{"testOffseted", SampleTestOffseted, RefineTestOffseted};
 
-	static DetectorResult SampleGridTestOffseted(const BitMatrix& image, const ResultPoint& topLeft, const ResultPoint& bottomLeft,
-									const ResultPoint& bottomRight, const ResultPoint& topRight, int width, int height,
-									DMGridRefineOptions gridRefine = {})
+	// The geometry four corner points describe, with the half-module margin the
+	// corner-based samplers have always used.
+	static ladder::Geometry CornerGeometry(const PointF& topLeft, const PointF& bottomLeft, const PointF& bottomRight,
+										   const PointF& topRight, int width, int height, const Warp* warp = nullptr)
 	{
-		PerspectiveTransform mod2pix = { Rectangle(width, height, 0.5), {topLeft, topRight, bottomRight, bottomLeft} };
-
-		return SampleGridTestOffseted(image, width, height, mod2pix, gridRefine);
+		return {width, height, {Rectangle(width, height, 0.5), {topLeft, topRight, bottomRight, bottomLeft}}, warp};
 	}
 
     static DetectorResult SampleGridWarped(const BitMatrix& image, const ResultPoint& topLeft, const ResultPoint& bottomLeft,
@@ -1096,13 +1129,13 @@ namespace ZXing::DataMatrix {
     // grid[0]: bottom-right and top-right pushed out one module along the bottom and top.
     static DetectorResult OldGrid0(OldContext& c, bool&)
     {
-        return SampleGrid(c.image, *c.topLeft, *c.bottomLeft, *c.bottomRight + c.DirBottomLR, *c.topRight + c.DirTopLR, c.dimensionTop, c.dimensionRight);
+        return kSamplingPlain(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft, *c.bottomRight + c.DirBottomLR, *c.topRight + c.DirTopLR, c.dimensionTop, c.dimensionRight), c.gridRefine);
     }
 
     // grid[1]: top-left and top-right pushed up one module along the sides.
     static DetectorResult OldGrid1(OldContext& c, bool&)
     {
-        return SampleGrid(c.image, *c.topLeft + c.DirLeftBT, *c.bottomLeft, *c.bottomRight, *c.topRight + c.DirRightBT, c.dimensionTop, c.dimensionRight);
+        return kSamplingPlain(c.image, CornerGeometry(*c.topLeft + c.DirLeftBT, *c.bottomLeft, *c.bottomRight, *c.topRight + c.DirRightBT, c.dimensionTop, c.dimensionRight), c.gridRefine);
     }
 
     // Re-derive the top-right corner from the L, and the two directions that
@@ -1118,13 +1151,13 @@ namespace ZXing::DataMatrix {
     // grid[2]: corrected top-right; top-left and bottom-left pulled back one module along the top and bottom.
     static DetectorResult OldGrid2(OldContext& c, bool&)
     {
-        return SampleGrid(c.image, *c.topLeft - c.DirTopLR, *c.bottomLeft - c.DirBottomLR, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight);
+        return kSamplingPlain(c.image, CornerGeometry(*c.topLeft - c.DirTopLR, *c.bottomLeft - c.DirBottomLR, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight), c.gridRefine);
     }
 
     // grid[3]: corrected top-right; bottom-left and bottom-right pulled down one module along the sides.
     static DetectorResult OldGrid3(OldContext& c, bool&)
     {
-        return SampleGrid(c.image, *c.topLeft, *c.bottomLeft - c.DirLeftBT, *c.bottomRight - c.DirRightBT, c.correctedTopRight, c.dimensionTop, c.dimensionRight);
+        return kSamplingPlain(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft - c.DirLeftBT, *c.bottomRight - c.DirRightBT, c.correctedTopRight, c.dimensionTop, c.dimensionRight), c.gridRefine);
     }
 
     // The plain corners with the corrected top-right, through the offset-testing
@@ -1133,8 +1166,9 @@ namespace ZXing::DataMatrix {
     static DetectorResult OldTestOffsetGrid(OldContext& c, bool&)
     {
         c.correctedOffset = false;
-        return SampleGridTestOffseted(c.image, *c.topLeft, *c.bottomLeft, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight,
-                                                        c.gridRefine);
+        return kSamplingTestOffseted(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft, *c.bottomRight, c.correctedTopRight, c.dimensionTop,
+                                                            c.dimensionRight),
+                                     c.gridRefine);
     }
 
     static const OldStep kOldPlan[] = {
@@ -1595,19 +1629,19 @@ namespace ZXing::DataMatrix {
         return SampleGridWarped(img, dimT, dimR, warp, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
     }
 
-    // The refinement Scan applies to a warped sample that does not decode
-    // cleanly: region growing from the L-corner if that scores better, then
-    // Reed-Solomon-guided resampling of the modules it flagged; each gated by
-    // gridRefine. SampleGridTestOffseted carries a near-copy of this for the
-    // unwarped path -- it scores an invalid sample differently -- so the two
-    // are not merged here.
-    static DetectorResult RefineWarpedGrid(const BitMatrix& img, int dimT, int dimR, const QuadrilateralF& sourcePoints,
-                                           DMGridRefineOptions gridRefine, DetectorResult res)
+    // Refinement "warped", what Scan applies to a warped sample that does not
+    // decode cleanly: region growing from the L-corner if that scores better,
+    // then Reed-Solomon-guided resampling of the modules it flagged; each gated
+    // by its feature. Unlike "testOffseted" it leaves an invalid sample alone --
+    // the one difference, and why the two stay two refinements.
+    static DetectorResult RefineWarped(const BitMatrix& img, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+                                       DetectorResult res)
     {
+        const int dimT = g.width, dimR = g.height;
         if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
             auto scoreWarp = EvaluateDecode(res.bits());
             if (!scoreWarp.ok) {
-                PerspectiveTransform mod2pix{Rectangle(dimT, dimR, 0), sourcePoints};
+                const PerspectiveTransform& mod2pix = g.mod2pix;
                 if (gridRefine.regionGrowing) {
                     auto grown = SampleGridRegionGrowing(img, dimT, dimR, mod2pix);
                     if (grown.isValid() && EvaluateDecode(grown.bits()).score() < scoreWarp.score()) {
@@ -1756,11 +1790,12 @@ namespace ZXing::DataMatrix {
                 if (tryToTraceWarp && (!warp->isValid() || warp->xOffsets.size() > dimT || warp->yOffsets.size() > dimR))
                     *warp = ComputeWarp(*startTracer.img, tl, bl, br, tr, 5, 5, dimT);
                 res = SampleScanGridWarped(*startTracer.img, tl, bl, br, tr, dimT, dimR, sourcePoints, *warp, correctCorners);
-                res = RefineWarpedGrid(*startTracer.img, dimT, dimR, sourcePoints, gridRefine, std::move(res));
+                res = RefineWarped(*startTracer.img, {dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints)}, gridRefine,
+                                   std::move(res));
             }
             else {
-                res = SampleGridTestOffseted(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints),
-											 gridRefine);
+                res = kSamplingTestOffseted(*startTracer.img, {dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints)},
+                                            gridRefine);
             }
 
             CHECK(res.isValid());
@@ -2492,7 +2527,7 @@ static DetectorResult PhaseDefinedGrid(ladder::Context& ctx, bool& decodedInside
         }
         auto&& [TL, BL, BR, TR] = P;
         auto warp = ComputeWarp(image, TL, BL, BR, TR, dim, dim, dim);
-        detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim, warp);
+        detRes = kSamplingWarped(image, CornerGeometry(TL, BL, BR, TR, dim, dim, &warp), ctx.gridRefine);
         if (detRes.isValid()) {
             ctx.dec = ctx.decode(detRes.bits());
             if (ctx.dec.isValid()) {

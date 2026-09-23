@@ -13,6 +13,7 @@
 #include "DMLadderSpec.h"
 #include "DMLadderStats.h"
 #include "GridSampler.h"
+#include "PerspectiveTransform.h"
 #include "Point.h"
 #include "Quadrilateral.h"
 
@@ -46,6 +47,47 @@ inline DecodeFn& CurrentDecoder() noexcept
 	thread_local DecodeFn d = &Decode;
 	return d;
 }
+
+/// Where a symbol's modules lie in the image: its size in modules, the
+/// module -> pixel transform, and the per-row/column warp if one was traced.
+/// What a locator or refiner hands the Sampling stage.
+struct Geometry
+{
+	int width = 0;
+	int height = 0;
+	PerspectiveTransform mod2pix;
+	const Warp* warp = nullptr;
+};
+
+/// A sample, with the geometry it was actually taken at: a sampler may move
+/// the corners (the offset-testing one does), and whatever refines the sample
+/// has to work from where it was taken, not from where it was asked for.
+struct ModuleGrid
+{
+	DetectorResult det;
+	Geometry geometry;
+};
+
+using SampleFn = ModuleGrid (*)(const BitMatrix& image, const Geometry& g);
+using RefineFn = DetectorResult (*)(const BitMatrix& image, const Geometry& g, DMGridRefineOptions refine, DetectorResult sample);
+
+/// The Sampling stage: a named sampler, and the refinement of what it sampled
+/// (none if null). The refinement is where region growing and Reed-Solomon
+/// feedback live, gated by the features; with both off it returns the sample.
+/// Each step names the Sampling it uses (DMDetector.cpp, kSampling*), and the
+/// runner decodes the result -- so a step is: geometry -> Sampling -> Decoder.
+struct Sampling
+{
+	const char* name;
+	SampleFn sample;
+	RefineFn refine = nullptr;
+
+	DetectorResult operator()(const BitMatrix& image, const Geometry& g, DMGridRefineOptions gridRefine) const
+	{
+		ModuleGrid m = sample(image, g);
+		return refine ? refine(image, m.geometry, gridRefine, std::move(m.det)) : std::move(m.det);
+	}
+};
 
 /// The two DMGridRefineOptions flags as features, over the registry defaults.
 inline Features FeaturesFrom(DMGridRefineOptions g) noexcept
