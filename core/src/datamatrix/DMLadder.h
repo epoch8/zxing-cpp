@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ZXing::DataMatrix::ladder {
@@ -88,6 +89,102 @@ struct Sampling
 		return refine ? refine(image, m.geometry, gridRefine, std::move(m.det)) : std::move(m.det);
 	}
 };
+
+// ---- Which Sampling a step uses: its own, unless a recipe overrides it -------
+
+/// The names of the steps running right now, outermost first -- "crpt",
+/// "lmarker[0]" while DetectCRPT's sub-plan runs its first L-marker variant.
+/// Kept by the runner (StepScope) in every build, profiling or not: it is what
+/// a recipe's per-step override is matched against, however deep the sampler
+/// sits (Scan, inside DetectNew, inside a sub-plan step).
+struct StepPath
+{
+	static constexpr size_t kDepth = 4;
+	const char* names[kDepth] = {};
+	size_t depth = 0; ///< may exceed kDepth; names beyond it are not kept
+};
+
+inline StepPath& CurrentStepPath() noexcept
+{
+	thread_local StepPath p;
+	return p;
+}
+
+/// Pushes a step name for the duration of the step, and pops it even if the
+/// step throws (the calculators catch decode exceptions and carry on).
+class StepScope
+{
+public:
+	explicit StepScope(const char* name) noexcept
+	{
+		StepPath& p = CurrentStepPath();
+		if (p.depth < StepPath::kDepth)
+			p.names[p.depth] = name;
+		++p.depth;
+	}
+	~StepScope() { --CurrentStepPath().depth; }
+	StepScope(const StepScope&) = delete;
+	StepScope& operator=(const StepScope&) = delete;
+};
+
+/// A recipe's per-step choice of Sampling: `step` is a step name, or a
+/// '/'-separated tail of a step path ("crptWarp/lmarker[0]"), matched against
+/// the innermost steps running.
+struct SamplingOverride
+{
+	const char* step = nullptr;
+	const Sampling* sampling = nullptr;
+};
+
+struct SamplingOverrides
+{
+	static constexpr size_t kMax = 8;
+	SamplingOverride items[kMax];
+	size_t n = 0;
+};
+
+/// Installed per decode by the entry point from the recipe in force; empty
+/// without one, which makes Pick return every step's own Sampling.
+inline SamplingOverrides& CurrentSamplingOverrides() noexcept
+{
+	thread_local SamplingOverrides o;
+	return o;
+}
+
+/// Does `key` ("lmarker[0]", "crptWarp/lmarker[0]") name the innermost steps of `path`?
+inline bool MatchesStepPath(const char* key, const StepPath& path) noexcept
+{
+	const size_t kept = path.depth < StepPath::kDepth ? path.depth : StepPath::kDepth;
+	if (kept != path.depth)
+		return false; // deeper than kept: cannot tell, so no override
+	std::string_view rest(key);
+	size_t level = kept;
+	while (!rest.empty()) {
+		if (level == 0)
+			return false;
+		const size_t slash = rest.rfind('/');
+		const std::string_view last = slash == std::string_view::npos ? rest : rest.substr(slash + 1);
+		if (last != path.names[level - 1])
+			return false;
+		rest = slash == std::string_view::npos ? std::string_view{} : rest.substr(0, slash);
+		--level;
+	}
+	return true;
+}
+
+/// The Sampling a step should use: `own`, unless the recipe in force overrides
+/// it for the steps running now.
+inline const Sampling& Pick(const Sampling& own) noexcept
+{
+	const SamplingOverrides& o = CurrentSamplingOverrides();
+	if (o.n == 0)
+		return own;
+	const StepPath& path = CurrentStepPath();
+	for (size_t i = 0; i < o.n; ++i)
+		if (MatchesStepPath(o.items[i].step, path))
+			return *o.items[i].sampling;
+	return own;
+}
 
 /// The two DMGridRefineOptions flags as features, over the registry defaults.
 inline Features FeaturesFrom(DMGridRefineOptions g) noexcept
@@ -232,7 +329,11 @@ DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>
 		CRPT_LADDER_ENTER(plan, index, step.name);
 		[[maybe_unused]] const auto t0 = CRPT_LADDER_CLOCK();
 		bool decodedInside = false;
-		DetectorResult det = step.run(ctx, decodedInside);
+		DetectorResult det;
+		{
+			StepScope scope(step.name);
+			det = step.run(ctx, decodedInside);
+		}
 		[[maybe_unused]] Outcome outcome = Outcome::NoDetection;
 
 		if (det.isValid()) {

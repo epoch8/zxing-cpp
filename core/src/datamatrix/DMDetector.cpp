@@ -583,9 +583,12 @@ namespace ZXing::DataMatrix {
 		return {SampleGrid(image, g.width, g.height, g.mod2pix), g};
 	}
 
-	// Sampler "warped": the grid through the transform and the geometry's warp.
+	// Sampler "warped": the grid through the transform and the geometry's warp --
+	// or plain, for a geometry without one (a recipe may name it for any step).
 	static ladder::ModuleGrid SampleWarped(const BitMatrix& image, const ladder::Geometry& g)
 	{
+		if (!g.warp)
+			return {SampleGrid(image, g.width, g.height, g.mod2pix), g};
 		return {SampleGridWarped(image, g.width, g.height, *g.warp, g.mod2pix), g};
 	}
 
@@ -1129,13 +1132,13 @@ namespace ZXing::DataMatrix {
     // grid[0]: bottom-right and top-right pushed out one module along the bottom and top.
     static DetectorResult OldGrid0(OldContext& c, bool&)
     {
-        return kSamplingPlain(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft, *c.bottomRight + c.DirBottomLR, *c.topRight + c.DirTopLR, c.dimensionTop, c.dimensionRight), c.gridRefine);
+        return ladder::Pick(kSamplingPlain)(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft, *c.bottomRight + c.DirBottomLR, *c.topRight + c.DirTopLR, c.dimensionTop, c.dimensionRight), c.gridRefine);
     }
 
     // grid[1]: top-left and top-right pushed up one module along the sides.
     static DetectorResult OldGrid1(OldContext& c, bool&)
     {
-        return kSamplingPlain(c.image, CornerGeometry(*c.topLeft + c.DirLeftBT, *c.bottomLeft, *c.bottomRight, *c.topRight + c.DirRightBT, c.dimensionTop, c.dimensionRight), c.gridRefine);
+        return ladder::Pick(kSamplingPlain)(c.image, CornerGeometry(*c.topLeft + c.DirLeftBT, *c.bottomLeft, *c.bottomRight, *c.topRight + c.DirRightBT, c.dimensionTop, c.dimensionRight), c.gridRefine);
     }
 
     // Re-derive the top-right corner from the L, and the two directions that
@@ -1151,13 +1154,13 @@ namespace ZXing::DataMatrix {
     // grid[2]: corrected top-right; top-left and bottom-left pulled back one module along the top and bottom.
     static DetectorResult OldGrid2(OldContext& c, bool&)
     {
-        return kSamplingPlain(c.image, CornerGeometry(*c.topLeft - c.DirTopLR, *c.bottomLeft - c.DirBottomLR, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight), c.gridRefine);
+        return ladder::Pick(kSamplingPlain)(c.image, CornerGeometry(*c.topLeft - c.DirTopLR, *c.bottomLeft - c.DirBottomLR, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight), c.gridRefine);
     }
 
     // grid[3]: corrected top-right; bottom-left and bottom-right pulled down one module along the sides.
     static DetectorResult OldGrid3(OldContext& c, bool&)
     {
-        return kSamplingPlain(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft - c.DirLeftBT, *c.bottomRight - c.DirRightBT, c.correctedTopRight, c.dimensionTop, c.dimensionRight), c.gridRefine);
+        return ladder::Pick(kSamplingPlain)(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft - c.DirLeftBT, *c.bottomRight - c.DirRightBT, c.correctedTopRight, c.dimensionTop, c.dimensionRight), c.gridRefine);
     }
 
     // The plain corners with the corrected top-right, through the offset-testing
@@ -1166,7 +1169,7 @@ namespace ZXing::DataMatrix {
     static DetectorResult OldTestOffsetGrid(OldContext& c, bool&)
     {
         c.correctedOffset = false;
-        return kSamplingTestOffseted(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft, *c.bottomRight, c.correctedTopRight, c.dimensionTop,
+        return ladder::Pick(kSamplingTestOffseted)(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft, *c.bottomRight, c.correctedTopRight, c.dimensionTop,
                                                             c.dimensionRight),
                                      c.gridRefine);
     }
@@ -1794,7 +1797,7 @@ namespace ZXing::DataMatrix {
                                    std::move(res));
             }
             else {
-                res = kSamplingTestOffseted(*startTracer.img, {dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints)},
+                res = ladder::Pick(kSamplingTestOffseted)(*startTracer.img, {dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints)},
                                             gridRefine);
             }
 
@@ -2527,7 +2530,7 @@ static DetectorResult PhaseDefinedGrid(ladder::Context& ctx, bool& decodedInside
         }
         auto&& [TL, BL, BR, TR] = P;
         auto warp = ComputeWarp(image, TL, BL, BR, TR, dim, dim, dim);
-        detRes = kSamplingWarped(image, CornerGeometry(TL, BL, BR, TR, dim, dim, &warp), ctx.gridRefine);
+        detRes = ladder::Pick(kSamplingWarped)(image, CornerGeometry(TL, BL, BR, TR, dim, dim, &warp), ctx.gridRefine);
         if (detRes.isValid()) {
             ctx.dec = ctx.decode(detRes.bits());
             if (ctx.dec.isValid()) {
@@ -2644,10 +2647,115 @@ static const OuterStep kDefinedPlan[] = {
 // top), and derive the DMGridRefineOptions the detectors still take from them,
 // so a flag flipped in the string reaches every phase the same way the setter
 // would have.
-static ladder::Context MakeContext(const BitMatrix& image, bool tryHarder, bool tryRotate, DMGridRefineOptions gridRefine,
-                                   const ladder::Spec& spec, DecoderResult& dec)
+// ---- Named stages and named recipes ------------------------------------------------
+//
+// A recipe is a named preset for one plan: the step order and features (in the
+// ladder-string grammar), the Decoder, and per-step Sampling overrides. The
+// ladder string selects one with `=name`; its other tokens still apply on top
+// (explicit steps replace the recipe's order, +/-features override its). With
+// no recipe named, a decode runs the plan as built: standard decoder, every
+// step's own Sampling -- which is what the golden records.
+
+struct NamedDecoder
 {
-    ladder::CurrentFeatures() = spec.apply(ladder::FeaturesFrom(gridRefine));
+    const char* name;
+    ladder::DecodeFn fn;
+};
+
+static const NamedDecoder kDecoders[] = {
+    {"standard", &Decode},
+};
+
+static const ladder::Sampling* const kSamplings[] = {&kSamplingPlain, &kSamplingWarped, &kSamplingTestOffseted};
+
+struct Recipe
+{
+    const char* name;
+    const char* plan; ///< as ValidateDMLadderSpec names them: samplegridv1, stock, defined
+    const char* spec; ///< step order and +/-features, the ladder-string grammar; "" = the plan as built
+    const char* decoder;
+    struct { const char* step; const char* sampling; } sampling[ladder::SamplingOverrides::kMax];
+};
+
+static const Recipe kRecipes[] = {
+    // The three plans as built, by name.
+    {"sgv1", "samplegridv1", "", "standard", {}},
+    {"stock", "stock", "", "standard", {}},
+    {"defined", "defined", "", "standard", {}},
+    // An experiment, not a default: DetectOldWithOffsets' four offset grids
+    // sampled with the offset-testing sampler (and its refinement) that only
+    // its last step, testOffsetGrid, uses as built.
+    {"sgv1.offsetGrids", "samplegridv1", "", "standard",
+     {{"grid[0]", "testOffseted"}, {"grid[1]", "testOffseted"}, {"grid[2]", "testOffseted"}, {"grid[3]", "testOffseted"}}},
+};
+
+/// What a decode runs with: the spec after the recipe (if any) is merged in,
+/// the Decoder, and the Sampling overrides.
+struct Resolved
+{
+    ladder::Spec spec;
+    ladder::DecodeFn decoder = &Decode;
+    ladder::SamplingOverrides overrides;
+};
+
+/// Throws std::invalid_argument on an unknown recipe, a recipe of another
+/// plan, or a stage name no registry has -- as the ladder string does for an
+/// unknown step, and caught the same way by ValidateDMLadderSpec at graph open.
+static Resolved ResolveRecipe(const ladder::Spec& spec, std::string_view plan)
+{
+    Resolved r;
+    r.spec = spec;
+    if (spec.recipe.empty())
+        return r;
+    const Recipe* recipe = nullptr;
+    for (const Recipe& x : kRecipes)
+        if (spec.recipe == x.name)
+            recipe = &x;
+    if (!recipe)
+        throw std::invalid_argument("unknown ladder recipe: =" + spec.recipe);
+    if (plan != recipe->plan)
+        throw std::invalid_argument("ladder recipe =" + spec.recipe + " is for plan " + recipe->plan + ", not " + std::string(plan));
+
+    const ladder::Spec base = ladder::ParseSpec(recipe->spec);
+    if (spec.steps.empty())
+        r.spec.steps = base.steps;
+    r.spec.featureMask = base.featureMask | spec.featureMask;
+    r.spec.featureBits = (base.featureBits & ~spec.featureMask) | (spec.featureBits & spec.featureMask);
+
+    r.decoder = nullptr;
+    for (const NamedDecoder& d : kDecoders)
+        if (std::string_view(recipe->decoder) == d.name)
+            r.decoder = d.fn;
+    if (!r.decoder)
+        throw std::invalid_argument("ladder recipe =" + spec.recipe + ": unknown decoder " + recipe->decoder);
+
+    for (const auto& o : recipe->sampling) {
+        if (!o.step)
+            break;
+        const ladder::Sampling* found = nullptr;
+        for (const ladder::Sampling* x : kSamplings)
+            if (std::string_view(o.sampling) == x->name)
+                found = x;
+        if (!found)
+            throw std::invalid_argument("ladder recipe =" + spec.recipe + ": unknown sampling " + o.sampling);
+        r.overrides.items[r.overrides.n++] = {o.step, found};
+    }
+    return r;
+}
+
+/// Put what a decode runs with in place -- every time, so nothing a previous
+/// decode on this thread installed carries over.
+static void Install(const Resolved& r, DMGridRefineOptions gridRefine)
+{
+    ladder::CurrentFeatures() = r.spec.apply(ladder::FeaturesFrom(gridRefine));
+    ladder::CurrentDecoder() = r.decoder;
+    ladder::CurrentSamplingOverrides() = r.overrides;
+}
+
+static ladder::Context MakeContext(const BitMatrix& image, bool tryHarder, bool tryRotate, DMGridRefineOptions gridRefine,
+                                   const Resolved& r, DecoderResult& dec)
+{
+    Install(r, gridRefine);
     ladder::Context ctx{{dec}, image, tryHarder, tryRotate, gridRefine};
     ctx.gridRefine = {ctx.on(ladder::Feat::regionGrowing), ctx.on(ladder::Feat::rsFeedback)};
     return ctx;
@@ -2656,32 +2764,36 @@ static ladder::Context MakeContext(const BitMatrix& image, bool tryHarder, bool 
 DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
                        DMGridRefineOptions gridRefine, const ladder::Spec& spec)
 {
+    const Resolved r = ResolveRecipe(spec, "stock");
     if (isPure) {
         // One detector, nothing competing: not a plan. Decoded through the same
         // Decoder stage the plans use, so every entry point returns its decode.
+        Install(r, gridRefine);
         DetectorResult det = DetectPure(image);
         if (det.isValid())
             outDecoderResult = ladder::CurrentDecoder()(det.bits());
         return det;
     }
 
-    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, outDecoderResult);
-    return ladder::RunLadder("stock", kStockPlan, spec, ctx, ladder::Policy::FirstValidDetection);
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, r, outDecoderResult);
+    return ladder::RunLadder("stock", kStockPlan, r.spec, ctx, ladder::Policy::FirstValidDetection);
 }
 
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
 								   DMGridRefineOptions gridRefine, const ladder::Spec& spec)
 {
-    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, outDecoderResult);
-    return ladder::RunLadder("sgv1", kSamplegridV1Plan, spec, ctx);
+    const Resolved r = ResolveRecipe(spec, "samplegridv1");
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, r, outDecoderResult);
+    return ladder::RunLadder("sgv1", kSamplegridV1Plan, r.spec, ctx);
 }
 
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
 							  DMGridRefineOptions gridRefine, const ladder::Spec& spec)
 {
-    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, spec, outDecoderResult);
+    const Resolved r = ResolveRecipe(spec, "defined");
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, r, outDecoderResult);
     ctx.corners = { P0, P1, P2, P3 };
-    return ladder::RunLadder("defined", kDefinedPlan, spec, ctx);
+    return ladder::RunLadder("defined", kDefinedPlan, r.spec, ctx);
 }
 } // namespace ZXing::DataMatrix
 
@@ -2697,6 +2809,8 @@ std::string ValidateDMLadderSpec(std::string_view spec, std::string_view plan)
     ladder::Spec parsed;
     try {
         parsed = ladder::ParseSpec(spec);
+        if (plan == "samplegridv1" || plan == "stock" || plan == "defined")
+            parsed = ResolveRecipe(parsed, plan).spec; // unknown recipe, wrong plan, unknown stage
     } catch (const std::invalid_argument& e) {
         return e.what();
     }
