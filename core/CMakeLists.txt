@@ -161,6 +161,8 @@ if (BUILD_READERS)
             src/MultiFormatReader.cpp
             src/PerspectiveTransform.h
             src/PerspectiveTransform.cpp
+            src/Preprocess.h
+            src/Preprocess.cpp
             src/Reader.h
             src/ReadBarcode.h
             src/ReadBarcode.cpp
@@ -210,6 +212,7 @@ if (BUILD_READERS)
             src/Error.h
             src/ImageView.h
             src/Point.h
+            src/Preprocess.h
             src/Quadrilateral.h
             src/ReadBarcode.h
             src/Result.h
