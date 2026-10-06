@@ -92,6 +92,24 @@ struct WalkPass
 /// header stays standard-library only, so it names them rather than include it.
 inline constexpr const char* kBinarizerNames[] = {"LocalAverage", "GlobalHistogram", "FixedThreshold", "BoolCast"};
 
+/// The preprocessing ops' names, in ZXing::PreprocessOp's order (Preprocess.h),
+/// and whether each keeps the image's size and geometry -- only those may run
+/// inside the walk ("pre:"), where results are positioned on the layer itself.
+inline constexpr struct
+{
+	const char* name;
+	bool inPlace;
+} kPreprocessOps[] = {
+	{"Original", true},          {"AdaptiveThreshold", true}, {"UnsharpMask", true},
+	{"AdaptiveMean", true},      {"BlurThreshold", true},     {"BlurThreshold2", true},
+	{"ScaledUnsharp", false},    {"OtsuInverted", true},      {"HistogramSharpening", true},
+	{"Morphological", true},     {"BlackEnhancement", true},  {"BoostWhite", true},
+	{"CLAHE", true},             {"NormalizeEx", true},       {"SauvolaBinarization", true},
+	{"ClaheEnhancement", true},  {"TopHatTransformation", true}, {"BlackHatTransformation", true},
+	{"AnisotropicDiffusion", true}, {"SuperResolution", false}, {"Erode", true},
+	{"Rotate", false},           {"CenterCrop", false},
+};
+
 struct Spec
 {
 	std::vector<std::string> steps;
@@ -102,6 +120,7 @@ struct Spec
 	/// runs around the plan, not inside it, so it is not part of empty().
 	std::vector<WalkPass> walk; ///< explicit passes in order; empty = the built-in walk
 	int binarizer = -1;         ///< a ZXing::Binarizer value; -1 = the hints' binarizer
+	std::vector<int> preOps;    ///< "pre:": ZXing::PreprocessOp values run on each layer before it is binarized
 	/// Orders for the plans nested inside steps ("old:grid[0]/testOffsetGrid",
 	/// "crpt:lmarker[0]/bottlePrepare/bottle[0]"): sub-plan name -> its steps in
 	/// run order. A sub-plan not named runs its built-in order. Not part of
@@ -116,7 +135,7 @@ struct Spec
 		return nullptr;
 	}
 
-	bool hasWalk() const noexcept { return !walk.empty() || binarizer >= 0; }
+	bool hasWalk() const noexcept { return !walk.empty() || binarizer >= 0 || !preOps.empty(); }
 
 	Features apply(Features base) const noexcept
 	{
@@ -164,6 +183,10 @@ inline WalkPass ParseWalkPass(std::string_view text)
  * order, '/'-separated -- and `bin:Name` -- the binarizer (LocalAverage,
  * GlobalHistogram, FixedThreshold, BoolCast). Each at most once.
  *
+ * `pre:CLAHE/BoostWhite` runs preprocessing ops on each pyramid layer before
+ * it is binarized, in order (ADR 0006 step 8) -- only ops that keep size and
+ * geometry (kPreprocessOps), so positions need no mapping back. At most once.
+ *
  * Any other `name:a/b/c` token orders a plan nested inside a step (ADR 0006
  * step 7): `old:` the grids of oldWithOffsets, `crpt:` the L-marker and bottle
  * variants of the CRPT steps. Which names exist, and their steps, only the
@@ -205,6 +228,27 @@ inline Spec ParseSpec(std::string_view text)
 			if (spec.binarizer < 0)
 				throw std::invalid_argument("unknown binarizer: " + std::string(tok) +
 											" (LocalAverage, GlobalHistogram, FixedThreshold, BoolCast)");
+		} else if (tok.substr(0, 4) == "pre:") {
+			if (!spec.preOps.empty())
+				throw std::invalid_argument("more than one pre: token");
+			std::string_view rest = tok.substr(4);
+			while (true) {
+				const size_t slash = rest.find('/');
+				const std::string_view name = rest.substr(0, slash);
+				int op = -1;
+				for (int i = 0; i < static_cast<int>(std::size(kPreprocessOps)); ++i)
+					if (name == kPreprocessOps[i].name)
+						op = i;
+				if (op < 0)
+					throw std::invalid_argument("unknown preprocessing op in pre: \"" + std::string(name) + "\"");
+				if (!kPreprocessOps[op].inPlace)
+					throw std::invalid_argument("pre: " + std::string(name) +
+												" changes the image's size or geometry; only in-place ops run inside the walk");
+				spec.preOps.push_back(op);
+				if (slash == std::string_view::npos)
+					break;
+				rest.remove_prefix(slash + 1);
+			}
 		} else if (const size_t colon = tok.find(':'); colon != std::string_view::npos && colon > 0) {
 			const std::string name(tok.substr(0, colon));
 			for (const auto& sp : spec.subPlans)
