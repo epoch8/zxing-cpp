@@ -323,10 +323,47 @@ constexpr size_t kMaxPlanSteps = 16;
  * plan's name and its index in that array, so a reordered sequence still
  * reports each step under its own name.
  */
+/// A detection copied by hand: DetectorResult is move-only.
+inline DetectorResult CopyOf(const DetectorResult& d)
+{
+	DetectorResult c(d.bits().copy(), QuadrilateralI(d.position()));
+	c.setResultedDefect(d.resultedDefect());
+	return c;
+}
+
 template <class Ctx>
 DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>* const* first, const Step<Ctx>* const* last,
-                        Ctx& ctx, Policy policy, Fallback fallback)
+                        Ctx& ctx, Policy policy, Fallback fallback, bool sweepable = false)
 {
+	// Sweep (feature sweepSteps, exhaustive profiling runs only): a win does
+	// not end the plan. The steps after it still run, on the state they would
+	// have seen had the winner not ended the plan, so what each step can read
+	// is recorded. The first win is what the plan returns, with the runner's
+	// state put back as it was at that win: the result does not change.
+	//
+	// Entry plans only (`sweepable`, set by the RunLadder that takes a Spec).
+	// A plan nested inside a step reports through its host's out-parameters
+	// (DetectOldWithOffsets' correctedOffset, DetectCRPT's defect), which the
+	// steps after its winner would overwrite and the runner cannot put back.
+	const bool sweep = sweepable && ctx.on(Feat::sweepSteps);
+	bool won = false;
+	DetectorResult wonDet, wonLast;
+	DecoderResult wonDec;
+	QuadrilateralI wonCandidate;
+	const auto hold = [&](DetectorResult&& det) {
+		if (!won) {
+			won = true;
+			wonDec = std::move(ctx.dec);
+			wonCandidate = ctx.candidate;
+			wonLast = std::move(ctx.last);
+			wonDet = std::move(det);
+			ctx.last = CopyOf(wonDet);
+		} else {
+			ctx.last = std::move(det);
+		}
+		ctx.dec = DecoderResult();
+	};
+
 	for (; first != last; ++first) {
 		const Step<Ctx>& step = **first;
 		[[maybe_unused]] const size_t index = static_cast<size_t>(&step - base);
@@ -352,19 +389,31 @@ DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>
 				ctx.dec = ctx.decode(det.bits());
 			if (policy == Policy::FirstValidDetection) {
 				CRPT_LADDER_LEAVE(ctx.dec.isValid() ? Outcome::Won : Outcome::Candidate, t0);
-				return det;
+				if (!sweep)
+					return det;
+				hold(std::move(det));
+				continue;
 			}
 		}
 
 		if (policy == Policy::DecodeToWin && ctx.dec.isValid()) {
 			CRPT_LADDER_LEAVE(Outcome::Won, t0);
-			return det;
+			if (!sweep)
+				return det;
+			hold(std::move(det));
+			continue;
 		}
 
 		CRPT_LADDER_LEAVE(outcome, t0);
 		ctx.last = std::move(det);
 	}
 
+	if (won) {
+		ctx.dec = std::move(wonDec);
+		ctx.candidate = wonCandidate;
+		ctx.last = std::move(wonLast);
+		return wonDet;
+	}
 	if (fallback == Fallback::LastDetection)
 		return std::move(ctx.last);
 	return DetectorResult({}, std::move(ctx.candidate));
@@ -374,13 +423,13 @@ DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>
 /// under: an entry plan's name starts every path, a sub-plan's is not in the path.
 template <class Ctx, size_t N>
 DetectorResult RunLadder(const char* name, const Step<Ctx> (&plan)[N], Ctx& ctx, Policy policy = Policy::DecodeToWin,
-                         Fallback fallback = Fallback::EmptyWithCandidate)
+                         Fallback fallback = Fallback::EmptyWithCandidate, bool sweepable = false)
 {
 	static_assert(N <= kMaxPlanSteps, "plan longer than kMaxPlanSteps");
 	const Step<Ctx>* seq[N];
 	for (size_t i = 0; i < N; ++i)
 		seq[i] = &plan[i];
-	return RunSteps(name, plan, seq, seq + N, ctx, policy, fallback);
+	return RunSteps(name, plan, seq, seq + N, ctx, policy, fallback, sweepable);
 }
 
 /**
@@ -392,8 +441,9 @@ template <class Ctx, size_t N>
 DetectorResult RunLadder(const char* name, const Step<Ctx> (&plan)[N], const Spec& spec, Ctx& ctx, Policy policy = Policy::DecodeToWin,
                          Fallback fallback = Fallback::EmptyWithCandidate)
 {
+	// An entry plan: the only kind a sweep runs through (RunSteps).
 	if (spec.steps.empty())
-		return RunLadder(name, plan, ctx, policy, fallback);
+		return RunLadder(name, plan, ctx, policy, fallback, /*sweepable=*/true);
 	if (spec.steps.size() > kMaxPlanSteps)
 		throw std::invalid_argument("ladder spec names more than " + std::to_string(kMaxPlanSteps) + " steps");
 
@@ -410,7 +460,7 @@ DetectorResult RunLadder(const char* name, const Step<Ctx> (&plan)[N], const Spe
 			throw std::invalid_argument("unknown ladder step: " + name);
 		seq[n++] = found;
 	}
-	return RunSteps(name, plan, seq, seq + n, ctx, policy, fallback);
+	return RunSteps(name, plan, seq, seq + n, ctx, policy, fallback, /*sweepable=*/true);
 }
 
 } // namespace ZXing::DataMatrix::ladder
