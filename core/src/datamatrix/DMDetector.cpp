@@ -1659,8 +1659,23 @@ namespace ZXing::DataMatrix {
         return res;
     }
 
-    static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, Warp* warp = nullptr, bool tryToTraceWarp = false, bool correctCorners = false,
-							   DMGridRefineOptions gridRefine = {})
+    // ---- Locator "scanL": Scan's L-finder, as a stage --------------------------
+    //
+    // From the tracer's start, walk to each white-after-black edge and try to
+    // trace the L (left and bottom legs) and the dashed top and right borders.
+    // Each plausible symbol is a candidate: the four corners (sub-pixel, from the
+    // border lines), the module dimensions and the half-pixel-shrunk source
+    // quadrilateral. `onCandidate` samples it (the Sampling stage) and returns
+    // the detection; the first valid one ends the search. ADR 0006 step 6.
+    struct ScanCandidate
+    {
+        PointF tl, bl, br, tr;
+        int dimT, dimR;
+        QuadrilateralF sourcePoints;
+    };
+
+    template <typename OnCandidate>
+    static DetectorResult LocateScanL(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, OnCandidate&& onCandidate)
     {
         while (startTracer.moveToNextWhiteAfterBlack()) {
             log(startTracer.p);
@@ -1788,24 +1803,38 @@ namespace ZXing::DataMatrix {
                     movedTowardsBy(bl, tl, br, 0.5f),
             };
 
-            DetectorResult res;
-            if (warp) {
-                if (tryToTraceWarp && (!warp->isValid() || warp->xOffsets.size() > dimT || warp->yOffsets.size() > dimR))
-                    *warp = ComputeWarp(*startTracer.img, tl, bl, br, tr, 5, 5, dimT);
-                res = SampleScanGridWarped(*startTracer.img, tl, bl, br, tr, dimT, dimR, sourcePoints, *warp, correctCorners);
-                res = RefineWarped(*startTracer.img, {dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints)}, gridRefine,
-                                   std::move(res));
-            }
-            else {
-                res = ladder::Pick(kSamplingTestOffseted)(*startTracer.img, {dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints)},
-                                            gridRefine);
-            }
-
+            // Mutable: the warp sampler's ComputeWarp may move the corners it is
+            // given, and samples with the moved ones, as the inline code did.
+            ScanCandidate candidate{tl, bl, br, tr, dimT, dimR, sourcePoints};
+            DetectorResult res = onCandidate(candidate);
             CHECK(res.isValid());
             return res;
         }
 
         return {};
+    }
+
+    // Scan = the scanL locator + its sampling: with a warp, the warp-tracing
+    // sampler and the "warped" refinement; without, the testOffseted Sampling
+    // stage (overridable per step by a recipe).
+    static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, Warp* warp = nullptr, bool tryToTraceWarp = false, bool correctCorners = false,
+							   DMGridRefineOptions gridRefine = {})
+    {
+        return LocateScanL(startTracer, lines, [&](ScanCandidate& c) {
+            DetectorResult res;
+            if (warp) {
+                if (tryToTraceWarp && (!warp->isValid() || warp->xOffsets.size() > c.dimT || warp->yOffsets.size() > c.dimR))
+                    *warp = ComputeWarp(*startTracer.img, c.tl, c.bl, c.br, c.tr, 5, 5, c.dimT);
+                res = SampleScanGridWarped(*startTracer.img, c.tl, c.bl, c.br, c.tr, c.dimT, c.dimR, c.sourcePoints, *warp, correctCorners);
+                res = RefineWarped(*startTracer.img, {c.dimT, c.dimR, PerspectiveTransform(Rectangle(c.dimT, c.dimR, 0), c.sourcePoints)}, gridRefine,
+                                   std::move(res));
+            }
+            else {
+                res = ladder::Pick(kSamplingTestOffseted)(*startTracer.img, {c.dimT, c.dimR, PerspectiveTransform(Rectangle(c.dimT, c.dimR, 0), c.sourcePoints)},
+                                            gridRefine);
+            }
+            return res;
+        });
     }
 
 
