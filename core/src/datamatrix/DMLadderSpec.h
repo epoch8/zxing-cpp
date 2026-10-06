@@ -93,21 +93,32 @@ struct WalkPass
 inline constexpr const char* kBinarizerNames[] = {"LocalAverage", "GlobalHistogram", "FixedThreshold", "BoolCast"};
 
 /// The preprocessing ops' names, in ZXing::PreprocessOp's order (Preprocess.h),
-/// and whether each keeps the image's size and geometry -- only those may run
-/// inside the walk ("pre:"), where results are positioned on the layer itself.
+/// and whether each keeps the image's size and geometry. All may run inside
+/// the walk ("pre:"): one that does not keep geometry is a scale, a crop or a
+/// rotation, whose affine map places results back on the layer
+/// (PreprocessGeometry.h, ADR 0006 step 8).
 inline constexpr struct
 {
 	const char* name;
-	bool inPlace;
+	bool keepsGeometry;
+	int maxArgs; ///< "pre:Name(a:b:c)" -- see ReadBarcode.cpp, PreParams, for what each means
 } kPreprocessOps[] = {
-	{"Original", true},          {"AdaptiveThreshold", true}, {"UnsharpMask", true},
-	{"AdaptiveMean", true},      {"BlurThreshold", true},     {"BlurThreshold2", true},
-	{"ScaledUnsharp", false},    {"OtsuInverted", true},      {"HistogramSharpening", true},
-	{"Morphological", true},     {"BlackEnhancement", true},  {"BoostWhite", true},
-	{"CLAHE", true},             {"NormalizeEx", true},       {"SauvolaBinarization", true},
-	{"ClaheEnhancement", true},  {"TopHatTransformation", true}, {"BlackHatTransformation", true},
-	{"AnisotropicDiffusion", true}, {"SuperResolution", false}, {"Erode", true},
-	{"Rotate", false},           {"CenterCrop", false},
+	{"Original", true, 0},          {"AdaptiveThreshold", true, 0}, {"UnsharpMask", true, 0},
+	{"AdaptiveMean", true, 0},      {"BlurThreshold", true, 0},     {"BlurThreshold2", true, 0},
+	{"ScaledUnsharp", false, 0},    {"OtsuInverted", true, 0},      {"HistogramSharpening", true, 0},
+	{"Morphological", true, 0},     {"BlackEnhancement", true, 0},  {"BoostWhite", true, 0},
+	{"CLAHE", true, 0},             {"NormalizeEx", true, 0},       {"SauvolaBinarization", true, 3},
+	{"ClaheEnhancement", true, 2},  {"TopHatTransformation", true, 1}, {"BlackHatTransformation", true, 1},
+	{"AnisotropicDiffusion", true, 3}, {"SuperResolution", false, 1}, {"Erode", true, 2},
+	{"Rotate", false, 1},           {"CenterCrop", false, 1},
+};
+
+/// One "pre:" op: its ZXing::PreprocessOp value and the arguments the token gave.
+struct PreOp
+{
+	int op = 0;
+	int nargs = 0;
+	double args[3] = {0, 0, 0};
 };
 
 struct Spec
@@ -120,7 +131,7 @@ struct Spec
 	/// runs around the plan, not inside it, so it is not part of empty().
 	std::vector<WalkPass> walk; ///< explicit passes in order; empty = the built-in walk
 	int binarizer = -1;         ///< a ZXing::Binarizer value; -1 = the hints' binarizer
-	std::vector<int> preOps;    ///< "pre:": ZXing::PreprocessOp values run on each layer before it is binarized
+	std::vector<PreOp> preOps;  ///< "pre:": ops run on each layer before it is binarized
 	/// Orders for the plans nested inside steps ("old:grid[0]/testOffsetGrid",
 	/// "crpt:lmarker[0]/bottlePrepare/bottle[0]"): sub-plan name -> its steps in
 	/// run order. A sub-plan not named runs its built-in order. Not part of
@@ -184,8 +195,11 @@ inline WalkPass ParseWalkPass(std::string_view text)
  * GlobalHistogram, FixedThreshold, BoolCast). Each at most once.
  *
  * `pre:CLAHE/BoostWhite` runs preprocessing ops on each pyramid layer before
- * it is binarized, in order (ADR 0006 step 8) -- only ops that keep size and
- * geometry (kPreprocessOps), so positions need no mapping back. At most once.
+ * it is binarized, in order (ADR 0006 step 8). Ops that resize, crop or rotate
+ * are allowed: their affine maps compose, and a result's position is mapped
+ * back to the layer. An op takes arguments as `Name(a:b:c)` -- ':' because ','
+ * separates tokens -- e.g. `Rotate(15)`, `CenterCrop(0.9)`,
+ * `SauvolaBinarization(31:0.3:128)`. At most once.
  *
  * Any other `name:a/b/c` token orders a plan nested inside a step (ADR 0006
  * step 7): `old:` the grids of oldWithOffsets, `crpt:` the L-marker and bottle
@@ -234,17 +248,42 @@ inline Spec ParseSpec(std::string_view text)
 			std::string_view rest = tok.substr(4);
 			while (true) {
 				const size_t slash = rest.find('/');
-				const std::string_view name = rest.substr(0, slash);
-				int op = -1;
+				const std::string_view item = rest.substr(0, slash);
+				const size_t paren = item.find('(');
+				const std::string_view name = item.substr(0, paren);
+				PreOp pre;
+				pre.op = -1;
 				for (int i = 0; i < static_cast<int>(std::size(kPreprocessOps)); ++i)
 					if (name == kPreprocessOps[i].name)
-						op = i;
-				if (op < 0)
+						pre.op = i;
+				if (pre.op < 0)
 					throw std::invalid_argument("unknown preprocessing op in pre: \"" + std::string(name) + "\"");
-				if (!kPreprocessOps[op].inPlace)
-					throw std::invalid_argument("pre: " + std::string(name) +
-												" changes the image's size or geometry; only in-place ops run inside the walk");
-				spec.preOps.push_back(op);
+				if (paren != std::string_view::npos) {
+					if (item.back() != ')')
+						throw std::invalid_argument("pre: \"" + std::string(item) + "\" -- expected Name(a:b:c)");
+					std::string_view args = item.substr(paren + 1, item.size() - paren - 2);
+					while (!args.empty()) {
+						const size_t colon = args.find(':');
+						const std::string a(args.substr(0, colon));
+						if (pre.nargs == 3 || pre.nargs >= kPreprocessOps[pre.op].maxArgs)
+							throw std::invalid_argument("pre: " + std::string(name) + " takes at most " +
+														std::to_string(kPreprocessOps[pre.op].maxArgs) + " argument(s)");
+						size_t used = 0;
+						double v = 0;
+						try {
+							v = std::stod(a, &used);
+						} catch (...) {
+							used = 0;
+						}
+						if (a.empty() || used != a.size())
+							throw std::invalid_argument("pre: bad argument \"" + a + "\" in " + std::string(item));
+						pre.args[pre.nargs++] = v;
+						if (colon == std::string_view::npos)
+							break;
+						args.remove_prefix(colon + 1);
+					}
+				}
+				spec.preOps.push_back(pre);
 				if (slash == std::string_view::npos)
 					break;
 				rest.remove_prefix(slash + 1);

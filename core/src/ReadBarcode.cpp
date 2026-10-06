@@ -11,6 +11,7 @@
 #include "MultiFormatReader.h"
 #include "Pattern.h"
 #include "Preprocess.h"
+#include "PreprocessGeometry.h"
 #include "ThresholdBinarizer.h"
 
 #include "datamatrix/DMLadderSpec.h"
@@ -19,6 +20,7 @@
 #include "Point.h"
 
 #include <algorithm>
+#include <cmath>
 #include <climits>
 #include <memory>
 #include <stdexcept>
@@ -147,8 +149,43 @@ static void ThrowIfTooLarge(const ImageView& _iv, const DecodeHints& hints)
 }
 
 // A result found on a pyramid layer, mapped back to the caller's image.
-static void ScaleToInput(Result& r, const ImageView& layer, const ImageView& _iv)
+// One layer as a walk body sees it: `layer` is the pyramid layer, `view` what
+// was binarized -- the layer itself, or the layer after the "pre:" ops, with
+// `toLayer` mapping view coordinates back to the layer's (ADR 0006 step 8).
+struct WalkLayer
 {
+	ImageView layer;
+	ImageView view;
+	bool mapped = false;
+	Affine toLayer, fromLayer;
+
+	PointF fromLayerPoint(PointF p) const
+	{
+		if (!mapped)
+			return p;
+		const double* m = fromLayer.m;
+		return {m[0] * p.x + m[1] * p.y + m[2], m[3] * p.x + m[4] * p.y + m[5]};
+	}
+};
+
+static Position MapPosition(const Position& p, const Affine& a)
+{
+	Position out = p;
+	const double* m = a.m;
+	for (int i = 0; i < 4; ++i) {
+		const double x = p[i].x, y = p[i].y;
+		out[i] = PointI(int(std::lround(m[0] * x + m[1] * y + m[2])), int(std::lround(m[3] * x + m[4] * y + m[5])));
+	}
+	return out;
+}
+
+// From the binarized view to the input: first back through the "pre:" ops'
+// map, if any, then the pyramid layer's scale as before.
+static void ScaleToInput(Result& r, const WalkLayer& wl, const ImageView& _iv)
+{
+	if (wl.mapped)
+		r.setPosition(MapPosition(r.position(), wl.toLayer));
+	const ImageView& layer = wl.layer;
 	if (layer.width() != _iv.width())
 		r.setPosition(Scale(r.position(), _iv.width() / layer.width()));
 }
@@ -162,34 +199,70 @@ static void ScaleToInput(Result& r, const ImageView& layer, const ImageView& _iv
 // The nesting is kept exactly, including that the `close` pass operates on
 // whatever state `invert` left the bitmap in -- see the TODO below.
 // The pyramid layers with the "pre:" ops applied (ADR 0006 step 8): each layer
-// is processed once, on first use, and kept for that layer's passes. An op
-// that fails, or that does not give back one channel of the same size, leaves
-// the layer as it was (the parser only admits in-place ops, so this is a guard).
+// is processed once, on first use, and kept for that layer's passes, with the
+// composed affine map of the ops (layer -> processed; PreprocessGeometry.h) so
+// results can be placed back on the layer. An op that fails, or that does not
+// give back one channel, is skipped: the image and the map stay as they were.
 // Without "pre:" a layer is returned as it is.
+// A "pre:" op's arguments as PreprocessParams, in the order the token gives
+// them: SauvolaBinarization(window:k:R), ClaheEnhancement(clipLimit:gridSize),
+// Top/BlackHatTransformation(kernelSize), AnisotropicDiffusion(iterations:
+// lambda:k), SuperResolution(scale), Erode(whiteOnBlack 0/1:size),
+// Rotate(degrees), CenterCrop(factor). Omitted ones keep their defaults.
+static PreprocessParams PreParams(const DataMatrix::ladder::PreOp& p)
+{
+	PreprocessParams q;
+	const auto a = [&](int i, double d) { return i < p.nargs ? p.args[i] : d; };
+	switch (static_cast<PreprocessOp>(p.op)) {
+	case PreprocessOp::SauvolaBinarization:
+		q.window = int(a(0, q.window)), q.sauvolaK = a(1, q.sauvolaK), q.sauvolaR = a(2, q.sauvolaR);
+		break;
+	case PreprocessOp::ClaheEnhancement: q.clipLimit = a(0, q.clipLimit), q.gridSize = int(a(1, q.gridSize)); break;
+	case PreprocessOp::TopHatTransformation:
+	case PreprocessOp::BlackHatTransformation: q.kernelSize = int(a(0, q.kernelSize)); break;
+	case PreprocessOp::AnisotropicDiffusion:
+		q.iterations = int(a(0, q.iterations)), q.lambda = a(1, q.lambda), q.diffusionK = a(2, q.diffusionK);
+		break;
+	case PreprocessOp::SuperResolution: q.scale = a(0, q.scale); break;
+	case PreprocessOp::Erode: q.whiteOnBlack = a(0, q.whiteOnBlack ? 1 : 0) != 0, q.erosionSize = int(a(1, q.erosionSize)); break;
+	case PreprocessOp::Rotate: q.angleDegrees = a(0, q.angleDegrees); break;
+	case PreprocessOp::CenterCrop: q.factor = a(0, q.factor); break;
+	default: break;
+	}
+	return q;
+}
+
 class PreppedLayers
 {
-	const std::vector<int>& _ops;
+	const std::vector<DataMatrix::ladder::PreOp>& _ops;
 	std::vector<PreprocessImage> _images;
+	std::vector<Affine> _maps;
 	std::vector<char> _done;
 
 public:
-	PreppedLayers(const std::vector<int>& ops, size_t layers) : _ops(ops), _images(ops.empty() ? 0 : layers), _done(_images.size(), 0) {}
+	PreppedLayers(const std::vector<DataMatrix::ladder::PreOp>& ops, size_t layers)
+		: _ops(ops), _images(ops.empty() ? 0 : layers), _maps(_images.size()), _done(_images.size(), 0)
+	{}
 
-	ImageView operator()(const ImageView& layer, size_t index)
+	WalkLayer operator()(const ImageView& layer, size_t index)
 	{
+		WalkLayer wl{layer, layer};
 		if (_ops.empty())
-			return layer;
+			return wl;
 		PreprocessImage& img = _images[index];
+		Affine& map = _maps[index];
 		if (!_done[index]) {
 			_done[index] = 1;
 			ImageView in = layer;
 			PreprocessImage a, b;
 			PreprocessImage* out = &a;
 			bool any = false;
-			for (int op : _ops) {
-				if (!Preprocess(static_cast<PreprocessOp>(op), PreprocessParams{}, in, *out) || out->channels != 1 ||
-					out->width != layer.width() || out->height != layer.height())
+			for (const auto& pre : _ops) {
+				const auto op = static_cast<PreprocessOp>(pre.op);
+				const PreprocessParams params = PreParams(pre);
+				if (!Preprocess(op, params, in, *out) || out->channels != 1 || out->empty())
 					continue;
+				map = PreprocessGeometry(op, params, in.width(), in.height(), out->width, out->height).after(map);
 				in = ImageView(out->pixels.data(), out->width, out->height, ImageFormat::Lum);
 				out = (out == &a) ? &b : &a;
 				any = true;
@@ -198,8 +271,12 @@ public:
 				img = std::move(out == &a ? b : a); // the last one written
 		}
 		if (img.empty())
-			return layer;
-		return ImageView(img.pixels.data(), img.width, img.height, ImageFormat::Lum);
+			return wl;
+		wl.view = ImageView(img.pixels.data(), img.width, img.height, ImageFormat::Lum);
+		wl.mapped = !map.identity();
+		wl.fromLayer = map;
+		wl.toLayer = map.inverse();
+		return wl;
 	}
 };
 
@@ -211,7 +288,8 @@ public:
 // that benefits from closing, is skipped.
 template <typename Body>
 static Results WalkExplicit(const ImageView& _iv, const ImageView& iv, const DecodeHints& hints, Binarizer binarizer,
-							const std::vector<DataMatrix::ladder::WalkPass>& passes, const std::vector<int>& preOps, Body&& body)
+							const std::vector<DataMatrix::ladder::WalkPass>& passes, const std::vector<DataMatrix::ladder::PreOp>& preOps,
+							Body&& body)
 {
 	auto formatsBenefittingFromClosing = BarcodeFormat::Aztec | BarcodeFormat::DataMatrix | BarcodeFormat::QRCode | BarcodeFormat::MicroQRCode;
 	std::unique_ptr<MultiFormatReader> closedReader;
@@ -236,9 +314,9 @@ static Results WalkExplicit(const ImageView& _iv, const ImageView& iv, const Dec
 	for (const auto& p : passes) {
 		if (p.layer >= pyramid.layers.size() || (p.close && !closedReader))
 			continue;
-		const ImageView layer = prepped(pyramid.layers[p.layer], p.layer);
+		const WalkLayer layer = prepped(pyramid.layers[p.layer], p.layer);
 		if (!bitmap || bitmapLayer != p.layer || (closed && !p.close)) {
-			bitmap = CreateBitmap(binarizer, layer);
+			bitmap = CreateBitmap(binarizer, layer.view);
 			bitmapLayer = p.layer;
 			closed = inverted = false;
 		}
@@ -276,7 +354,7 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 	// DMLadderSpec.h). Parsed only when it mentions one, so the usual call
 	// parses nothing; the string was validated when the graph opened.
 	Binarizer binarizer = hints.binarizer();
-	std::vector<int> preOps;
+	std::vector<DataMatrix::ladder::PreOp> preOps;
 	if (const std::string& ladder = hints.dmLadder(); ladder.find("walk:") != std::string::npos ||
 													  ladder.find("bin:") != std::string::npos || ladder.find("pre:") != std::string::npos) {
 		const DataMatrix::ladder::Spec spec = DataMatrix::ladder::ParseSpec(ladder);
@@ -304,8 +382,8 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
 	PreppedLayers prepped(preOps, pyramid.layers.size());
 	for (size_t layerIndex = 0; layerIndex < pyramid.layers.size(); ++layerIndex) {
-		const ImageView layer = prepped(pyramid.layers[layerIndex], layerIndex);
-		auto bitmap = CreateBitmap(binarizer, layer);
+		const WalkLayer layer = prepped(pyramid.layers[layerIndex], layerIndex);
+		auto bitmap = CreateBitmap(binarizer, layer.view);
 		for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
 			if (close) {
 				CRPT_LADDER_WALK_SETUP(Close);
@@ -353,7 +431,7 @@ Results ReadBarcodes(const ImageView& _iv, const DecodeHints& hints)
 	if (hints.isPure())
 		return {reader.read(*CreateBitmap(hints.binarizer(), iv))};
 
-	return WalkBinarizations(_iv, iv, hints, [&](BinaryBitmap& bitmap, const ImageView& layer, bool close, MultiFormatReader* closedReader, Results& results, int& maxSymbols) {
+	return WalkBinarizations(_iv, iv, hints, [&](BinaryBitmap& bitmap, const WalkLayer& layer, bool close, MultiFormatReader* closedReader, Results& results, int& maxSymbols) {
 		auto rs = (close ? *closedReader : reader).readMultiple(bitmap, maxSymbols);
 		for (auto& r : rs) {
 			ScaleToInput(r, layer, _iv);
@@ -383,13 +461,14 @@ Results readbarcodescrpt_detector_v1_samplegridv1(const ImageView& _iv, const Po
 	// This entry point has always run `reader` on the closed pass too, never
 	// the MultiFormatReader the walk builds for it, and returns on the first
 	// valid result without the Contains() dedup. Both kept as they were.
-	return WalkBinarizations(_iv, iv, hints, [&](BinaryBitmap& bitmap, const ImageView& layer, bool, MultiFormatReader*, Results& results, int&) {
-		PointF layerScale(layer.width(), layer.height());
+	return WalkBinarizations(_iv, iv, hints, [&](BinaryBitmap& bitmap, const WalkLayer& layer, bool, MultiFormatReader*, Results& results, int&) {
+		PointF layerScale(layer.layer.width(), layer.layer.height());
 
-		PointF sP0 = P0 * layerScale;
-		PointF sP1 = P1 * layerScale;
-		PointF sP2 = P2 * layerScale;
-		PointF sP3 = P3 * layerScale;
+		// The corner hints on the layer, then into the binarized view ("pre:").
+		PointF sP0 = layer.fromLayerPoint(P0 * layerScale);
+		PointF sP1 = layer.fromLayerPoint(P1 * layerScale);
+		PointF sP2 = layer.fromLayerPoint(P2 * layerScale);
+		PointF sP3 = layer.fromLayerPoint(P3 * layerScale);
 
 		auto r = reader->decode(bitmap, sP0, sP1, sP2, sP3);
 		if (r.isValid()) {
@@ -415,7 +494,7 @@ Results readbarcodescrpt_samplegridv1(const ImageView& _iv, const DecodeHints& h
 
 	auto reader = std::make_unique<ZXing::DataMatrix::DMCRPTReader>(hints);
 
-	return WalkBinarizations(_iv, iv, hints, [&](BinaryBitmap& bitmap, const ImageView& layer, bool close, MultiFormatReader* closedReader, Results& results, int& maxSymbols) {
+	return WalkBinarizations(_iv, iv, hints, [&](BinaryBitmap& bitmap, const WalkLayer& layer, bool close, MultiFormatReader* closedReader, Results& results, int& maxSymbols) {
 		if(!close) {
 			auto r = reader->decode(bitmap);
 			if (r.isValid()) {

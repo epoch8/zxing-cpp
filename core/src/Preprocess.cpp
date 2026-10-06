@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "Preprocess.h"
+#include "PreprocessGeometry.h"
 
 #include "opencv2/core.hpp"
 #include "opencv2/imgproc.hpp"
@@ -379,6 +380,35 @@ bool Preprocess(PreprocessOp op, const PreprocessParams& params, const ImageView
 	} catch (...) {
 		out = PreprocessImage();
 		return false;
+	}
+}
+
+Affine PreprocessGeometry(PreprocessOp op, const PreprocessParams& p, int inW, int inH, int outW, int outH) noexcept
+{
+	switch (op) {
+	case PreprocessOp::ScaledUnsharp:
+	case PreprocessOp::SuperResolution: {
+		if (inW <= 0 || inH <= 0)
+			return {};
+		// cv::resize maps pixel centres: x' + 0.5 = s (x + 0.5).
+		const double sx = double(outW) / inW, sy = double(outH) / inH;
+		return {{sx, 0, 0.5 * (sx - 1), 0, sy, 0.5 * (sy - 1)}};
+	}
+	case PreprocessOp::CenterCrop: {
+		// The ROI's top-left, as CenterCrop computes it (integer division).
+		const int x = (inW - outW) / 2, y = (inH - outH) / 2;
+		return {{1, 0, -double(x), 0, 1, -double(y)}};
+	}
+	case PreprocessOp::Rotate: {
+		// cv::getRotationMatrix2D(centre, angle, 1): the source-to-destination
+		// matrix warpAffine applies (no WARP_INVERSE_MAP); centre in float, as there.
+		const double cx = float(inW / 2.0f), cy = float(inH / 2.0f);
+		const double a = p.angleDegrees * 3.14159265358979323846 / 180.0;
+		const double alpha = std::cos(a), beta = std::sin(a);
+		return {{alpha, beta, (1 - alpha) * cx - beta * cy, -beta, alpha, beta * cx + (1 - alpha) * cy}};
+	}
+	default:
+		return {};
 	}
 }
 
