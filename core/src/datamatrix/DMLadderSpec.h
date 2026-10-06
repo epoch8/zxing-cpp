@@ -11,6 +11,7 @@
 // the public hints and the parser can be exercised without a zxing build.
 
 #include <cstdint>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -77,12 +78,31 @@ struct Features
 /// A parsed ladder string. Empty `steps` means the plan's built-in order;
 /// the feature fields are overrides applied on top of whatever the caller's
 /// hints set.
+/// One pass of the binarization walk (ReadBarcode.cpp): a pyramid layer,
+/// binarized, then closed if `close`, then inverted if `invert`.
+struct WalkPass
+{
+	uint8_t layer = 0;
+	bool close = false;
+	bool invert = false;
+};
+
+/// The binarizers' names, in ZXing::Binarizer's order (DecodeHints.h). This
+/// header stays standard-library only, so it names them rather than include it.
+inline constexpr const char* kBinarizerNames[] = {"LocalAverage", "GlobalHistogram", "FixedThreshold", "BoolCast"};
+
 struct Spec
 {
 	std::vector<std::string> steps;
 	std::string recipe;       ///< a named recipe (DMDetector.cpp, kRecipes), or empty
 	uint64_t featureBits = 0; ///< values for the overridden features
 	uint64_t featureMask = 0; ///< which features the string overrode
+	/// The binarization walk, when the string sets one ("walk:", "bin:"); it
+	/// runs around the plan, not inside it, so it is not part of empty().
+	std::vector<WalkPass> walk; ///< explicit passes in order; empty = the built-in walk
+	int binarizer = -1;         ///< a ZXing::Binarizer value; -1 = the hints' binarizer
+
+	bool hasWalk() const noexcept { return !walk.empty() || binarizer >= 0; }
 
 	Features apply(Features base) const noexcept
 	{
@@ -93,6 +113,28 @@ struct Spec
 	bool empty() const noexcept { return steps.empty() && featureMask == 0 && recipe.empty(); }
 };
 
+/// "L0", "L1+inv", "L0+close+inv" -> a pass. Layer 0..9; each modifier once.
+inline WalkPass ParseWalkPass(std::string_view text)
+{
+	WalkPass p;
+	if (text.size() < 2 || text[0] != 'L' || text[1] < '0' || text[1] > '9')
+		throw std::invalid_argument("bad walk pass \"" + std::string(text) + "\": expected L<layer>[+close][+inv]");
+	p.layer = static_cast<uint8_t>(text[1] - '0');
+	std::string_view rest = text.substr(2);
+	while (!rest.empty()) {
+		if (rest.substr(0, 4) == "+inv" && !p.invert) {
+			p.invert = true;
+			rest.remove_prefix(4);
+		} else if (rest.substr(0, 6) == "+close" && !p.close) {
+			p.close = true;
+			rest.remove_prefix(6);
+		} else {
+			throw std::invalid_argument("bad walk pass \"" + std::string(text) + "\": expected L<layer>[+close][+inv]");
+		}
+	}
+	return p;
+}
+
 /**
  * Grammar: tokens separated by spaces and/or commas. `=name` names a recipe
  * (at most one); `+name` turns a feature on and `-name` off, on top of the
@@ -102,6 +144,11 @@ struct Spec
  * because only the plan knows its steps. Never a silent no-op: a typo in a
  * schedule must fail the run, not quietly produce a build whose numbers mean
  * something else.
+ *
+ * Two tokens set the binarization walk around the plan (ReadBarcode.cpp)
+ * instead of a step: `walk:L0/L0+inv/L1` -- exactly these passes, in this
+ * order, '/'-separated -- and `bin:Name` -- the binarizer (LocalAverage,
+ * GlobalHistogram, FixedThreshold, BoolCast). Each at most once.
  */
 inline Spec ParseSpec(std::string_view text)
 {
@@ -118,7 +165,28 @@ inline Spec ParseSpec(std::string_view text)
 		std::string_view tok = text.substr(i, j - i);
 		i = j;
 
-		if (tok[0] == '=') {
+		if (tok.substr(0, 5) == "walk:") {
+			if (!spec.walk.empty())
+				throw std::invalid_argument("more than one walk: token");
+			std::string_view passes = tok.substr(5);
+			while (true) {
+				const size_t slash = passes.find('/');
+				spec.walk.push_back(ParseWalkPass(passes.substr(0, slash)));
+				if (slash == std::string_view::npos)
+					break;
+				passes.remove_prefix(slash + 1);
+			}
+		} else if (tok.substr(0, 4) == "bin:") {
+			if (spec.binarizer >= 0)
+				throw std::invalid_argument("more than one bin: token");
+			const std::string_view name = tok.substr(4);
+			for (int b = 0; b < static_cast<int>(std::size(kBinarizerNames)); ++b)
+				if (name == kBinarizerNames[b])
+					spec.binarizer = b;
+			if (spec.binarizer < 0)
+				throw std::invalid_argument("unknown binarizer: " + std::string(tok) +
+											" (LocalAverage, GlobalHistogram, FixedThreshold, BoolCast)");
+		} else if (tok[0] == '=') {
 			if (tok.size() < 2)
 				throw std::invalid_argument("empty ladder recipe name");
 			if (!spec.recipe.empty())

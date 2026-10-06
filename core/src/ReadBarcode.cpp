@@ -12,10 +12,12 @@
 #include "Pattern.h"
 #include "ThresholdBinarizer.h"
 
+#include "datamatrix/DMLadderSpec.h"
 #include "datamatrix/DMLadderStats.h"
 #include "datamatrix/DMReader.h"
 #include "Point.h"
 
+#include <algorithm>
 #include <climits>
 #include <memory>
 #include <stdexcept>
@@ -158,9 +160,87 @@ static void ScaleToInput(Result& r, const ImageView& layer, const ImageView& _iv
 //
 // The nesting is kept exactly, including that the `close` pass operates on
 // whatever state `invert` left the bitmap in -- see the TODO below.
+// An explicit walk from the phase's ladder string ("walk:L0/L0+inv/L1",
+// DMLadderSpec.h): exactly these passes, in this order. A pass reuses the
+// previous pass's bitmap when it is on the same layer and only inversion
+// changes, as the built-in walk does; a pass with `close` closes before it
+// inverts. A layer the pyramid does not have, or a closing pass with no format
+// that benefits from closing, is skipped.
+template <typename Body>
+static Results WalkExplicit(const ImageView& _iv, const ImageView& iv, const DecodeHints& hints, Binarizer binarizer,
+							const std::vector<DataMatrix::ladder::WalkPass>& passes, Body&& body)
+{
+	auto formatsBenefittingFromClosing = BarcodeFormat::Aztec | BarcodeFormat::DataMatrix | BarcodeFormat::QRCode | BarcodeFormat::MicroQRCode;
+	std::unique_ptr<MultiFormatReader> closedReader;
+	const bool anyClose = std::any_of(passes.begin(), passes.end(), [](auto& p) { return p.close; });
+	if (anyClose && hints.hasFormat(formatsBenefittingFromClosing)) {
+		DecodeHints closedHints = hints;
+		closedHints.setFormats((hints.formats().empty() ? BarcodeFormat::Any : hints.formats()) & formatsBenefittingFromClosing);
+		closedReader = std::make_unique<MultiFormatReader>(closedHints);
+	}
+
+	LumImagePyramid pyramid = [&] {
+		CRPT_LADDER_WALK_SETUP(Pyramid);
+		return LumImagePyramid(iv, hints.downscaleThreshold() * hints.tryDownscale(), hints.downscaleFactor());
+	}();
+
+	Results results;
+	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
+	std::unique_ptr<BinaryBitmap> bitmap;
+	size_t bitmapLayer = 0;
+	bool closed = false, inverted = false;
+	for (const auto& p : passes) {
+		if (p.layer >= pyramid.layers.size() || (p.close && !closedReader))
+			continue;
+		auto&& layer = pyramid.layers[p.layer];
+		if (!bitmap || bitmapLayer != p.layer || (closed && !p.close)) {
+			bitmap = CreateBitmap(binarizer, layer);
+			bitmapLayer = p.layer;
+			closed = inverted = false;
+		}
+		if (p.close && !closed) {
+			if (inverted) {
+				bitmap->invert();
+				inverted = false;
+			}
+			CRPT_LADDER_WALK_SETUP(Close);
+			bitmap->close();
+			closed = true;
+		}
+		if (inverted != p.invert) {
+			CRPT_LADDER_WALK_SETUP(Invert);
+			bitmap->invert();
+			inverted = p.invert;
+		}
+		bool done;
+		{
+			CRPT_LADDER_PASS(binarizer, p.layer, p.close, p.invert);
+			[[maybe_unused]] size_t resultsBefore = results.size();
+			done = body(*bitmap, layer, p.close, closedReader.get(), results, maxSymbols);
+			CRPT_LADDER_PASS_RESULTS(results, resultsBefore);
+		}
+		if (done || maxSymbols <= 0)
+			return results;
+	}
+	return results;
+}
+
 template <typename Body>
 static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, const DecodeHints& hints, Body&& body)
 {
+	// The phase's ladder string can set the walk ("walk:", "bin:" --
+	// DMLadderSpec.h). Parsed only when it mentions one, so the usual call
+	// parses nothing; the string was validated when the graph opened.
+	Binarizer binarizer = hints.binarizer();
+	if (const std::string& ladder = hints.dmLadder();
+		ladder.find("walk:") != std::string::npos || ladder.find("bin:") != std::string::npos) {
+		const DataMatrix::ladder::Spec spec = DataMatrix::ladder::ParseSpec(ladder);
+		if (spec.binarizer >= 0)
+			binarizer = static_cast<Binarizer>(spec.binarizer);
+		if (!spec.walk.empty())
+			return WalkExplicit(_iv, iv, hints, binarizer, spec.walk, body);
+	}
+
 	auto formatsBenefittingFromClosing = BarcodeFormat::Aztec | BarcodeFormat::DataMatrix | BarcodeFormat::QRCode | BarcodeFormat::MicroQRCode;
 	DecodeHints closedHints = hints;
 	std::unique_ptr<MultiFormatReader> closedReader;
@@ -178,7 +258,7 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
 	for (size_t layerIndex = 0; layerIndex < pyramid.layers.size(); ++layerIndex) {
 		auto&& layer = pyramid.layers[layerIndex];
-		auto bitmap = CreateBitmap(hints.binarizer(), layer);
+		auto bitmap = CreateBitmap(binarizer, layer);
 		for (int close = 0; close <= (closedReader ? 1 : 0); ++close) {
 			if (close) {
 				CRPT_LADDER_WALK_SETUP(Close);
@@ -196,7 +276,7 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 				// (DMLadderStats.h). Compiled out without CRPT_ZXING_PROFILING.
 				bool done;
 				{
-					CRPT_LADDER_PASS(hints.binarizer(), layerIndex, close != 0, invert != 0);
+					CRPT_LADDER_PASS(binarizer, layerIndex, close != 0, invert != 0);
 					[[maybe_unused]] size_t resultsBefore = results.size();
 					done = body(*bitmap, layer, close != 0, closedReader.get(), results, maxSymbols);
 					CRPT_LADDER_PASS_RESULTS(results, resultsBefore);
