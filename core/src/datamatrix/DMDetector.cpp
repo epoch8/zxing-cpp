@@ -2731,7 +2731,7 @@ struct NamedDecoder
 };
 
 static const NamedDecoder kDecoders[] = {
-    {"standard", &Decode},
+    {"standard", &ladder::DecodeStandard},
 };
 
 static const ladder::Sampling* const kSamplings[] = {&kSamplingPlain, &kSamplingWarped, &kSamplingTestOffseted};
@@ -2762,7 +2762,7 @@ static const Recipe kRecipes[] = {
 struct Resolved
 {
     ladder::Spec spec;
-    ladder::DecodeFn decoder = &Decode;
+    ladder::DecodeFn decoder = &ladder::DecodeStandard;
     ladder::SamplingOverrides overrides;
 };
 

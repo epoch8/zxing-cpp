@@ -48,9 +48,22 @@ inline Features& CurrentFeatures() noexcept
 /// swapped everywhere below.
 using DecodeFn = DecoderResult (*)(const BitMatrix& bits);
 
+/// The "standard" Decoder stage: DataMatrix::Decode with the one accept rule
+/// (ADR 0006 step 9): a decode with no content bytes is a failed decode, so
+/// the plan and the walk keep looking -- "found" means there is something to
+/// report. Every other result is accepted as it is: a DataMatrix's own
+/// structure already keeps wrong reads out.
+inline DecoderResult DecodeStandard(const BitMatrix& bits)
+{
+	DecoderResult r = Decode(bits);
+	if (r.isValid() && r.content().empty())
+		return DecoderResult(FormatError("decoded to no content"));
+	return r;
+}
+
 inline DecodeFn& CurrentDecoder() noexcept
 {
-	thread_local DecodeFn d = &Decode;
+	thread_local DecodeFn d = &DecodeStandard;
 	return d;
 }
 
