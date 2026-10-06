@@ -647,11 +647,34 @@ namespace ZXing::DataMatrix {
 		return {std::move(res), {width, height, mod2pix, g.warp}};
 	}
 
+	// Record runs (ADR 0006 step 4): which of the four grid-refinement settings
+	// (CrptLadderWin::refine) this sample decodes with, for the hosting step's
+	// win entry. `refine` is the refinement with the setting as a parameter; the
+	// caller then runs it with the setting in force, so this only observes.
+	template <class Refine>
+	static void NoteRefineSettings([[maybe_unused]] const BitMatrix& image, [[maybe_unused]] const ladder::Geometry& g,
+								   [[maybe_unused]] DMGridRefineOptions inForce, [[maybe_unused]] const DetectorResult& res,
+								   [[maybe_unused]] Refine refine)
+	{
+#ifdef CRPT_ZXING_PROFILING
+		if (!ladder::CurrentFeatures().on(ladder::Feat::sweepSteps))
+			return;
+		const auto decode = ladder::CurrentDecoder();
+		uint8_t settings = 0;
+		for (int c = 0; c < 4; ++c) {
+			DetectorResult r = refine(image, g, DMGridRefineOptions{(c & 1) != 0, (c & 2) != 0}, ladder::CopyOf(res));
+			if (r.isValid() && decode(r.bits()).isValid())
+				settings |= static_cast<uint8_t>(1 << c);
+		}
+		CRPT_LADDER_REFINE(settings, (inForce.regionGrowing ? 1 : 0) | (inForce.rsFeedback ? 2 : 0));
+#endif
+	}
+
 	// Refinement "testOffseted": when the sample does not decode cleanly -- an invalid
 	// sample counts as not clean -- region growing from the L-corner if that scores
 	// better, then Reed-Solomon-guided resampling. Each gated by its feature.
-	static DetectorResult RefineTestOffseted(const BitMatrix& image, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
-											 DetectorResult res)
+	static DetectorResult RefineTestOffsetedWith(const BitMatrix& image, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+												 DetectorResult res)
 	{
 		if (!gridRefine.any())
 			return res;
@@ -682,6 +705,13 @@ namespace ZXing::DataMatrix {
 		}
 
 		return res;
+	}
+
+	static DetectorResult RefineTestOffseted(const BitMatrix& image, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+											 DetectorResult res)
+	{
+		NoteRefineSettings(image, g, gridRefine, res, RefineTestOffsetedWith);
+		return RefineTestOffsetedWith(image, g, gridRefine, std::move(res));
 	}
 
 	static const ladder::Sampling kSamplingPlain{"plain", SamplePlain};
@@ -1186,6 +1216,7 @@ namespace ZXing::DataMatrix {
 											   DMGridRefineOptions gridRefine = {})
     {
         OldContext c{{outDecoderResult}, image, gridRefine, correctedOffset};
+        c.hostOut = &correctedOffset; // testOffsetGrid clears it; a sweep puts it back
 
         // Each `return {}` in setup is noted as a bail on the step hosting this
         // detector: its cost then reads as setup failing, not grids failing.
@@ -1643,8 +1674,8 @@ namespace ZXing::DataMatrix {
     // then Reed-Solomon-guided resampling of the modules it flagged; each gated
     // by its feature. Unlike "testOffseted" it leaves an invalid sample alone --
     // the one difference, and why the two stay two refinements.
-    static DetectorResult RefineWarped(const BitMatrix& img, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
-                                       DetectorResult res)
+    static DetectorResult RefineWarpedWith(const BitMatrix& img, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+                                           DetectorResult res)
     {
         const int dimT = g.width, dimR = g.height;
         if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
@@ -1663,6 +1694,13 @@ namespace ZXing::DataMatrix {
             }
         }
         return res;
+    }
+
+    static DetectorResult RefineWarped(const BitMatrix& img, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+                                       DetectorResult res)
+    {
+        NoteRefineSettings(img, g, gridRefine, res, RefineWarpedWith);
+        return RefineWarpedWith(img, g, gridRefine, std::move(res));
     }
 
     // ---- Locator "scanL": Scan's L-finder, as a stage --------------------------
@@ -2469,6 +2507,7 @@ namespace ZXing::DataMatrix {
             return {};
         }
         CrptContext c{{outDecodeResult}, image, warp, needToTraceWarp, correctCorners, gridRefine, setup};
+        c.sweepWarp = warp; // sweeps put back the warp a winning variant traced (DMLadder.h)
 
         if (setup.transitions[0].transitions > 4) {
             possibleResultedDefect = ResultedDefect::LMarker;
@@ -2668,6 +2707,9 @@ static DetectorResult StepNewWarp(ladder::Context& ctx, bool& decodedInside)
 // edit rather than a code change.
 static DetectorResult StepCrptWarpRedecode(ladder::Context& ctx, bool& /*decodedInside*/)
 {
+    // Its bits are s5's, refined as s5 refined them: so are the settings it
+    // decodes with (a record run's win entry, CrptLadderStats.h).
+    CRPT_LADDER_INHERIT_REFINE();
     DetectorResult det = std::move(ctx.last);
     if (det.isValid())
         det.setResultedDefect(ResultedDefect::PrintShift);
@@ -2845,6 +2887,7 @@ DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, b
     }
 
     ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, r, outDecoderResult);
+    ctx.sweepWarp = &ctx.warp;
     return ladder::RunLadder("stock", kStockPlan, r.spec, ctx, ladder::Policy::FirstValidDetection);
 }
 
@@ -2853,6 +2896,7 @@ DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool 
 {
     const Resolved r = ResolveRecipe(spec, "samplegridv1");
     ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, r, outDecoderResult);
+    ctx.sweepWarp = &ctx.warp;
     return ladder::RunLadder("sgv1", kSamplegridV1Plan, r.spec, ctx);
 }
 
@@ -2861,6 +2905,7 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
 {
     const Resolved r = ResolveRecipe(spec, "defined");
     ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, r, outDecoderResult);
+    ctx.sweepWarp = &ctx.warp;
     ctx.corners = { P0, P1, P2, P3 };
     return ladder::RunLadder("defined", kDefinedPlan, r.spec, ctx);
 }

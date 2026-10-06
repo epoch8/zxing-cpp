@@ -72,6 +72,18 @@ private:
 /// Attach a note to the innermost open step.
 void AddNote(Note note) noexcept;
 
+/// Record runs: a refinement in the innermost open step worked out which grid-
+/// refinement settings its sample decodes with (CrptLadderWin::refine), and
+/// which setting is in force. A step that wins carries the union of what its
+/// refinements reported -- unless none of them decoded with the setting in
+/// force, in which case its winning sample was never refined and the setting
+/// did not matter. A step hosting a sub-plan gets the union of its sub-steps'.
+void NoteRefine(uint8_t settings, uint8_t inForce) noexcept;
+
+/// The innermost open step re-decodes the detection the step before it (at the
+/// same depth) produced: what it decodes with is what that one did.
+void InheritRefine() noexcept;
+
 /// A named piece of work inside a step -- the white-rect search, the 45-degree
 /// rotation, the transition measurements. Times its scope and charges it to the
 /// hosting step under "<step path>#<name>". `name` must be a string literal:
@@ -105,6 +117,7 @@ public:
 
 private:
 	int _slot; // -1: no slot (a layer or binarizer beyond the table)
+	int _outer; // the pass open before this one (win entries name the innermost)
 	uint32_t _results = 0;
 	TimePoint _t0;
 };
@@ -139,6 +152,8 @@ private:
 #define CRPT_LADDER_ENTER(plan, index, step) ::ZXing::DataMatrix::ladder::stats::Frame crptLadderFrame_(plan, index, step)
 #define CRPT_LADDER_LEAVE(outcome, t0) crptLadderFrame_.leave(outcome, t0)
 #define CRPT_LADDER_NOTE(note) ::ZXing::DataMatrix::ladder::stats::AddNote(::ZXing::DataMatrix::ladder::Note::note)
+#define CRPT_LADDER_REFINE(settings, inForce) ::ZXing::DataMatrix::ladder::stats::NoteRefine(settings, inForce)
+#define CRPT_LADDER_INHERIT_REFINE() ::ZXing::DataMatrix::ladder::stats::InheritRefine()
 #define CRPT_LADDER_PROBE_CAT_(a, b) a##b
 #define CRPT_LADDER_PROBE_CAT(a, b) CRPT_LADDER_PROBE_CAT_(a, b)
 #define CRPT_LADDER_PROBE(name) \
@@ -164,6 +179,8 @@ private:
 #define CRPT_LADDER_ENTER(plan, index, step) ((void)0)
 #define CRPT_LADDER_LEAVE(outcome, t0) ((void)0)
 #define CRPT_LADDER_NOTE(note) ((void)0)
+#define CRPT_LADDER_REFINE(settings, inForce) ((void)0)
+#define CRPT_LADDER_INHERIT_REFINE() ((void)0)
 #define CRPT_LADDER_PROBE(name) ((void)0)
 #define CRPT_LADDER_WALK_SETUP(what) ((void)0)
 #define CRPT_LADDER_PASS(binarizer, layer, close, invert) ((void)0)

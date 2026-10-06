@@ -63,6 +63,33 @@ extern "C" {
 
 #define CRPT_LADDER_SLOTS (CRPT_LADDER_STEP_SLOTS + CRPT_LADDER_PROBE_SLOTS + CRPT_LADDER_WALK_SLOTS + CRPT_LADDER_WALK_SETUP_SLOTS)
 
+// The first walk slot: walk pass w is slot CRPT_LADDER_WALK_BASE + w.
+#define CRPT_LADDER_WALK_BASE (CRPT_LADDER_STEP_SLOTS + CRPT_LADDER_PROBE_SLOTS)
+
+// Wins by walk pass (ADR 0006 step 4, record mode). The step rows add up every
+// pass of the walk, so they cannot say which pass a step read on -- and a
+// replay of a walk with fewer passes needs exactly that. So each time a step
+// ends having decoded, the runner also appends an entry: the walk pass it ran
+// in, the step's slot, and under which grid-refinement settings it decoded.
+//
+// `refine`, bit c set: the step decodes with refinement setting c, whose bit 0
+// is region growing and bit 1 RS feedback (c = 0 neither ... 3 both; the
+// schedule's flag bits 1 and 2). Exhaustive runs (+sweepSteps) work all four
+// out where a refinement applies, and also add an entry for a step that did
+// not decode with the setting in force but would have with another one -- an
+// entry whose bit for the setting in force is clear. Everywhere else the
+// setting did not matter, and all four bits are set.
+#define CRPT_LADDER_MAX_WINS 4096
+#define CRPT_LADDER_NO_WALK 0xFFFF
+
+struct CrptLadderWin
+{
+	uint16_t walk;   // the walk pass (slot CRPT_LADDER_WALK_BASE + walk), or CRPT_LADDER_NO_WALK
+	uint16_t slot;   // the step's slot, as in the step rows
+	uint8_t refine;  // the settings it decodes with, see above
+	uint8_t reserved[3];
+};
+
 // One step, at one path, since the last CrptLadderReset().
 struct CrptLadderStepStat
 {
@@ -104,9 +131,15 @@ size_t CrptLadderSnapshot(struct CrptLadderStepStat* out, size_t n);
 const char* CrptLadderNames(size_t i);
 
 // Records that had no slot since the last reset: deeper than a sub-plan, or a
-// plan or step beyond the table. Should stay 0; if it does not, the table is
-// too small for the plans.
+// plan or step beyond the table, or a win past CRPT_LADDER_MAX_WINS. Should
+// stay 0; if it does not, the table is too small for the plans.
 uint32_t CrptLadderDropped(void);
+
+// Copy up to n of the calling thread's win entries since the last reset into
+// out, oldest first; returns how many there are (0 without profiling). An
+// entry's index is stable until the next reset, so a caller can take the
+// entries a piece of work added as the range between two counts.
+size_t CrptLadderWins(struct CrptLadderWin* out, size_t n);
 
 #ifdef __cplusplus
 } // extern "C"

@@ -280,6 +280,20 @@ public:
 	}
 };
 
+// Record runs (ADR 0006 step 4: the calculator adds +sweepSteps to the
+// DataMatrix ladder string). A walk that would stop -- a body said done, or the
+// symbol budget ran out -- runs its remaining passes anyway, each into scratch
+// results that are thrown away, so the ladder rows record what every pass can
+// read on its own. What the walk returns does not change.
+static bool SweepWalk([[maybe_unused]] const DecodeHints& hints)
+{
+#ifdef CRPT_ZXING_PROFILING
+	return hints.dmLadder().find("+sweepSteps") != std::string::npos;
+#else
+	return false;
+#endif
+}
+
 // An explicit walk from the phase's ladder string ("walk:L0/L0+inv/L1",
 // DMLadderSpec.h): exactly these passes, in this order. A pass reuses the
 // previous pass's bitmap when it is on the same layer and only inversion
@@ -307,6 +321,10 @@ static Results WalkExplicit(const ImageView& _iv, const ImageView& iv, const Dec
 
 	Results results;
 	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
+	const bool sweep = SweepWalk(hints);
+	Results scratch;
+	int scratchMax = 0;
+	bool stopped = false; // a sweep past the point where the walk returns
 	PreppedLayers prepped(preOps, pyramid.layers.size());
 	std::unique_ptr<BinaryBitmap> bitmap;
 	size_t bitmapLayer = 0;
@@ -336,13 +354,21 @@ static Results WalkExplicit(const ImageView& _iv, const ImageView& iv, const Dec
 		}
 		bool done;
 		{
+			if (stopped) {
+				scratch.clear();
+				scratchMax = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
+			}
+			Results& into = stopped ? scratch : results;
 			CRPT_LADDER_PASS(binarizer, p.layer, p.close, p.invert);
-			[[maybe_unused]] size_t resultsBefore = results.size();
-			done = body(*bitmap, layer, p.close, closedReader.get(), results, maxSymbols);
-			CRPT_LADDER_PASS_RESULTS(results, resultsBefore);
+			[[maybe_unused]] size_t resultsBefore = into.size();
+			done = body(*bitmap, layer, p.close, closedReader.get(), into, stopped ? scratchMax : maxSymbols);
+			CRPT_LADDER_PASS_RESULTS(into, resultsBefore);
 		}
-		if (done || maxSymbols <= 0)
-			return results;
+		if (!stopped && (done || maxSymbols <= 0)) {
+			if (!sweep)
+				return results;
+			stopped = true;
+		}
 	}
 	return results;
 }
@@ -380,6 +406,10 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 
 	Results results;
 	int maxSymbols = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
+	const bool sweep = SweepWalk(hints);
+	Results scratch;
+	int scratchMax = 0;
+	bool stopped = false; // a sweep past the point where the walk returns
 	PreppedLayers prepped(preOps, pyramid.layers.size());
 	for (size_t layerIndex = 0; layerIndex < pyramid.layers.size(); ++layerIndex) {
 		const WalkLayer layer = prepped(pyramid.layers[layerIndex], layerIndex);
@@ -401,15 +431,21 @@ static Results WalkBinarizations(const ImageView& _iv, const ImageView& iv, cons
 				// (DMLadderStats.h). Compiled out without CRPT_ZXING_PROFILING.
 				bool done;
 				{
+					if (stopped) {
+						scratch.clear();
+						scratchMax = hints.maxNumberOfSymbols() ? hints.maxNumberOfSymbols() : INT_MAX;
+					}
+					Results& into = stopped ? scratch : results;
 					CRPT_LADDER_PASS(binarizer, layerIndex, close != 0, invert != 0);
-					[[maybe_unused]] size_t resultsBefore = results.size();
-					done = body(*bitmap, layer, close != 0, closedReader.get(), results, maxSymbols);
-					CRPT_LADDER_PASS_RESULTS(results, resultsBefore);
+					[[maybe_unused]] size_t resultsBefore = into.size();
+					done = body(*bitmap, layer, close != 0, closedReader.get(), into, stopped ? scratchMax : maxSymbols);
+					CRPT_LADDER_PASS_RESULTS(into, resultsBefore);
 				}
-				if (done)
-					return results;
-				if (maxSymbols <= 0)
-					return results;
+				if (!stopped && (done || maxSymbols <= 0)) {
+					if (!sweep)
+						return results;
+					stopped = true;
+				}
 			}
 		}
 	}

@@ -243,6 +243,20 @@ struct State
 	DecodeFn decoder = CurrentDecoder();
 
 	DecoderResult decode(const BitMatrix& bits) const { return decoder(bits); }
+
+	/// A plan nested inside a step may also report through one more of its
+	/// host's out-parameters, which a step of the plan writes
+	/// (DetectOldWithOffsets' correctedOffset, cleared by testOffsetGrid). Set
+	/// so a sweep can put it back as it was at the first win (RunSteps).
+	bool* hostOut = nullptr;
+
+	/// The warp the plan's steps trace into and reuse (the entry plans'
+	/// Context::warp; the CRPT plan's host warp). A step reuses a valid warp
+	/// that fits its symbol, so after a win the steps a sweep runs next would
+	/// sample with the winner's warp -- on another image size, out of bounds.
+	/// A sweep puts back the warp from before the winning step for the steps
+	/// after it, and the winner's at the end (RunSteps).
+	Warp* sweepWarp = nullptr;
 };
 
 /**
@@ -354,16 +368,23 @@ DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>
 	// is recorded. The first win is what the plan returns, with the runner's
 	// state put back as it was at that win: the result does not change.
 	//
-	// Entry plans only (`sweepable`, set by the RunLadder that takes a Spec).
-	// A plan nested inside a step reports through its host's out-parameters
-	// (DetectOldWithOffsets' correctedOffset, DetectCRPT's defect), which the
-	// steps after its winner would overwrite and the runner cannot put back.
+	// Entry plans and the plans nested in their steps (`sweepable`). A nested
+	// plan that reports through its host's out-parameters names the one a
+	// step writes (State::hostOut), and that is put back too. (DetectCRPT's
+	// defect is set before its plan runs and no step of it writes it.)
 	const bool sweep = sweepable && ctx.on(Feat::sweepSteps);
 	bool won = false;
 	DetectorResult wonDet, wonLast;
 	DecoderResult wonDec;
 	QuadrilateralI wonCandidate;
+	bool wonHostOut = false;
+	Warp preWarp, wonWarp; // sweeps only: the warp before the step, and after the first win
 	const auto hold = [&](DetectorResult&& det) {
+		if (ctx.sweepWarp) {
+			if (!won)
+				wonWarp = *ctx.sweepWarp;
+			*ctx.sweepWarp = preWarp;
+		}
 		if (!won) {
 			won = true;
 			wonDec = std::move(ctx.dec);
@@ -371,6 +392,8 @@ DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>
 			wonLast = std::move(ctx.last);
 			wonDet = std::move(det);
 			ctx.last = CopyOf(wonDet);
+			if (ctx.hostOut)
+				wonHostOut = *ctx.hostOut;
 		} else {
 			ctx.last = std::move(det);
 		}
@@ -385,6 +408,8 @@ DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>
 			continue;
 		}
 
+		if (sweep && ctx.sweepWarp)
+			preWarp = *ctx.sweepWarp;
 		CRPT_LADDER_ENTER(plan, index, step.name);
 		[[maybe_unused]] const auto t0 = CRPT_LADDER_CLOCK();
 		bool decodedInside = false;
@@ -425,6 +450,10 @@ DetectorResult RunSteps(const char* plan, const Step<Ctx>* base, const Step<Ctx>
 		ctx.dec = std::move(wonDec);
 		ctx.candidate = wonCandidate;
 		ctx.last = std::move(wonLast);
+		if (ctx.hostOut)
+			*ctx.hostOut = wonHostOut;
+		if (ctx.sweepWarp)
+			*ctx.sweepWarp = std::move(wonWarp);
 		return wonDet;
 	}
 	if (fallback == Fallback::LastDetection)
@@ -479,7 +508,7 @@ template <class Ctx, size_t N>
 DetectorResult RunLadder(const char* name, const Step<Ctx> (&plan)[N], const Spec& spec, Ctx& ctx, Policy policy = Policy::DecodeToWin,
                          Fallback fallback = Fallback::EmptyWithCandidate)
 {
-	// An entry plan: the only kind a sweep runs through (RunSteps).
+	// An entry plan: swept (RunSteps), like the plans nested in its steps.
 	if (spec.steps.empty())
 		return RunLadder(name, plan, ctx, policy, fallback, /*sweepable=*/true);
 	return RunLadderInOrder(name, plan, spec.steps, ctx, policy, fallback, /*sweepable=*/true);
@@ -495,14 +524,15 @@ inline std::vector<std::pair<std::string, std::vector<std::string>>>& CurrentSub
 }
 
 /// Run a plan nested inside a step: in the order the ladder string names for
-/// it (`sub` -- "old", "crpt"), or its built-in order. Never swept (RunSteps).
+/// it (`sub` -- "old", "crpt"), or its built-in order. Swept like an entry
+/// plan, its host's out-parameter put back (RunSteps, State::hostOut).
 template <class Ctx, size_t N>
 DetectorResult RunSubLadder(const char* sub, const Step<Ctx> (&plan)[N], Ctx& ctx, Policy policy, Fallback fallback)
 {
 	for (const auto& [name, order] : CurrentSubPlans())
 		if (name == sub)
-			return RunLadderInOrder(sub, plan, order, ctx, policy, fallback, /*sweepable=*/false);
-	return RunLadder(sub, plan, ctx, policy, fallback);
+			return RunLadderInOrder(sub, plan, order, ctx, policy, fallback, /*sweepable=*/true);
+	return RunLadder(sub, plan, ctx, policy, fallback, /*sweepable=*/true);
 }
 
 } // namespace ZXing::DataMatrix::ladder

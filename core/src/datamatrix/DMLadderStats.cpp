@@ -31,6 +31,8 @@ constexpr size_t kWalkLayers = CRPT_LADDER_WALK_LAYERS;
 constexpr size_t kWalkSetupBase = kWalkBase + CRPT_LADDER_WALK_SLOTS;
 constexpr size_t kSlots = CRPT_LADDER_SLOTS;
 constexpr size_t kMaxDepth = 4;
+constexpr size_t kMaxWins = CRPT_LADDER_MAX_WINS;
+constexpr uint8_t kAllSettings = 0xF; // CrptLadderWin::refine: every refinement setting
 
 // Process-wide, so a slot means the same path on every thread: which plan each
 // entry index is, and the names a slot's path is built from. Written once each,
@@ -63,6 +65,20 @@ struct ThreadState
 	uint32_t dropped;
 	const char* lastPlan; // the last entry plan looked up, and its index + 1
 	int lastEntry;
+
+	// Win entries (CrptLadderWin) since the last reset, and what they are built
+	// from: the open walk pass (+1, 0 none), and per open step the refinement
+	// settings reported inside it and whether one included the setting in force.
+	CrptLadderWin wins[kMaxWins];
+	uint32_t nWins;
+	int walk;
+	uint8_t settings[kMaxDepth];
+	bool inForceSeen[kMaxDepth];
+	uint8_t inForce;
+	// What the last step to leave at each depth decoded with (its entry's
+	// settings, 0 if none), for a step that re-decodes its detection.
+	uint8_t prevSettings[kMaxDepth];
+	bool prevInForceSeen[kMaxDepth];
 };
 
 thread_local ThreadState t;
@@ -160,8 +176,11 @@ void Record(const char* plan, size_t index, const char* step, Outcome outcome) n
 Frame::Frame(const char* plan, size_t index, const char* step) noexcept
 {
 	int slot = SlotFor(plan, index, step);
-	if (t.depth < kMaxDepth)
+	if (t.depth < kMaxDepth) {
 		t.frame[t.depth] = slot + 1;
+		t.settings[t.depth] = 0;
+		t.inForceSeen[t.depth] = false;
+	}
 	++t.depth;
 }
 
@@ -175,8 +194,36 @@ void Frame::leave(Outcome outcome, TimePoint t0) noexcept
 {
 	_open = false;
 	--t.depth;
-	int slot = t.depth < kMaxDepth ? t.frame[t.depth] - 1 : -1;
+	const uint32_t d = t.depth;
+	int slot = d < kMaxDepth ? t.frame[d] - 1 : -1;
 	Add(slot, outcome, Since(t0));
+
+	// The win entry (CrptLadderStats.h): the settings this step decodes with.
+	uint8_t settings = d < kMaxDepth ? t.settings[d] : 0;
+	if (outcome == Outcome::Won && !(d < kMaxDepth && t.inForceSeen[d]))
+		settings = kAllSettings; // its winning sample was never refined
+	if (d < kMaxDepth) {
+		t.prevSettings[d] = settings;
+		t.prevInForceSeen[d] = settings >> t.inForce & 1;
+	}
+	if (!settings)
+		return;
+	if (slot >= 0) {
+		if (t.nWins < kMaxWins) {
+			CrptLadderWin& w = t.wins[t.nWins++];
+			w.walk = t.walk ? static_cast<uint16_t>(t.walk - 1) : CRPT_LADDER_NO_WALK;
+			w.slot = static_cast<uint16_t>(slot);
+			w.refine = settings;
+		} else {
+			++t.dropped;
+		}
+	}
+	// A sub-step's settings are its host's too: the host decodes when it does.
+	if (d > 0 && d - 1 < kMaxDepth) {
+		t.settings[d - 1] |= settings;
+		if (settings >> t.inForce & 1)
+			t.inForceSeen[d - 1] = true;
+	}
 }
 
 namespace {
@@ -219,14 +266,16 @@ int WalkSlot(int binarizer, int layer, bool close, bool invert) noexcept
 } // namespace
 
 Pass::Pass(int binarizer, int layer, bool close, bool invert) noexcept
-	: _slot(WalkSlot(binarizer, layer, close, invert)), _t0(Now())
+	: _slot(WalkSlot(binarizer, layer, close, invert)), _outer(t.walk), _t0(Now())
 {
 	if (_slot < 0)
 		++t.dropped;
+	t.walk = _slot < 0 ? 0 : _slot - static_cast<int>(kWalkBase) + 1;
 }
 
 Pass::~Pass()
 {
+	t.walk = _outer;
 	if (_slot < 0)
 		return;
 	uint64_t ns = Since(_t0);
@@ -270,6 +319,26 @@ void AddNote(Note note) noexcept
 	}
 }
 
+void InheritRefine() noexcept
+{
+	if (t.depth == 0 || t.depth > kMaxDepth)
+		return;
+	const uint32_t d = t.depth - 1;
+	t.settings[d] |= t.prevSettings[d];
+	t.inForceSeen[d] = t.inForceSeen[d] || t.prevInForceSeen[d];
+}
+
+void NoteRefine(uint8_t settings, uint8_t inForce) noexcept
+{
+	t.inForce = inForce & 3;
+	if (t.depth == 0 || t.depth > kMaxDepth)
+		return;
+	const uint32_t d = t.depth - 1;
+	t.settings[d] |= settings;
+	if (settings >> t.inForce & 1)
+		t.inForceSeen[d] = true;
+}
+
 } // namespace ZXing::DataMatrix::ladder::stats
 
 using namespace ZXing::DataMatrix::ladder::stats;
@@ -278,6 +347,16 @@ extern "C" void CrptLadderReset(void)
 {
 	std::memset(t.table, 0, sizeof(t.table));
 	t.dropped = 0;
+	t.nWins = 0;
+}
+
+extern "C" size_t CrptLadderWins(struct CrptLadderWin* out, size_t n)
+{
+	if (out) {
+		size_t k = n < t.nWins ? n : t.nWins;
+		std::memcpy(out, t.wins, k * sizeof(*out));
+	}
+	return t.nWins;
 }
 
 extern "C" size_t CrptLadderSnapshot(struct CrptLadderStepStat* out, size_t n)
@@ -376,6 +455,11 @@ extern "C" const char* CrptLadderNames(size_t)
 }
 
 extern "C" uint32_t CrptLadderDropped(void)
+{
+	return 0;
+}
+
+extern "C" size_t CrptLadderWins(struct CrptLadderWin*, size_t)
 {
 	return 0;
 }
