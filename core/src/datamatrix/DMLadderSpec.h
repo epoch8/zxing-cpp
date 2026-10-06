@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <iterator>
+#include <utility>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -101,6 +102,19 @@ struct Spec
 	/// runs around the plan, not inside it, so it is not part of empty().
 	std::vector<WalkPass> walk; ///< explicit passes in order; empty = the built-in walk
 	int binarizer = -1;         ///< a ZXing::Binarizer value; -1 = the hints' binarizer
+	/// Orders for the plans nested inside steps ("old:grid[0]/testOffsetGrid",
+	/// "crpt:lmarker[0]/bottlePrepare/bottle[0]"): sub-plan name -> its steps in
+	/// run order. A sub-plan not named runs its built-in order. Not part of
+	/// empty(): the entry plan's own order is unaffected.
+	std::vector<std::pair<std::string, std::vector<std::string>>> subPlans;
+
+	const std::vector<std::string>* subPlan(std::string_view name) const noexcept
+	{
+		for (const auto& [n, steps] : subPlans)
+			if (n == name)
+				return &steps;
+		return nullptr;
+	}
 
 	bool hasWalk() const noexcept { return !walk.empty() || binarizer >= 0; }
 
@@ -149,6 +163,11 @@ inline WalkPass ParseWalkPass(std::string_view text)
  * instead of a step: `walk:L0/L0+inv/L1` -- exactly these passes, in this
  * order, '/'-separated -- and `bin:Name` -- the binarizer (LocalAverage,
  * GlobalHistogram, FixedThreshold, BoolCast). Each at most once.
+ *
+ * Any other `name:a/b/c` token orders a plan nested inside a step (ADR 0006
+ * step 7): `old:` the grids of oldWithOffsets, `crpt:` the L-marker and bottle
+ * variants of the CRPT steps. Which names exist, and their steps, only the
+ * detector knows: ValidateDMLadderSpec checks them at graph open.
  */
 inline Spec ParseSpec(std::string_view text)
 {
@@ -186,6 +205,24 @@ inline Spec ParseSpec(std::string_view text)
 			if (spec.binarizer < 0)
 				throw std::invalid_argument("unknown binarizer: " + std::string(tok) +
 											" (LocalAverage, GlobalHistogram, FixedThreshold, BoolCast)");
+		} else if (const size_t colon = tok.find(':'); colon != std::string_view::npos && colon > 0) {
+			const std::string name(tok.substr(0, colon));
+			for (const auto& sp : spec.subPlans)
+				if (sp.first == name)
+					throw std::invalid_argument("more than one " + name + ": token");
+			std::vector<std::string> steps;
+			std::string_view rest = tok.substr(colon + 1);
+			while (true) {
+				const size_t slash = rest.find('/');
+				const std::string_view step = rest.substr(0, slash);
+				if (step.empty())
+					throw std::invalid_argument("empty step in " + std::string(tok));
+				steps.emplace_back(step);
+				if (slash == std::string_view::npos)
+					break;
+				rest.remove_prefix(slash + 1);
+			}
+			spec.subPlans.emplace_back(name, std::move(steps));
 		} else if (tok[0] == '=') {
 			if (tok.size() < 2)
 				throw std::invalid_argument("empty ladder recipe name");

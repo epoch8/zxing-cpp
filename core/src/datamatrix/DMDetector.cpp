@@ -1307,7 +1307,7 @@ namespace ZXing::DataMatrix {
         c.dimensionTop = c.dimensionRight = c.dimension;
 
         correctedOffset = true;
-        return ladder::RunLadder("old", kOldPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
+        return ladder::RunSubLadder("old", kOldPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
     }
 
 
@@ -2480,7 +2480,7 @@ namespace ZXing::DataMatrix {
         // `if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid())`
         // this replaces. LastDetection: what came out of the final variant,
         // valid or not, is what DetectCRPT has always handed back.
-        return ladder::RunLadder("crpt", kCrptPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
+        return ladder::RunSubLadder("crpt", kCrptPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
     }
 
 
@@ -2816,6 +2816,7 @@ static Resolved ResolveRecipe(const ladder::Spec& spec, std::string_view plan)
 static void Install(const Resolved& r, DMGridRefineOptions gridRefine)
 {
     ladder::CurrentFeatures() = r.spec.apply(ladder::FeaturesFrom(gridRefine));
+    ladder::CurrentSubPlans() = r.spec.subPlans;
     ladder::CurrentDecoder() = r.decoder;
     ladder::CurrentSamplingOverrides() = r.overrides;
 }
@@ -2871,6 +2872,34 @@ namespace ZXing {
 // plans; ladder::RunLadder throws on the same names at run time as a backstop,
 // but a caller that swallows exceptions around decoding (the calculators do)
 // needs the answer before the first frame.
+namespace {
+
+// Sub-plan orders (ADR 0006 step 7): a sub-plan the plan actually runs, steps
+// it has, none twice, and each step's prerequisite earlier -- correctTopRight
+// computes the corner grid[2], grid[3] and testOffsetGrid use; bottlePrepare
+// the images bottle[k] reads.
+template <class Plan>
+std::string CheckSubPlan(const std::string& sub, const std::vector<std::string>& order, const Plan& steps,
+                         const char* prereq, std::initializer_list<const char*> needing)
+{
+    for (size_t i = 0; i < order.size(); ++i) {
+        bool known = false;
+        for (const auto& step : steps)
+            known = known || order[i] == step.name;
+        if (!known)
+            return "unknown step \"" + order[i] + "\" in sub-plan " + sub;
+        for (size_t j = 0; j < i; ++j)
+            if (order[j] == order[i])
+                return "step \"" + order[i] + "\" twice in sub-plan " + sub;
+        for (const char* n : needing)
+            if (order[i] == n && std::find(order.begin(), order.begin() + i, std::string(prereq)) == order.begin() + i)
+                return "sub-plan " + sub + ": \"" + order[i] + "\" needs \"" + prereq + "\" before it";
+    }
+    return {};
+}
+
+} // namespace
+
 std::string ValidateDMLadderSpec(std::string_view spec, std::string_view plan)
 {
     using namespace DataMatrix;
@@ -2881,6 +2910,19 @@ std::string ValidateDMLadderSpec(std::string_view spec, std::string_view plan)
             parsed = ResolveRecipe(parsed, plan).spec; // unknown recipe, wrong plan, unknown stage
     } catch (const std::invalid_argument& e) {
         return e.what();
+    }
+    for (const auto& [sub, order] : parsed.subPlans) {
+        std::string err;
+        if (sub == "old" && plan == "samplegridv1")
+            err = CheckSubPlan(sub, order, kOldPlan, "correctTopRight", {"grid[2]", "grid[3]", "testOffsetGrid"});
+        else if (sub == "crpt" && (plan == "samplegridv1" || plan == "stock"))
+            err = CheckSubPlan(sub, order, kCrptPlan, "bottlePrepare", {"bottle[0]", "bottle[1]", "bottle[2]", "bottle[3]"});
+        else if (sub == "old" || sub == "crpt")
+            err = "sub-plan " + sub + " is not run by plan \"" + std::string(plan) + "\"";
+        else
+            err = "unknown sub-plan \"" + sub + "\" (old, crpt)";
+        if (!err.empty())
+            return err;
     }
     if (parsed.steps.empty())
         return {};

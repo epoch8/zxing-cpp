@@ -437,6 +437,31 @@ DetectorResult RunLadder(const char* name, const Step<Ctx> (&plan)[N], Ctx& ctx,
  * names no steps. A name the plan does not have is a hard error: a typo in a
  * schedule fails the run rather than silently running something else.
  */
+/// Run a plan in the order `order` names. A name the plan does not have is a
+/// hard error. `sweepable`: see RunSteps.
+template <class Ctx, size_t N>
+DetectorResult RunLadderInOrder(const char* name, const Step<Ctx> (&plan)[N], const std::vector<std::string>& order, Ctx& ctx,
+                                Policy policy, Fallback fallback, bool sweepable)
+{
+	if (order.size() > kMaxPlanSteps)
+		throw std::invalid_argument("ladder spec names more than " + std::to_string(kMaxPlanSteps) + " steps");
+
+	const Step<Ctx>* seq[kMaxPlanSteps];
+	size_t n = 0;
+	for (const std::string& stepName : order) {
+		const Step<Ctx>* found = nullptr;
+		for (const Step<Ctx>& step : plan)
+			if (stepName == step.name) {
+				found = &step;
+				break;
+			}
+		if (!found)
+			throw std::invalid_argument("unknown ladder step: " + stepName);
+		seq[n++] = found;
+	}
+	return RunSteps(name, plan, seq, seq + n, ctx, policy, fallback, sweepable);
+}
+
 template <class Ctx, size_t N>
 DetectorResult RunLadder(const char* name, const Step<Ctx> (&plan)[N], const Spec& spec, Ctx& ctx, Policy policy = Policy::DecodeToWin,
                          Fallback fallback = Fallback::EmptyWithCandidate)
@@ -444,23 +469,27 @@ DetectorResult RunLadder(const char* name, const Step<Ctx> (&plan)[N], const Spe
 	// An entry plan: the only kind a sweep runs through (RunSteps).
 	if (spec.steps.empty())
 		return RunLadder(name, plan, ctx, policy, fallback, /*sweepable=*/true);
-	if (spec.steps.size() > kMaxPlanSteps)
-		throw std::invalid_argument("ladder spec names more than " + std::to_string(kMaxPlanSteps) + " steps");
+	return RunLadderInOrder(name, plan, spec.steps, ctx, policy, fallback, /*sweepable=*/true);
+}
 
-	const Step<Ctx>* seq[kMaxPlanSteps];
-	size_t n = 0;
-	for (const std::string& name : spec.steps) {
-		const Step<Ctx>* found = nullptr;
-		for (const Step<Ctx>& step : plan)
-			if (name == step.name) {
-				found = &step;
-				break;
-			}
-		if (!found)
-			throw std::invalid_argument("unknown ladder step: " + name);
-		seq[n++] = found;
-	}
-	return RunSteps(name, plan, seq, seq + n, ctx, policy, fallback, /*sweepable=*/true);
+/// The sub-plan orders of the decode in progress (Spec::subPlans), installed
+/// by the entry point like CurrentFeatures. A copy, not a pointer into the
+/// entry's spec, so nothing can dangle; empty in prod, where the copy is free.
+inline std::vector<std::pair<std::string, std::vector<std::string>>>& CurrentSubPlans() noexcept
+{
+	thread_local std::vector<std::pair<std::string, std::vector<std::string>>> subPlans;
+	return subPlans;
+}
+
+/// Run a plan nested inside a step: in the order the ladder string names for
+/// it (`sub` -- "old", "crpt"), or its built-in order. Never swept (RunSteps).
+template <class Ctx, size_t N>
+DetectorResult RunSubLadder(const char* sub, const Step<Ctx> (&plan)[N], Ctx& ctx, Policy policy, Fallback fallback)
+{
+	for (const auto& [name, order] : CurrentSubPlans())
+		if (name == sub)
+			return RunLadderInOrder(sub, plan, order, ctx, policy, fallback, /*sweepable=*/false);
+	return RunLadder(sub, plan, ctx, policy, fallback);
 }
 
 } // namespace ZXing::DataMatrix::ladder
