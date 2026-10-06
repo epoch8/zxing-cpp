@@ -6,7 +6,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "GridSampler.h"
+#include <algorithm>
+#include <cmath>
 #include <cfloat>
+#include <vector>
 // #include "DebugDrawStuff.h"
 #ifdef PRINT_DEBUG
 #include "LogMatrix.h"
@@ -489,18 +492,97 @@ namespace ZXing {
         }
     }
 
-    DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const PerspectiveTransform& mod2Pix)
-    {
-        return SampleGrid(image, width, height, {ROI{0, width, 0, height, mod2Pix}});
-    }
+ModuleSnapResult SnapToModuleCenter(const BitMatrix& image, PointF p, PointF moduleStepX, PointF moduleStepY)
+{
+	ModuleSnapResult out{p, true, {0, 0}};
+	const float lenX = static_cast<float>(length(moduleStepX));
+	const float lenY = static_cast<float>(length(moduleStepY));
+	if (lenX < 1.f || lenY < 1.f || !image.isIn(p))
+		return out;
 
-    DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const Warp& warp, const PerspectiveTransform& mod2Pix)
-    {
-        return SampleGridWarped(image, width, height, warp, {ROI{0, width, 0, height, mod2Pix}});
-    }
+	const bool color = image.get(p);
+	const PointF nx = normalized(moduleStepX);
+	const PointF ny = normalized(moduleStepY);
+	const float maxProbeX = 0.55f * lenX;
+	const float maxProbeY = 0.55f * lenY;
 
-    DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const ROIs& rois)
-    {
+	// Ignore a single opposite-color pixel (speckle); confirm edge with +1px along dir.
+	auto edgeDist = [&](PointF dir, float maxLen) -> float {
+		const int steps = std::max(2, static_cast<int>(std::ceil(maxLen)));
+		const float step = maxLen / static_cast<float>(steps);
+		for (int i = 1; i <= steps; ++i) {
+			const PointF q = p + (i * step) * dir;
+			if (!image.isIn(q))
+				return (i - 1) * step;
+			if (image.get(q) != color) {
+				const PointF q2 = q + dir; // ~1 px further
+				if (image.isIn(q2) && image.get(q2) == color)
+					continue; // 1 px noise
+				return (i - 0.5f) * step;
+			}
+		}
+		return maxLen;
+	};
+
+	const float dPosX = edgeDist(nx, maxProbeX);
+	const float dNegX = edgeDist(-nx, maxProbeX);
+	const float dPosY = edgeDist(ny, maxProbeY);
+	const float dNegY = edgeDist(-ny, maxProbeY);
+
+	const bool hitEdge = dPosX < maxProbeX - 1e-3f || dNegX < maxProbeX - 1e-3f || dPosY < maxProbeY - 1e-3f
+						 || dNegY < maxProbeY - 1e-3f;
+
+	// Shift toward the side with more remaining same-color distance (= center of the blob).
+	PointF snapped = p + 0.5 * (dPosX - dNegX) * nx + 0.5 * (dPosY - dNegY) * ny;
+
+	PointF delta = snapped - p;
+	const float maxSnap = 0.45f * std::min(lenX, lenY);
+	const float deltaLen = static_cast<float>(length(delta));
+	if (deltaLen > maxSnap && deltaLen > 1e-6f) {
+		snapped = p + (maxSnap / deltaLen) * delta;
+		delta = snapped - p;
+	}
+
+	if (!image.isIn(snapped))
+		return out;
+
+	out.p = snapped;
+	out.delta = delta;
+	out.plateau = !hitEdge;
+	return out;
+}
+
+static PointF ModuleStepX(const PerspectiveTransform& mod2Pix, int x, int y, int x0, int x1)
+{
+	if (x + 1 < x1)
+		return mod2Pix(PointF{x + 1.5, y + 0.5}) - mod2Pix(PointF{x + 0.5, y + 0.5});
+	if (x > x0)
+		return mod2Pix(PointF{x + 0.5, y + 0.5}) - mod2Pix(PointF{x - 0.5, y + 0.5});
+	return mod2Pix(PointF{1.5, 0.5}) - mod2Pix(PointF{0.5, 0.5});
+}
+
+static PointF ModuleStepY(const PerspectiveTransform& mod2Pix, int x, int y, int y0, int y1)
+{
+	if (y + 1 < y1)
+		return mod2Pix(PointF{x + 0.5, y + 1.5}) - mod2Pix(PointF{x + 0.5, y + 0.5});
+	if (y > y0)
+		return mod2Pix(PointF{x + 0.5, y + 0.5}) - mod2Pix(PointF{x + 0.5, y - 0.5});
+	return mod2Pix(PointF{0.5, 1.5}) - mod2Pix(PointF{0.5, 0.5});
+}
+
+DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const PerspectiveTransform& mod2Pix)
+{
+	return SampleGrid(image, width, height, {ROI{0, width, 0, height, mod2Pix}});
+}
+
+DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const Warp& warp,
+								const PerspectiveTransform& mod2Pix)
+{
+	return SampleGridWarped(image, width, height, warp, {ROI{0, width, 0, height, mod2Pix}});
+}
+
+DetectorResult SampleGrid(const BitMatrix& image, int width, int height, const ROIs& rois)
+{
 #ifdef PRINT_DEBUG
         LogMatrix log;
 	static int i = 0;
@@ -522,11 +604,11 @@ namespace ZXing {
                     return {};
         }
 
-        BitMatrix res(width, height);
-        for (auto&& [x0, x1, y0, y1, mod2Pix] : rois) {
-            for (int y = y0; y < y1; ++y)
-                for (int x = x0; x < x1; ++x) {
-                    auto p = mod2Pix(centered(PointI{x, y}));
+	BitMatrix res(width, height);
+	for (auto&& [x0, x1, y0, y1, mod2Pix] : rois) {
+		for (int y = y0; y < y1; ++y)
+			for (int x = x0; x < x1; ++x) {
+				auto p = mod2Pix(centered(PointI{x, y}));
 #ifdef PRINT_DEBUG
                     log(p, 3);
 #endif
@@ -548,13 +630,13 @@ namespace ZXing {
             return PointI();
         };
 
-        return {std::move(res),
-                {projectCorner({0, 0}), projectCorner({width, 0}), projectCorner({width, height}), projectCorner({0, height})}};
-    }
+	return {std::move(res),
+			{projectCorner({0, 0}), projectCorner({width, 0}), projectCorner({width, height}), projectCorner({0, height})}};
+}
 
 
-    DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const Warp& warp, const ROIs& rois)
-    {
+DetectorResult SampleGridWarped(const BitMatrix& image, int width, int height, const Warp& warp, const ROIs& rois)
+{
 #ifdef PRINT_DEBUG
         LogMatrix log;
 	static int i = 0;
@@ -628,7 +710,116 @@ namespace ZXing {
             return PointI();
         };
 
-        return {std::move(res),
-                {projectCorner({0, 0}), projectCorner({width, 0}), projectCorner({width, height}), projectCorner({0, height})}};
-    }
+	return {std::move(res),
+			{projectCorner({0, 0}), projectCorner({width, 0}), projectCorner({width, height}), projectCorner({0, height})}};
+}
+
+DetectorResult SampleGridRegionGrowing(const BitMatrix& image, int width, int height,
+									   const PerspectiveTransform& mod2Pix)
+{
+	if (width <= 0 || height <= 0 || !mod2Pix.isValid())
+		return {};
+
+	auto isInside = [&](PointI p) { return image.isIn(mod2Pix(centered(p))); };
+	for (int y = 0; y < height; ++y)
+		if (!isInside({0, y}) || !isInside({width - 1, y}))
+			return {};
+	for (int x = 0; x < width; ++x)
+		if (!isInside({x, 0}) || !isInside({x, height - 1}))
+			return {};
+
+	std::vector<PointF> grid(static_cast<size_t>(width * height));
+	auto at = [&](int x, int y) -> PointF& { return grid[static_cast<size_t>(y * width + x)]; };
+
+	auto stepXAt = [&](int x, int y) {
+		return ModuleStepX(mod2Pix, x, y, 0, width);
+	};
+	auto stepYAt = [&](int x, int y) {
+		return ModuleStepY(mod2Pix, x, y, 0, height);
+	};
+
+	// Lazy back-fill: only the immediate predecessor in the current growth chain.
+	constexpr float backfillWeight = 0.5f;
+	constexpr float minSnapPx = 0.25f;
+	int prevX = -1, prevY = -1;
+	bool prevWasPlateau = false;
+	// Bottom-left seed may be back-filled during the bottom pass; remember for left-edge start.
+	bool bottomLeftWasPlateau = false;
+
+	auto place = [&](int x, int y, PointF pred) {
+		auto snap = SnapToModuleCenter(image, pred, stepXAt(x, y), stepYAt(x, y));
+		at(x, y) = snap.p;
+		if (prevX >= 0 && prevWasPlateau && !snap.plateau && length(snap.delta) >= minSnapPx) {
+			PointF moved = at(prevX, prevY) + backfillWeight * snap.delta;
+			if (image.isIn(moved)) {
+				at(prevX, prevY) = moved;
+				if (prevX == 0 && prevY == height - 1)
+					bottomLeftWasPlateau = false;
+			}
+		}
+		prevX = x;
+		prevY = y;
+		prevWasPlateau = snap.plateau;
+	};
+
+	// Seed at L-pattern corner (bottom-left in module space: y grows downward).
+	{
+		auto snap = SnapToModuleCenter(image, mod2Pix(centered(PointI{0, height - 1})), stepXAt(0, height - 1),
+									   stepYAt(0, height - 1));
+		at(0, height - 1) = snap.p;
+		prevX = 0;
+		prevY = height - 1;
+		prevWasPlateau = snap.plateau;
+		bottomLeftWasPlateau = snap.plateau;
+	}
+
+	// Grow along solid bottom border (L).
+	for (int x = 1; x < width; ++x) {
+		PointF pred = at(x - 1, height - 1) + stepXAt(x - 1, height - 1);
+		pred = 0.65 * pred + 0.35 * mod2Pix(centered(PointI{x, height - 1}));
+		place(x, height - 1, pred);
+	}
+
+	// Grow along solid left border (L); predecessor is bottom-left, not last bottom cell.
+	prevX = 0;
+	prevY = height - 1;
+	prevWasPlateau = bottomLeftWasPlateau;
+	for (int y = height - 2; y >= 0; --y) {
+		PointF pred = at(0, y + 1) - stepYAt(0, y + 1);
+		pred = 0.65 * pred + 0.35 * mod2Pix(centered(PointI{0, y}));
+		place(0, y, pred);
+	}
+
+	// Interior: chain only along the row (left → right). No back-fill onto the left border.
+	for (int y = height - 2; y >= 0; --y) {
+		prevX = -1;
+		prevWasPlateau = false;
+		for (int x = 1; x < width; ++x) {
+			PointF fromLeft = at(x - 1, y) + stepXAt(x - 1, y);
+			PointF fromBelow = at(x, y + 1) - stepYAt(x, y + 1);
+			PointF pred = 0.5 * (fromLeft + fromBelow);
+			pred = 0.75 * pred + 0.25 * mod2Pix(centered(PointI{x, y}));
+			place(x, y, pred);
+		}
+	}
+
+	BitMatrix res(width, height);
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			const PointF& p = at(x, y);
+			if (!image.isIn(p))
+				return {};
+			if (image.get(p))
+				res.set(x, y);
+		}
+	}
+
+	auto projectCorner = [&](PointI p) {
+		return PointI(mod2Pix(PointF(p)) + PointF(0.5, 0.5));
+	};
+
+	return {std::move(res),
+			{projectCorner({0, 0}), projectCorner({width, 0}), projectCorner({width, height}), projectCorner({0, height})}};
+}
+
 } // ZXing

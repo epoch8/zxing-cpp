@@ -7,6 +7,7 @@
 #pragma once
 #include "Point.h"
 #include <DecoderResult.h>
+#include "DecodeHints.h"
 #include "GridSampler.h"
 
 #ifdef __cpp_impl_coroutine
@@ -27,11 +28,14 @@ using DetectorResults = Generator<DetectorResult>;
 using DetectorResults = DetectorResult;
 #endif
 
-DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure);
+DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure,
+					   DMGridRefineOptions gridRefine = {});
 
-DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult);
+DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
+								   DMGridRefineOptions gridRefine = {});
 
-DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult);
+DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder,
+							  bool tryRotate, bool isPure, DecoderResult& outDecoderResult, DMGridRefineOptions gridRefine = {});
 
 } // DataMatrix
 } // ZXing

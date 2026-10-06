@@ -7,9 +7,22 @@ endif()
 if(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
     # Linux build: prefer OpenCV 4 via pkg-config, fallback to opencv (3.x)
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(OpenCV opencv4)
+    pkg_check_modules(OpenCV QUIET opencv4)
     if(NOT OpenCV_FOUND)
         pkg_check_modules(OpenCV REQUIRED opencv)
+    endif()
+
+    # Prefer the locally built static OpenCV archives when available.
+    # This avoids accidentally resolving against stray system/shared OpenCV
+    # runtimes with a different ABI version at load time.
+    set(OPENCV_LOCAL_CORE_A "/usr/local/lib/libopencv_core.a")
+    set(OPENCV_LOCAL_IMGPROC_A "/usr/local/lib/libopencv_imgproc.a")
+    if(EXISTS "${OPENCV_LOCAL_CORE_A}" AND EXISTS "${OPENCV_LOCAL_IMGPROC_A}")
+        message(STATUS "Using explicit local static OpenCV archives for ZXing")
+        set(OpenCV_LIBRARIES
+            "${OPENCV_LOCAL_IMGPROC_A}"
+            "${OPENCV_LOCAL_CORE_A}"
+        )
     endif()
 
     add_library(opencv_interface INTERFACE)
@@ -20,17 +33,10 @@ if(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
     set(OpenCV_FOUND TRUE)
     set(OpenCV_LIBS opencv_interface)
 else()
-    # Android build: use OpenCV Android SDK (OpenCVConfig.cmake)
+    # Android build: use CMake configuration
     set(OpenCV_FIND_VERSION "4.0")
-    set(OpenCV_SHARED ON)
-    set(BUILD_SHARED_LIBS ON)
-
-    # Point OpenCV_DIR to ABI-specific config if present
-    if(OpenCV_DIR AND ANDROID_ABI AND EXISTS "${OpenCV_DIR}/abi-${ANDROID_ABI}/OpenCVConfig.cmake")
-        set(OpenCV_DIR "${OpenCV_DIR}/abi-${ANDROID_ABI}")
-    endif()
-
-    find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
+    set(OpenCV_SHARED ON)  # Force using shared libraries (.so) instead of static (.a)
+    set(BUILD_SHARED_LIBS ON)  # Force shared libraries globally
 endif()
 
 

@@ -40,8 +40,11 @@ class GenericGF;
  *
  * @param message data and error-correction/parity codewords
  * @param numECCodeWords number of error-correction code words
+ * @param numErrorsCorrected if non-null, set to the number of symbols that were corrected (0 if already clean)
+ * @param errorPositions if non-null, filled with indices into message that were corrected
  * @return true iff message errors could successfully be fixed (or there have not been any)
  */
-bool ReedSolomonDecode(const GenericGF& field, std::vector<int>& message, int numECCodeWords);
+bool ReedSolomonDecode(const GenericGF& field, std::vector<int>& message, int numECCodeWords,
+					   int* numErrorsCorrected = nullptr, std::vector<int>* errorPositions = nullptr);
 
 } // ZXing

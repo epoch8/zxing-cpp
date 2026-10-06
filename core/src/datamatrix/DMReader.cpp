@@ -27,11 +27,12 @@ Result Reader::decode(const BinaryBitmap& image) const
 	if (binImg == nullptr)
 		return {};
 
-	auto detectorResult = Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure());
+	auto detectorResult = Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine());
 	if (!detectorResult.isValid())
 		return {};
 
-	Result res = Result(Decode(detectorResult.bits()), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
+	DecoderResult decoderResult = Decode(detectorResult.bits());
+	Result res = Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 	res.setResultedDefect(detectorResult.resultedDefect());
 	return res;
 #endif
@@ -44,7 +45,8 @@ Result Reader::decode(const BinaryBitmap& image, const PointF& P0, const PointF&
 		return {};
 
 	DecoderResult decoderResult;
-	auto detectorResult = DetectDefined(*binImg, P0, P1, P2, P3, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult);
+	auto detectorResult = DetectDefined(*binImg, P0, P1, P2, P3, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult,
+										_hints.dmGridRefine());
 
 	if (!detectorResult.isValid()) return {};
 
@@ -59,7 +61,7 @@ Results Reader::decode(const BinaryBitmap& image, int maxSymbols) const
 		return {};
 
 	Results results;
-	for (auto&& detRes : Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure())) {
+	for (auto&& detRes : Detect(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), _hints.dmGridRefine())) {
 		auto decRes = Decode(detRes.bits());
 		if (decRes.isValid(_hints.returnErrors())) {
 			results.emplace_back(std::move(decRes), std::move(detRes).position(), BarcodeFormat::DataMatrix);
@@ -80,13 +82,16 @@ Result DMCRPTReader::decode(const BinaryBitmap& image) const
 		return {};
 
 	DecoderResult decoderResult;
-	auto detectorResult = DetectSamplegridV1(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult);
+	auto detectorResult = DetectSamplegridV1(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult,
+											 _hints.dmGridRefine());
 
-	Result res = Result(Decode(detectorResult.bits()), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
+	if (!decoderResult.isValid() && detectorResult.isValid()) {
+		decoderResult = Decode(detectorResult.bits());
+	}
+
+	Result res = Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 	res.setResultedDefect(detectorResult.resultedDefect());
 	return res;
-
-	// return Result(std::move(decoderResult), std::move(detectorResult).position(), BarcodeFormat::DataMatrix);
 }
 #ifdef __cpp_impl_coroutine
 Result DMCRPTReader::decode(const BinaryBitmap& image, int maxSymbols) const
@@ -96,7 +101,8 @@ Result DMCRPTReader::decode(const BinaryBitmap& image, int maxSymbols) const
 		return {};
 
 	DecoderResult decoderResult;
-	auto detectorResult = DetectSamplegridV1(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult);
+	auto detectorResult = DetectSamplegridV1(*binImg, _hints.tryHarder(), _hints.tryRotate(), _hints.isPure(), decoderResult,
+											 _hints.dmGridRefine());
 
 	if (!detectorResult.isValid()) return {};
 

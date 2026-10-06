@@ -106,8 +106,14 @@ FindErrorMagnitudes(const GenericGF& field, const GenericGFPoly& errorEvaluator,
 }
 
 bool
-ReedSolomonDecode(const GenericGF& field, std::vector<int>& message, int numECCodeWords)
+ReedSolomonDecode(const GenericGF& field, std::vector<int>& message, int numECCodeWords, int* numErrorsCorrected,
+				  std::vector<int>* errorPositions)
 {
+	if (numErrorsCorrected)
+		*numErrorsCorrected = 0;
+	if (errorPositions)
+		errorPositions->clear();
+
 	GenericGFPoly poly(field, message);
 
 	std::vector<int> syndromes(numECCodeWords);
@@ -130,13 +136,19 @@ ReedSolomonDecode(const GenericGF& field, std::vector<int>& message, int numECCo
 	auto errorMagnitudes = FindErrorMagnitudes(field, omega, errorLocations);
 
 	int msgLen = Size(message);
+	if (errorPositions)
+		errorPositions->reserve(Size(errorLocations));
 	for (int i = 0; i < Size(errorLocations); ++i) {
 		int position = msgLen - 1 - field.log(errorLocations[i]);
 		if (position < 0)
 			return false;
 
 		message[position] ^= errorMagnitudes[i];
+		if (errorPositions)
+			errorPositions->push_back(position);
 	}
+	if (numErrorsCorrected)
+		*numErrorsCorrected = Size(errorLocations);
 	return true;
 }
 
