@@ -1104,10 +1104,9 @@ namespace ZXing::DataMatrix {
         bool& correctedOffset;
 
         // Setup's decisions. The corner pointers point into DetectOldWithOffsets's
-        // four local ResultPoints -- deliberately locals, not members: setup orders
-        // two of them through a std::map keyed on their ADDRESSES, and on an exact
-        // tie between the L's sides that order decides which end is bottom-right.
-        // Keeping them where the original declared them keeps that as it was.
+        // four local ResultPoints. Setup takes the L's two free ends in the order
+        // A, B, C, D (it used to be their addresses' order -- ADR 0006 step 6), so
+        // the points may live anywhere now.
         const ResultPoint* topLeft = nullptr;
         const ResultPoint* bottomLeft = nullptr;
         const ResultPoint* bottomRight = nullptr;
@@ -1227,23 +1226,30 @@ namespace ZXing::DataMatrix {
         }
 
         // The corner both L sides share is bottom-left; the other two ends are
-        // bottom-right and top-left, in the order the map yields them.
-        std::map<const ResultPoint*, int> pointCount;
-        pointCount[lSideOne.from] += 1;
-        pointCount[lSideOne.to] += 1;
-        pointCount[lSideTwo.from] += 1;
-        pointCount[lSideTwo.to] += 1;
+        // bottom-right and top-left, taken in the order A, B, C, D. That order
+        // used to be a std::map's over the four points' ADDRESSES, i.e. the
+        // compiler's stack layout. It only matters on an exact tie between the
+        // L's sides (OrderByBestPatterns orders by geometry otherwise), and the
+        // drift corpus has none; now it is the same on every compiler.
+        const ResultPoint* const corners[4] = {&pointA, &pointB, &pointC, &pointD};
+        int pointCount[4] = {0, 0, 0, 0};
+        for (const ResultPoint* end : {lSideOne.from, lSideOne.to, lSideTwo.from, lSideTwo.to})
+            for (int i = 0; i < 4; ++i)
+                if (end == corners[i])
+                    ++pointCount[i];
 
-        for (const auto& [point, count] : pointCount) {
-            if (count == 2) {
-                c.bottomLeft = point; // this is definitely the bottom left, then -- end of two L sides
+        for (int i = 0; i < 4; ++i) {
+            if (pointCount[i] == 0)
+                continue;
+            if (pointCount[i] == 2) {
+                c.bottomLeft = corners[i]; // this is definitely the bottom left, then -- end of two L sides
             }
             else {
                 if (c.bottomRight == nullptr) {
-                    c.bottomRight = point;
+                    c.bottomRight = corners[i];
                 }
                 else {
-                    c.topLeft = point;
+                    c.topLeft = corners[i];
                 }
             }
         }
@@ -1259,13 +1265,13 @@ namespace ZXing::DataMatrix {
         }
 
         // Top-right is whichever point the L did not touch.
-        if (pointCount.find(&pointA) == pointCount.end()) {
+        if (pointCount[0] == 0) {
             c.topRight = &pointA;
         }
-        else if (pointCount.find(&pointB) == pointCount.end()) {
+        else if (pointCount[1] == 0) {
             c.topRight = &pointB;
         }
-        else if (pointCount.find(&pointC) == pointCount.end()) {
+        else if (pointCount[2] == 0) {
             c.topRight = &pointC;
         }
         else {
