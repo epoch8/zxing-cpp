@@ -1,4 +1,4 @@
-framework module ZXingCppWrapper {
+framework module ZXing {
     header "ZXing.h"
     export *
 }
