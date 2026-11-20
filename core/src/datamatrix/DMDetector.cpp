@@ -8,6 +8,7 @@
 
 
 #include "DMDetector.h"
+#include "DMLadder.h"
 
 #include "DMDecoder.h"
 #include "DecoderResult.h"
@@ -36,11 +37,11 @@
 #include <utility>
 #include <vector>
 #include <iostream>
-#include "opencv2/core.hpp"
-#include "opencv2/imgproc.hpp"
+#include "opencv2/opencv.hpp"
 #include <opencv2/core/hal/intrin.hpp>
 #include <memory>
 // #include <chrono>
+
 
 #undef min
 #undef max
@@ -135,7 +136,7 @@ namespace ZXing::DataMatrix {
     {
         return static_cast<float>(std::round(x));
     }
-
+	
 	template <typename Func>
 	void RasterizeTriangle(const PointF& v1, const PointF& v2, const PointF& v3, const BitMatrix& targetImage, Func ProcessPixel) {
 		PointF vertices[3] = {v1, v2, v3};
@@ -454,11 +455,6 @@ namespace ZXing::DataMatrix {
                           { Rectangle(width, height, 0.5), {topLeft, topRight, bottomRight, bottomLeft} });
     }
 
-	static DecoderResult DecodeResult(const DetectorResult& det)
-	{
-		return Decode(det.bits());
-	}
-
 	/**
 	 * Targeted grid refine using Reed-Solomon error locations.
 	 * Mis-sampled modules (from corrected codewords) are re-sampled with a small shared
@@ -579,8 +575,31 @@ namespace ZXing::DataMatrix {
 		return bestRes;
 	}
 
-	DetectorResult SampleGridTestOffseted(const BitMatrix& image, int width, int height, PerspectiveTransform mod2pix,
-										  DMGridRefineOptions gridRefine = {}) {
+	// ---- The Sampling stage: samplers and refinements (DMLadder.h) ----------------
+
+	// Sampler "plain": the grid through the geometry's transform, nothing else.
+	static ladder::ModuleGrid SamplePlain(const BitMatrix& image, const ladder::Geometry& g)
+	{
+		return {SampleGrid(image, g.width, g.height, g.mod2pix), g};
+	}
+
+	// Sampler "warped": the grid through the transform and the geometry's warp --
+	// or plain, for a geometry without one (a recipe may name it for any step).
+	static ladder::ModuleGrid SampleWarped(const BitMatrix& image, const ladder::Geometry& g)
+	{
+		if (!g.warp)
+			return {SampleGrid(image, g.width, g.height, g.mod2pix), g};
+		return {SampleGridWarped(image, g.width, g.height, *g.warp, g.mod2pix), g};
+	}
+
+	// Sampler "testOffseted": sample; if a border line came out doubled, pull that
+	// side's corners in and sample again; if the centre lines say the grid sits half
+	// a module off, resample through a one-step warp. The geometry it hands on has
+	// the corners moved but not that warp -- what its refinement has always used.
+	static ladder::ModuleGrid SampleTestOffseted(const BitMatrix& image, const ladder::Geometry& g)
+	{
+		const int width = g.width, height = g.height;
+		PerspectiveTransform mod2pix = g.mod2pix;
         auto res = SampleGrid(image, width, height, mod2pix);
 		auto doubleLine = testDoubleLine(res.bits());
 
@@ -625,8 +644,42 @@ namespace ZXing::DataMatrix {
 			res = SampleGridWarped(image, width, height, w, mod2pix);
 		}
 
+		return {std::move(res), {width, height, mod2pix, g.warp}};
+	}
+
+	// Record runs (ADR 0006 step 4): which of the four grid-refinement settings
+	// (CrptLadderWin::refine) this sample decodes with, for the hosting step's
+	// win entry. `refine` is the refinement with the setting as a parameter; the
+	// caller then runs it with the setting in force, so this only observes.
+	template <class Refine>
+	static void NoteRefineSettings([[maybe_unused]] const BitMatrix& image, [[maybe_unused]] const ladder::Geometry& g,
+								   [[maybe_unused]] DMGridRefineOptions inForce, [[maybe_unused]] const DetectorResult& res,
+								   [[maybe_unused]] Refine refine)
+	{
+#ifdef CRPT_ZXING_PROFILING
+		if (!ladder::CurrentFeatures().on(ladder::Feat::sweepSteps))
+			return;
+		const auto decode = ladder::CurrentDecoder();
+		uint8_t settings = 0;
+		for (int c = 0; c < 4; ++c) {
+			DetectorResult r = refine(image, g, DMGridRefineOptions{(c & 1) != 0, (c & 2) != 0}, ladder::CopyOf(res));
+			if (r.isValid() && decode(r.bits()).isValid())
+				settings |= static_cast<uint8_t>(1 << c);
+		}
+		CRPT_LADDER_REFINE(settings, (inForce.regionGrowing ? 1 : 0) | (inForce.rsFeedback ? 2 : 0));
+#endif
+	}
+
+	// Refinement "testOffseted": when the sample does not decode cleanly -- an invalid
+	// sample counts as not clean -- region growing from the L-corner if that scores
+	// better, then Reed-Solomon-guided resampling. Each gated by its feature.
+	static DetectorResult RefineTestOffsetedWith(const BitMatrix& image, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+												 DetectorResult res)
+	{
 		if (!gridRefine.any())
 			return res;
+		const int width = g.width, height = g.height;
+		const PerspectiveTransform& mod2pix = g.mod2pix;
 
 		// 1) Region-growing grid from the L-corner if still not cleanly decodable.
 		if (gridRefine.regionGrowing) {
@@ -654,14 +707,23 @@ namespace ZXing::DataMatrix {
 		return res;
 	}
 
-
-	static DetectorResult SampleGridTestOffseted(const BitMatrix& image, const ResultPoint& topLeft, const ResultPoint& bottomLeft,
-									const ResultPoint& bottomRight, const ResultPoint& topRight, int width, int height,
-									DMGridRefineOptions gridRefine = {})
+	static DetectorResult RefineTestOffseted(const BitMatrix& image, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+											 DetectorResult res)
 	{
-		PerspectiveTransform mod2pix = { Rectangle(width, height, 0.5), {topLeft, topRight, bottomRight, bottomLeft} };
+		NoteRefineSettings(image, g, gridRefine, res, RefineTestOffsetedWith);
+		return RefineTestOffsetedWith(image, g, gridRefine, std::move(res));
+	}
 
-		return SampleGridTestOffseted(image, width, height, mod2pix, gridRefine);
+	static const ladder::Sampling kSamplingPlain{"plain", SamplePlain};
+	static const ladder::Sampling kSamplingWarped{"warped", SampleWarped};
+	static const ladder::Sampling kSamplingTestOffseted{"testOffseted", SampleTestOffseted, RefineTestOffseted};
+
+	// The geometry four corner points describe, with the half-module margin the
+	// corner-based samplers have always used.
+	static ladder::Geometry CornerGeometry(const PointF& topLeft, const PointF& bottomLeft, const PointF& bottomRight,
+										   const PointF& topRight, int width, int height, const Warp* warp = nullptr)
+	{
+		return {width, height, {Rectangle(width, height, 0.5), {topLeft, topRight, bottomRight, bottomLeft}}, warp};
 	}
 
     static DetectorResult SampleGridWarped(const BitMatrix& image, const ResultPoint& topLeft, const ResultPoint& bottomLeft,
@@ -825,7 +887,7 @@ namespace ZXing::DataMatrix {
 
         if (dimensionTop < 10 || dimensionTop > 144 || dimensionRight < 8 || dimensionRight > 144)
             return false;
-
+		
 		return true;
 	}
 
@@ -1053,197 +1115,230 @@ namespace ZXing::DataMatrix {
     //     }
 	// }
 
+    // ---- DetectOldWithOffsets as a sub-ladder ------------------------------------
+    //
+    // Setup finds the white rectangle, picks the two sides with the fewest
+    // transitions as the L, orients the corners and sizes the symbol from the
+    // transitions -- three bails on the way. Those are decisions, and they now
+    // sit in the context where an attribution hook can read them. What follows
+    // are the attempts: four grids at one-module offsets (a corner correction
+    // between the second and third), then the offset-testing sampler. Each is a
+    // step run by the same runner as everything else.
+
+    struct OldContext : ladder::State
+    {
+        const BitMatrix& image;
+        DMGridRefineOptions gridRefine;
+        /// The caller's flag: true if an offset grid wins, false once the
+        /// offset-testing sampler is reached -- exactly the original's timing.
+        bool& correctedOffset;
+
+        // Setup's decisions. The corner pointers point into DetectOldWithOffsets's
+        // four local ResultPoints. Setup takes the L's two free ends in the order
+        // A, B, C, D (it used to be their addresses' order -- ADR 0006 step 6), so
+        // the points may live anywhere now.
+        const ResultPoint* topLeft = nullptr;
+        const ResultPoint* bottomLeft = nullptr;
+        const ResultPoint* bottomRight = nullptr;
+        const ResultPoint* topRight = nullptr;
+        int dimension = 0;
+        int dimensionTop = 0;
+        int dimensionRight = 0;
+        float dimInv = 0;
+        PointF DirTopLR, DirBottomLR, DirRightBT, DirLeftBT;
+
+        // Produced by the correctTopRight step for the two grids after it.
+        ResultPoint correctedTopRight;
+    };
+
+    using OldStep = ladder::Step<OldContext>;
+
+    // The grid steps return their sample; the runner decodes it. (The original
+    // decoded every grid itself, empty ones too -- Decode() on empty bits yields
+    // "Empty DM" -- which only set the error text of a read that failed anyway,
+    // and nothing downstream reads that.)
+
+    // grid[0]: bottom-right and top-right pushed out one module along the bottom and top.
+    static DetectorResult OldGrid0(OldContext& c, bool&)
+    {
+        return ladder::Pick(kSamplingPlain)(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft, *c.bottomRight + c.DirBottomLR, *c.topRight + c.DirTopLR, c.dimensionTop, c.dimensionRight), c.gridRefine);
+    }
+
+    // grid[1]: top-left and top-right pushed up one module along the sides.
+    static DetectorResult OldGrid1(OldContext& c, bool&)
+    {
+        return ladder::Pick(kSamplingPlain)(c.image, CornerGeometry(*c.topLeft + c.DirLeftBT, *c.bottomLeft, *c.bottomRight, *c.topRight + c.DirRightBT, c.dimensionTop, c.dimensionRight), c.gridRefine);
+    }
+
+    // Re-derive the top-right corner from the L, and the two directions that
+    // depend on it, for the grids that follow. Detects nothing.
+    static DetectorResult OldCorrectTopRight(OldContext& c, bool&)
+    {
+        c.correctedTopRight = CorrectTopRight(c.image, *c.bottomLeft, *c.bottomRight, *c.topLeft, *c.topRight, c.dimension);
+        c.DirTopLR = c.dimInv * (c.correctedTopRight - *c.topLeft);
+        c.DirRightBT = c.dimInv * (c.correctedTopRight - *c.bottomRight);
+        return {};
+    }
+
+    // grid[2]: corrected top-right; top-left and bottom-left pulled back one module along the top and bottom.
+    static DetectorResult OldGrid2(OldContext& c, bool&)
+    {
+        return ladder::Pick(kSamplingPlain)(c.image, CornerGeometry(*c.topLeft - c.DirTopLR, *c.bottomLeft - c.DirBottomLR, *c.bottomRight, c.correctedTopRight, c.dimensionTop, c.dimensionRight), c.gridRefine);
+    }
+
+    // grid[3]: corrected top-right; bottom-left and bottom-right pulled down one module along the sides.
+    static DetectorResult OldGrid3(OldContext& c, bool&)
+    {
+        return ladder::Pick(kSamplingPlain)(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft - c.DirLeftBT, *c.bottomRight - c.DirRightBT, c.correctedTopRight, c.dimensionTop, c.dimensionRight), c.gridRefine);
+    }
+
+    // The plain corners with the corrected top-right, through the offset-testing
+    // sampler (which refines on its own). Its decode result is handed back
+    // whatever it is; reaching this step is what clears correctedOffset.
+    static DetectorResult OldTestOffsetGrid(OldContext& c, bool&)
+    {
+        c.correctedOffset = false;
+        return ladder::Pick(kSamplingTestOffseted)(c.image, CornerGeometry(*c.topLeft, *c.bottomLeft, *c.bottomRight, c.correctedTopRight, c.dimensionTop,
+                                                            c.dimensionRight),
+                                     c.gridRefine);
+    }
+
+    static const OldStep kOldPlan[] = {
+        {"grid[0]",         OldGrid0},
+        {"grid[1]",         OldGrid1},
+        {"correctTopRight", OldCorrectTopRight},
+        {"grid[2]",         OldGrid2},
+        {"grid[3]",         OldGrid3},
+        {"testOffsetGrid",  OldTestOffsetGrid},
+    };
+
     static DetectorResult DetectOldWithOffsets(const BitMatrix& image, DecoderResult& outDecoderResult, bool& correctedOffset,
 											   DMGridRefineOptions gridRefine = {})
     {
+        OldContext c{{outDecoderResult}, image, gridRefine, correctedOffset};
+        c.hostOut = &correctedOffset; // testOffsetGrid clears it; a sweep puts it back
+
+        // Each `return {}` in setup is noted as a bail on the step hosting this
+        // detector: its cost then reads as setup failing, not grids failing.
         ResultPoint pointA, pointB, pointC, pointD;
-        if (!DetectWhiteRect(image, pointA, pointB, pointC, pointD))
+        bool whiteRect;
+        {
+            CRPT_LADDER_PROBE("whiteRect");
+            whiteRect = DetectWhiteRect(image, pointA, pointB, pointC, pointD);
+        }
+        if (!whiteRect) {
+            CRPT_LADDER_NOTE(Bail);
             return {};
+        }
 
-        // Point A and D are across the diagonal from one another,
-        // as are B and C. Figure out which are the solid black lines
-        // by counting transitions
-        std::array transitions = {
-                TransitionsBetween(image, pointA, pointB),
-                TransitionsBetween(image, pointA, pointC),
-                TransitionsBetween(image, pointB, pointD),
-                TransitionsBetween(image, pointC, pointD),
-        };
-        std::sort(transitions.begin(), transitions.end(),
-                  [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+        // The transitions point into pointA..D, which is why those are members.
+        // IIFE: `transitions` must outlive the probe, so the probe cannot simply
+        // be declared next to it -- it would time the rest of the function.
+        std::array transitions = [&] {
+            CRPT_LADDER_PROBE("transitions");
+            std::array t = {
+                    TransitionsBetween(image, pointA, pointB),
+                    TransitionsBetween(image, pointA, pointC),
+                    TransitionsBetween(image, pointB, pointD),
+                    TransitionsBetween(image, pointC, pointD),
+            };
+            std::sort(t.begin(), t.end(),
+                      [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+            return t;
+        }();
 
-        // Sort by number of transitions. First two will be the two solid sides; last two
-        // will be the two alternating black/white sides
+        // The two sides with the fewest transitions are the L.
         const auto& lSideOne = transitions[0];
         const auto& lSideTwo = transitions[1];
 
-        // We accept at most 4 transisions inside the L pattern (i.e. 2 corruptions) to reduce false positive FormatErrors
-        if (lSideTwo.transitions > 8)
+        if (lSideTwo.transitions > 8) {
+            CRPT_LADDER_NOTE(Bail);
             return {};
+        }
 
-        // Figure out which point is their intersection by tallying up the number of times we see the
-        // endpoints in the four endpoints. One will show up twice.
-        std::map<const ResultPoint*, int> pointCount;
-        pointCount[lSideOne.from] += 1;
-        pointCount[lSideOne.to] += 1;
-        pointCount[lSideTwo.from] += 1;
-        pointCount[lSideTwo.to] += 1;
+        // The corner both L sides share is bottom-left; the other two ends are
+        // bottom-right and top-left, taken in the order A, B, C, D. That order
+        // used to be a std::map's over the four points' ADDRESSES, i.e. the
+        // compiler's stack layout. It only matters on an exact tie between the
+        // L's sides (OrderByBestPatterns orders by geometry otherwise), and the
+        // drift corpus has none; now it is the same on every compiler.
+        const ResultPoint* const corners[4] = {&pointA, &pointB, &pointC, &pointD};
+        int pointCount[4] = {0, 0, 0, 0};
+        for (const ResultPoint* end : {lSideOne.from, lSideOne.to, lSideTwo.from, lSideTwo.to})
+            for (int i = 0; i < 4; ++i)
+                if (end == corners[i])
+                    ++pointCount[i];
 
-        const ResultPoint* bottomRight = nullptr;
-        const ResultPoint* bottomLeft = nullptr;
-        const ResultPoint* topLeft = nullptr;
-        for (const auto& [point, count] : pointCount) {
-            if (count == 2) {
-                bottomLeft = point; // this is definitely the bottom left, then -- end of two L sides
+        for (int i = 0; i < 4; ++i) {
+            if (pointCount[i] == 0)
+                continue;
+            if (pointCount[i] == 2) {
+                c.bottomLeft = corners[i]; // this is definitely the bottom left, then -- end of two L sides
             }
             else {
-                // Otherwise it's either top left or bottom right -- just assign the two arbitrarily now
-                if (bottomRight == nullptr) {
-                    bottomRight = point;
+                if (c.bottomRight == nullptr) {
+                    c.bottomRight = corners[i];
                 }
                 else {
-                    topLeft = point;
+                    c.topLeft = corners[i];
                 }
             }
         }
 
-        if (bottomRight == nullptr || bottomLeft == nullptr || topLeft == nullptr)
+        if (c.bottomRight == nullptr || c.bottomLeft == nullptr || c.topLeft == nullptr) {
+            CRPT_LADDER_NOTE(Bail);
             return {};
-
-        // Bottom left is correct but top left and bottom right might be switched
-        // Use the dot product trick to sort them out
-        OrderByBestPatterns(bottomRight, bottomLeft, topLeft);
-
-        // Which point didn't we find in relation to the "L" sides? that's the top right corner
-        const ResultPoint* topRight;
-        if (pointCount.find(&pointA) == pointCount.end()) {
-            topRight = &pointA;
         }
-        else if (pointCount.find(&pointB) == pointCount.end()) {
-            topRight = &pointB;
+
+        {
+            CRPT_LADDER_PROBE("order");
+            OrderByBestPatterns(c.bottomRight, c.bottomLeft, c.topLeft);
         }
-        else if (pointCount.find(&pointC) == pointCount.end()) {
-            topRight = &pointC;
+
+        // Top-right is whichever point the L did not touch.
+        if (pointCount[0] == 0) {
+            c.topRight = &pointA;
+        }
+        else if (pointCount[1] == 0) {
+            c.topRight = &pointB;
+        }
+        else if (pointCount[2] == 0) {
+            c.topRight = &pointC;
         }
         else {
-            topRight = &pointD;
+            c.topRight = &pointD;
         }
 
-        // Next determine the dimension by tracing along the top or right side and counting black/white
-        // transitions. Since we start inside a black module, we should see a number of transitions
-        // equal to 1 less than the code dimension. Well, actually 2 less, because we are going to
-        // end on a black module:
+        // Symbol size from the transitions along the top and right, rounded up
+        // to even and plus the two finder modules.
+        c.dimensionTop = TransitionsBetween(image, *c.topLeft, *c.topRight).transitions;
+        c.dimensionRight = TransitionsBetween(image, *c.bottomRight, *c.topRight).transitions;
 
-        // The top right point is actually the corner of a module, which is one of the two black modules
-        // adjacent to the white module at the top right. Tracing to that corner from either the top left
-        // or bottom right should work here.
-
-        int dimensionTop = TransitionsBetween(image, *topLeft, *topRight).transitions;
-        int dimensionRight = TransitionsBetween(image, *bottomRight, *topRight).transitions;
-
-
-        if ((dimensionTop & 0x01) == 1) {
-            // it can't be odd, so, round... up?
-            dimensionTop++;
+        if ((c.dimensionTop & 0x01) == 1) {
+            c.dimensionTop++;
         }
-        dimensionTop += 2;
+        c.dimensionTop += 2;
 
-        if ((dimensionRight & 0x01) == 1) {
-            // it can't be odd, so, round... up?
-            dimensionRight++;
+        if ((c.dimensionRight & 0x01) == 1) {
+            c.dimensionRight++;
         }
-        dimensionRight += 2;
+        c.dimensionRight += 2;
 
-        if (dimensionTop < 10 || dimensionTop > 144 || dimensionRight < 8 || dimensionRight > 144)
+        if (c.dimensionTop < 10 || c.dimensionTop > 144 || c.dimensionRight < 8 || c.dimensionRight > 144) {
+            CRPT_LADDER_NOTE(Bail);
             return {};
-
-
-
-
-        ResultPoint correctedTopRight;
-        {
-            // The matrix is square
-
-            int dimension = std::max(dimensionRight, dimensionTop);
-
-            // ResultPoint topRightCorrected = *topRight;
-            // ResultPoint bottomRightCorrected = *bottomRight;
-            // ResultPoint topLeftCorrected = *topLeft;
-            // ResultPoint bottomLeftCorrected = *bottomLeft;
-            DetectorResult res;
-            float dimInv = 1.0 / float(dimension);
-            PointF DirTopLR = dimInv * (*topRight - *topLeft);
-            PointF DirBottomLR = dimInv * (*bottomRight - *bottomLeft);
-
-            PointF DirRightBT = dimInv * (*topRight - *bottomRight);
-            PointF DirLeftBT = dimInv * (*topLeft - *bottomLeft);
-
-            dimensionTop = dimensionRight = dimension;
-
-            auto sgDebug = [&](const BitMatrix& image, const ResultPoint& topLeft, const ResultPoint& bottomLeft, const ResultPoint& bottomRight, const ResultPoint& topRight, int width, int height) {
-                // drawDebugImageWithLines(image, "test3", {topLeft.x(), topLeft.y(), topRight.x(), topRight.y(),
-                // bottomRight.x(), bottomRight.y(), bottomLeft.x(), bottomLeft.y()});
-                return SampleGrid(image, topLeft, bottomLeft, bottomRight, topRight, dimensionTop, dimensionRight);
-            };
-
-            correctedOffset = true;
-			bool tryInvert = false;
-			for(int i = 1; i--; ) {
-				res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight + DirBottomLR, *topRight + DirTopLR, dimensionTop, dimensionRight);
-				if(outDecoderResult = DecodeResult(res); outDecoderResult.isValid()) return res;
-
-				res = SampleGrid(image, *topLeft + DirLeftBT, *bottomLeft, *bottomRight, *topRight + DirRightBT, dimensionTop, dimensionRight);
-				if(outDecoderResult = DecodeResult(res); outDecoderResult.isValid()) return res;
-
-
-				correctedTopRight = CorrectTopRight(image, *bottomLeft, *bottomRight, *topLeft, *topRight, dimension);
-
-				DirTopLR = dimInv * (correctedTopRight - *topLeft);
-				DirRightBT = dimInv * (correctedTopRight - *bottomRight);
-
-				res = SampleGrid(image, *topLeft - DirTopLR, *bottomLeft - DirBottomLR, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
-				if(outDecoderResult = DecodeResult(res); outDecoderResult.isValid()) return res;
-
-				res = SampleGrid(image, *topLeft, *bottomLeft - DirLeftBT, *bottomRight - DirRightBT, correctedTopRight, dimensionTop, dimensionRight);
-				if(outDecoderResult = DecodeResult(res); outDecoderResult.isValid()) return res;
-				if(tryInvert) {
-					tryInvert = false;
-					DirTopLR = -0.5 * DirTopLR;
-					DirBottomLR = -0.5 * DirBottomLR;
-
-					DirRightBT = -0.5 * DirRightBT;
-					DirLeftBT = -0.5 * DirLeftBT;
-				}
-			}
-
-            // ExtendSide(image, *bottomLeft, bottomRightCorrected, *topLeft, topRightCorrected, dimension);
-            // correct top right point to match the white module
-            // correctedTopRight = CorrectTopRight(image, *bottomLeft, *bottomRight, *topLeft, *topRight, dimension);
-            // correctedTopRight = CorrectTopRight(image, *bottomLeft, bottomRightCorrected, *topLeft, topRightCorrected, dimension);
-
-            // Redetermine the dimension using the corrected top right point
-            // int dimensionCorrected = std::max(TransitionsBetween(image, *topLeft, correctedTopRight).transitions,
-            //                                   TransitionsBetween(image, *bottomRight, correctedTopRight).transitions);
-            // int dimensionCorrected = dimension;
-
-            // int dimensionCorrected = std::max(TransitionsBetween(image, *topLeft, topRightCorrected).transitions,
-            //                                   TransitionsBetween(image, bottomRightCorrected, correctedTopRight).transitions);
-            // dimensionCorrected++;
-            // if ((dimensionCorrected & 0x01) == 1) {
-            //     dimensionCorrected++;
-            // }
-            correctedOffset = false;
-			res = SampleGridTestOffseted(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight,
-										 gridRefine);
-            // res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
-			// auto testValue = testCenterLineBiOffset(res.bits());
-            outDecoderResult = DecodeResult(res);
-            return res;
         }
 
-        // DetectorResult res = SampleGrid(image, *topLeft, *bottomLeft, *bottomRight, correctedTopRight, dimensionTop, dimensionRight);
+        c.dimension = std::max(c.dimensionRight, c.dimensionTop);
+        c.dimInv = 1.0 / float(c.dimension);
+        c.DirTopLR = c.dimInv * (*c.topRight - *c.topLeft);
+        c.DirBottomLR = c.dimInv * (*c.bottomRight - *c.bottomLeft);
+        c.DirRightBT = c.dimInv * (*c.topRight - *c.bottomRight);
+        c.DirLeftBT = c.dimInv * (*c.topLeft - *c.bottomLeft);
+        c.dimensionTop = c.dimensionRight = c.dimension;
 
-        return {};
+        correctedOffset = true;
+        return ladder::RunSubLadder("old", kOldPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
     }
 
 
@@ -1549,8 +1644,82 @@ namespace ZXing::DataMatrix {
     };
 
 
-    static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, Warp* warp = nullptr, bool tryToTraceWarp = false, bool correctCorners = false,
-							   DMGridRefineOptions gridRefine = {})
+    // ---- Scan's warped tail, as two named units ---------------------------------
+    //
+    // On this base the tail is a pipeline -- sample, then refine in place, then
+    // return the first valid grid to the caller, which decodes -- so it is not a
+    // ladder and does not go through the runner. Naming the two units is what
+    // lets a later warp-loop version (one step per warp, refine as a step whose
+    // result the runner decodes) drop in without touching the tracing above.
+
+    // Sample through a warp: resample it to the symbol's dimensions if it is
+    // not already, then sample from corrected corners when asked, else through
+    // the perspective transform of the traced quadrilateral.
+    static DetectorResult SampleScanGridWarped(const BitMatrix& img, PointF tl, PointF bl, PointF br, PointF tr, int dimT, int dimR,
+                                               const QuadrilateralF& sourcePoints, Warp& warp, bool correctCorners)
+    {
+        if (warp.xOffsets.size() != dimT || warp.yOffsets.size() != dimR) {
+            warp.Resample(dimT, dimR);
+        }
+        if (correctCorners) {
+            auto TL = tl, BL = bl, BR = br, TR = tr;
+            CorrectCorners(img, TL, BL, BR, TR, dimT);
+            return SampleGridWarped(img, TL, BL, BR, TR, dimT, dimR, warp);
+        }
+        return SampleGridWarped(img, dimT, dimR, warp, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
+    }
+
+    // Refinement "warped", what Scan applies to a warped sample that does not
+    // decode cleanly: region growing from the L-corner if that scores better,
+    // then Reed-Solomon-guided resampling of the modules it flagged; each gated
+    // by its feature. Unlike "testOffseted" it leaves an invalid sample alone --
+    // the one difference, and why the two stay two refinements.
+    static DetectorResult RefineWarpedWith(const BitMatrix& img, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+                                           DetectorResult res)
+    {
+        const int dimT = g.width, dimR = g.height;
+        if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
+            auto scoreWarp = EvaluateDecode(res.bits());
+            if (!scoreWarp.ok) {
+                const PerspectiveTransform& mod2pix = g.mod2pix;
+                if (gridRefine.regionGrowing) {
+                    auto grown = SampleGridRegionGrowing(img, dimT, dimR, mod2pix);
+                    if (grown.isValid() && EvaluateDecode(grown.bits()).score() < scoreWarp.score()) {
+                        res = std::move(grown);
+                        scoreWarp = EvaluateDecode(res.bits());
+                    }
+                }
+                if (gridRefine.rsFeedback && !scoreWarp.errorModules.empty())
+                    res = RefineGridWithDecoderFeedback(img, dimT, dimR, mod2pix, std::move(res), scoreWarp);
+            }
+        }
+        return res;
+    }
+
+    static DetectorResult RefineWarped(const BitMatrix& img, const ladder::Geometry& g, DMGridRefineOptions gridRefine,
+                                       DetectorResult res)
+    {
+        NoteRefineSettings(img, g, gridRefine, res, RefineWarpedWith);
+        return RefineWarpedWith(img, g, gridRefine, std::move(res));
+    }
+
+    // ---- Locator "scanL": Scan's L-finder, as a stage --------------------------
+    //
+    // From the tracer's start, walk to each white-after-black edge and try to
+    // trace the L (left and bottom legs) and the dashed top and right borders.
+    // Each plausible symbol is a candidate: the four corners (sub-pixel, from the
+    // border lines), the module dimensions and the half-pixel-shrunk source
+    // quadrilateral. `onCandidate` samples it (the Sampling stage) and returns
+    // the detection; the first valid one ends the search. ADR 0006 step 6.
+    struct ScanCandidate
+    {
+        PointF tl, bl, br, tr;
+        int dimT, dimR;
+        QuadrilateralF sourcePoints;
+    };
+
+    template <typename OnCandidate>
+    static DetectorResult LocateScanL(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, OnCandidate&& onCandidate)
     {
         while (startTracer.moveToNextWhiteAfterBlack()) {
             log(startTracer.p);
@@ -1678,51 +1847,38 @@ namespace ZXing::DataMatrix {
                     movedTowardsBy(bl, tl, br, 0.5f),
             };
 
-            DetectorResult res;
-            if (tryToTraceWarp && warp) {
-                if (!warp->isValid() || warp->xOffsets.size() > dimT || warp->yOffsets.size() > dimR) {
-                    *warp = ComputeWarp(*startTracer.img, tl, bl, br, tr, 5, 5, dimT);
-                }
-                // warp->Resample(dimT, dimR);
-            }
-            if (warp) {
-                if (warp->xOffsets.size() != dimT || warp->yOffsets.size() != dimR) {
-                    warp->Resample(dimT, dimR);
-                }
-                if (correctCorners) {
-                    auto TL = tl, BL = bl, BR = br, TR = tr;
-                    CorrectCorners(*startTracer.img, TL, BL, BR, TR, dimT);
-                    res = SampleGridWarped(*startTracer.img, TL, BL, BR, TR, dimT, dimR, *warp);
-                }
-                else {
-                    res = SampleGridWarped(*startTracer.img, dimT, dimR, *warp, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints));
-                }
-				if (res.isValid() && (gridRefine.regionGrowing || gridRefine.rsFeedback)) {
-					auto scoreWarp = EvaluateDecode(res.bits());
-					if (!scoreWarp.ok) {
-						PerspectiveTransform mod2pix{Rectangle(dimT, dimR, 0), sourcePoints};
-						if (gridRefine.regionGrowing) {
-							auto grown = SampleGridRegionGrowing(*startTracer.img, dimT, dimR, mod2pix);
-							if (grown.isValid() && EvaluateDecode(grown.bits()).score() < scoreWarp.score()) {
-								res = std::move(grown);
-								scoreWarp = EvaluateDecode(res.bits());
-							}
-						}
-						if (gridRefine.rsFeedback && !scoreWarp.errorModules.empty())
-							res = RefineGridWithDecoderFeedback(*startTracer.img, dimT, dimR, mod2pix, std::move(res), scoreWarp);
-					}
-				}
-            }
-            else {
-                res = SampleGridTestOffseted(*startTracer.img, dimT, dimR, PerspectiveTransform(Rectangle(dimT, dimR, 0), sourcePoints),
-											 gridRefine);
-            }
-
+            // Mutable: the warp sampler's ComputeWarp may move the corners it is
+            // given, and samples with the moved ones, as the inline code did.
+            ScanCandidate candidate{tl, bl, br, tr, dimT, dimR, sourcePoints};
+            DetectorResult res = onCandidate(candidate);
             CHECK(res.isValid());
             return res;
         }
 
         return {};
+    }
+
+    // Scan = the scanL locator + its sampling: with a warp, the warp-tracing
+    // sampler and the "warped" refinement; without, the testOffseted Sampling
+    // stage (overridable per step by a recipe).
+    static DetectorResult Scan(EdgeTracer& startTracer, std::array<DMRegressionLine, 4>& lines, Warp* warp = nullptr, bool tryToTraceWarp = false, bool correctCorners = false,
+							   DMGridRefineOptions gridRefine = {})
+    {
+        return LocateScanL(startTracer, lines, [&](ScanCandidate& c) {
+            DetectorResult res;
+            if (warp) {
+                if (tryToTraceWarp && (!warp->isValid() || warp->xOffsets.size() > c.dimT || warp->yOffsets.size() > c.dimR))
+                    *warp = ComputeWarp(*startTracer.img, c.tl, c.bl, c.br, c.tr, 5, 5, c.dimT);
+                res = SampleScanGridWarped(*startTracer.img, c.tl, c.bl, c.br, c.tr, c.dimT, c.dimR, c.sourcePoints, *warp, correctCorners);
+                res = RefineWarped(*startTracer.img, {c.dimT, c.dimR, PerspectiveTransform(Rectangle(c.dimT, c.dimR, 0), c.sourcePoints)}, gridRefine,
+                                   std::move(res));
+            }
+            else {
+                res = ladder::Pick(kSamplingTestOffseted)(*startTracer.img, {c.dimT, c.dimR, PerspectiveTransform(Rectangle(c.dimT, c.dimR, 0), c.sourcePoints)},
+                                            gridRefine);
+            }
+            return res;
+        });
     }
 
 
@@ -1735,9 +1891,7 @@ namespace ZXing::DataMatrix {
 #endif
 
         // disable expensive multi-line scan to detect off-center symbols for now
-#ifndef __cpp_impl_coroutine
         tryHarder = false;
-#endif
 
         //ResultPoint p1;
         //createBitmapFromBitMatrix(image,p1,p1,p1,p1);
@@ -1767,15 +1921,9 @@ namespace ZXing::DataMatrix {
                 if (!tracer.isIn())
                     break;
 
-#ifdef __cpp_impl_coroutine
-                DetectorResult res;
-                while (res = Scan(tracer, lines), res.isValid())
-                    co_yield std::move(res);
-#else
                 if (auto res = Scan(tracer, lines, warp, tryToTraceWarp, correctCorners, gridRefine); res.isValid()) {
                     return res;
                 }
-#endif
 
                 if (!tryHarder)
                     break; // only test center lines
@@ -1785,9 +1933,7 @@ namespace ZXing::DataMatrix {
                 break; // only test left direction
         }
 
-#ifndef __cpp_impl_coroutine
         return {};
-#endif
     }
 
 
@@ -1948,7 +2094,7 @@ namespace ZXing::DataMatrix {
 			// cv::convertMaps(floatMap, {}, mapXY.first, mapXY.second, CV_32FC2, true);
 			// cv::convertMaps(mapXY, {}, mapXY, {}, CV_16SC2);
 		}
-
+		
 		cv::remap(img, outImg, mapXY.first, mapXY.second, cv::InterpolationFlags::INTER_NEAREST, 0, 0);
     }
 
@@ -2167,7 +2313,7 @@ namespace ZXing::DataMatrix {
     void line3(cv::Mat& mat, int x1, int y1, int x2, int y2, int thickness = 2) {
 		cv::line(mat, {x1,y1},{x2,y2}, BitMatrix::SET_V, thickness, cv::LINE_4);
     }
-
+	
 
 
 
@@ -2197,126 +2343,183 @@ namespace ZXing::DataMatrix {
 		return cv::Mat(h, w, CV_8UC1);
 	}
 
-    // outBailedNoWhiteRect (optional): set true iff this call took the early
-    // "no white rect at 0deg or 45deg" path and returned {}. Lets a caller that
-    // is about to repeat the call on the SAME image skip it -- see
-    // DetectSamplegridV1.
-    static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect, Warp* warp = nullptr, bool needToTraceWarp = false, bool correctCorners = false,
-									 DMGridRefineOptions gridRefine = {}, bool* outBailedNoWhiteRect = nullptr)
+    // ---- DetectCRPT as a sub-ladder ---------------------------------------------
+    //
+    // Setup finds the white rectangle (retrying at 45 degrees) and measures the
+    // transitions along its sides. That is a precondition, not a variant, so it
+    // stays in DetectCRPT and bails the way it always did. What follows are the
+    // variants -- the two L-marker drawings, then the bottle unwarp in four
+    // orientations behind one preparation step -- each a step run by the same
+    // runner as the entry-point plans. Per-variant attribution falls out of the
+    // runner instead of out of hand-placed counters.
+
+    // ---- Locator "crptWhiteRect": DetectCRPT's setup, as a stage ------------------
+    //
+    // Find the white rectangle round the symbol on a copy of the image; failing
+    // that, on the copy rotated by 45 degrees. Its product: the image the
+    // rectangle was found on, the four corners, and the four sides' transition
+    // counts sorted fewest first. The transitions point INTO the corners, so a
+    // CrptSetup never moves or copies; everything downstream refers to it.
+    struct CrptSetup
     {
-        if (outBailedNoWhiteRect) *outBailedNoWhiteRect = false;
-
-        /*ResultPoint p1(0, 0);
-        ResultPoint p2(0, 0);
-        ResultPoint p3(0, 0);
-        ResultPoint p4(0, 0);
-        createBitmapFromBitMatrix(image, p1, p2, p3, p4);*/
-
-
-
-        // BitMatrix newimage = CreateSnapped(image);
-        // BitMatrix newimage();
-		BitMatrix newimage = image.copy();
+        const BitMatrix* source = nullptr; ///< the image it was located on: what a reuse must match
+        bool found = false;
+        BitMatrix image;
         ResultPoint pointA, pointB, pointC, pointD;
+        std::array<ResultPointsAndTransitions, 4> transitions;
 
-        if (!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {
-			// drawDebugImage(newimage, "unrotated");
-			rotateCV45(image, newimage);
-			// drawDebugImage(newimage, "rotated");
-			if(!DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) {
-				if (outBailedNoWhiteRect) *outBailedNoWhiteRect = true;
-				return {};
-			}
+        CrptSetup() = default;
+        CrptSetup(const CrptSetup&) = delete;
+        CrptSetup& operator=(const CrptSetup&) = delete;
+    };
 
-            // for (const auto& rot : rotateEasy) {
-			// 	rotateNew(image, newimage, rot);
+    static void LocateCrptWhiteRect(const BitMatrix& image, CrptSetup& s)
+    {
+        s.source = &image;
+        {
+            CRPT_LADDER_PROBE("copy");
+            s.image = image.copy();
+        }
+        {
+            CRPT_LADDER_PROBE("whiteRect");
+            s.found = DetectWhiteRect(s.image, s.pointA, s.pointB, s.pointC, s.pointD);
+        }
+        if (!s.found) {
+            {
+                CRPT_LADDER_PROBE("rotate45");
+                rotateCV45(image, s.image);
+            }
+            {
+                CRPT_LADDER_PROBE("whiteRect");
+                s.found = DetectWhiteRect(s.image, s.pointA, s.pointB, s.pointC, s.pointD);
+            }
+            if (!s.found)
+                return;
+        }
+        {
+            CRPT_LADDER_PROBE("transitions");
+            s.transitions = {
+                    TransitionsBetween(s.image, s.pointA, s.pointB),
+                    TransitionsBetween(s.image, s.pointA, s.pointC),
+                    TransitionsBetween(s.image, s.pointB, s.pointD),
+                    TransitionsBetween(s.image, s.pointC, s.pointD),
+            };
+            std::sort(s.transitions.begin(), s.transitions.end(),
+                      [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+        }
+    }
 
-			// 	// rotateNew2(image, newimage, rot);
-			// 	// drawDebugImage(newimage, "rotNew");
-            //     if (DetectWhiteRect(newimage, pointA, pointB, pointC, pointD)) break;
-            // }
+    struct CrptContext : ladder::State
+    {
+        const BitMatrix& image;
+        Warp* warp;
+        bool needToTraceWarp;
+        bool correctCorners;
+        DMGridRefineOptions gridRefine;
+
+        // The locator's product: the rectangle, its image, its sides.
+        const CrptSetup& setup;
+
+        // Scratch the variants draw into. One BitMatrix for both phases, as
+        // before: the L-marker variants copy newimage into it, the bottle
+        // preparation reallocates it square and keeps a cv::Mat view of it.
+        BitMatrix img2;
+        cv::Mat img2Mat;
+        cv::Mat resizedImg;
+        size_t remapSize = 0;
+    };
+
+    using CrptStep = ladder::Step<CrptContext>;
+
+    // The rectangle's two sides with the fewest transitions (side 0 and side n2),
+    // drawn onto a copy of the image so the tracer sees an L-marker, then
+    // DetectNew on that.
+    static DetectorResult CrptLMarker(CrptContext& c, int n2)
+    {
+        c.setup.image.copyTo(c.img2);
+        auto mat = c.img2.asMat();
+        const auto& t = c.setup.transitions;
+        line3(mat, t[0].from->x(), t[0].from->y(), t[0].to->x(), t[0].to->y());
+        line3(mat, t[n2].from->x(), t[n2].from->y(), t[n2].to->x(), t[n2].to->y());
+        return DetectNew(c.img2, true, true, c.warp, c.needToTraceWarp, c.correctCorners, c.gridRefine);
+    }
+    static DetectorResult CrptLMarker0(CrptContext& c, bool&) { return CrptLMarker(c, 1); }
+    static DetectorResult CrptLMarker1(CrptContext& c, bool&) { return CrptLMarker(c, 2); }
+
+    // The bottle unwarp's shared input: the ORIGINAL image resized to a fixed
+    // square (256, or 128 for small crops) and re-binarised. Detects nothing
+    // itself; the four orientations that follow read what it prepared.
+    static DetectorResult CrptBottlePrepare(CrptContext& c, bool&)
+    {
+        const size_t remapSizeBig = 256;
+        const size_t remapSizeHalfThreshold = 160;
+        c.remapSize = remapSizeBig;
+        if(std::max(c.image.width(), c.image.height()) < remapSizeHalfThreshold) {
+            c.remapSize /= 2;
         }
 
+        c.img2 = BitMatrix(c.remapSize, c.remapSize);
+        c.img2Mat = c.img2.asMat();
 
-        std::array transitions = {
-                TransitionsBetween(newimage, pointA, pointB),
-                TransitionsBetween(newimage, pointA, pointC),
-                TransitionsBetween(newimage, pointB, pointD),
-                TransitionsBetween(newimage, pointC, pointD),
-        };
+        cv::resize(c.image.asMat(), c.resizedImg, {static_cast<int>(c.remapSize), static_cast<int>(c.remapSize)}, 0,0, cv::INTER_LINEAR);
+        cv::threshold(c.resizedImg, c.resizedImg, 127, 255, cv::THRESH_BINARY);
+        return {};
+    }
 
-        std::sort(transitions.begin(), transitions.end(),
-                  [](const auto& a, const auto& b) { return a.transitions < b.transitions; });
+    // One bottle orientation: unwarp the prepared square into img2, then DetectNew.
+    static DetectorResult CrptBottle(CrptContext& c, int i)
+    {
+        correctBottleCv(c.resizedImg, c.img2Mat, i & 0b10, i & 0b01, c.remapSize != 256);
+        return DetectNew(c.img2, true, true, c.warp, c.needToTraceWarp, c.correctCorners, c.gridRefine);
+    }
+    static DetectorResult CrptBottle0(CrptContext& c, bool&) { return CrptBottle(c, 0); }
+    static DetectorResult CrptBottle1(CrptContext& c, bool&) { return CrptBottle(c, 1); }
+    static DetectorResult CrptBottle2(CrptContext& c, bool&) { return CrptBottle(c, 2); }
+    static DetectorResult CrptBottle3(CrptContext& c, bool&) { return CrptBottle(c, 3); }
 
+    static const CrptStep kCrptPlan[] = {
+        {"lmarker[0]",    CrptLMarker0},
+        {"lmarker[1]",    CrptLMarker1},
+        {"bottlePrepare", CrptBottlePrepare},
+        {"bottle[0]",     CrptBottle0},
+        {"bottle[1]",     CrptBottle1},
+        {"bottle[2]",     CrptBottle2},
+        {"bottle[3]",     CrptBottle3},
+    };
 
-        DetectorResult res;
-        int n1, n2;
+    // `located` is the plan's memo of the locator (ladder::Context::crptSetup):
+    // the first DetectCRPT of a plan run fills it, a later one on the same image
+    // reuses it -- a bail included, which is the "skip the redundant DetectCRPT"
+    // of checking_speed / variant 1, here as a consequence rather than a rule.
+    static DetectorResult DetectCRPT(const BitMatrix& image, DecoderResult& outDecodeResult, ResultedDefect& possibleResultedDefect,
+                                     std::shared_ptr<CrptSetup>& located, Warp* warp = nullptr, bool needToTraceWarp = false,
+                                     bool correctCorners = false, DMGridRefineOptions gridRefine = {})
+    {
+        if (!located || located->source != &image) {
+            located = std::make_shared<CrptSetup>();
+            LocateCrptWhiteRect(image, *located);
+        }
+        const CrptSetup& setup = *located;
+        if (!setup.found) {
+            // The bail that makes a second DetectCRPT on the same image
+            // redundant: noted on the hosting step (sgv1/crpt, sgv1/crptWarp).
+            CRPT_LADDER_NOTE(Bail);
+            return {};
+        }
+        CrptContext c{{outDecodeResult}, image, warp, needToTraceWarp, correctCorners, gridRefine, setup};
+        c.sweepWarp = warp; // sweeps put back the warp a winning variant traced (DMLadder.h)
 
-        if (transitions[0].transitions > 4) {
+        if (setup.transitions[0].transitions > 4) {
             possibleResultedDefect = ResultedDefect::LMarker;
         }
 
-        //���������� L �� ���� ��������� �� image � ������� DetectNew ��� ������� (��� � ������ L ���� ����������� � ���� �����)
-
-		BitMatrix img2;
-
-		for (int i = 0; i < 2; i++) {
-            if (i == 0) { n1 = 0; n2 = 1; }
-            if (i == 1) { n1 = 0; n2 = 2; }
-
-			newimage.copyTo(img2);
-			// img2 = BitMatrix(newimage.width(), newimage.height());
-            // line2(img2, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
-            // line2(img2, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
-
-			// drawDebugImage(img2,"oldLine");
-			// newimage.copyTo(img2);
-            // img2 = BitMatrix(newimage.width(), newimage.height());
-			auto mat = img2.asMat();
-            line3(mat, transitions[n1].from->x(), transitions[n1].from->y(), transitions[n1].to->x(), transitions[n1].to->y());
-            line3(mat, transitions[n2].from->x(), transitions[n2].from->y(), transitions[n2].to->x(), transitions[n2].to->y());
-			// drawDebugImage(img2,"newLine");
-
-            res = DetectNew(img2, true, true, warp, needToTraceWarp, correctCorners, gridRefine);
-
-            if (!res.isValid()) continue;
-            if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid()) return res;
-        } //i
-
-
-        //������������ �������������� �������� �������, 4 ��������: �����������/���������+��������
-        //� ���� ����� ������������ ���3, L1, ������� � �.�, �������� ����������� �� � ��������
-        // BitMatrix img2;
-
-		const size_t remapSizeBig = 256;
-		const size_t remapSizeHalfThreshold = 160;
-		size_t remapSize = remapSizeBig;
-		if(std::max(image.width(), image.height()) < remapSizeHalfThreshold) {
-			remapSize /= 2;
-		}
-
-		img2 = BitMatrix(remapSize, remapSize);
-		auto img2Mat = img2.asMat();
-
-		cv::Mat resizedImg;
-		cv::resize(image.asMat(), resizedImg, {static_cast<int>(remapSize), static_cast<int>(remapSize)}, 0,0, cv::INTER_LINEAR);
-		cv::threshold(resizedImg, resizedImg, 127, 255, cv::THRESH_BINARY);
-		// drawDebugImage(resizedImg, "orig");
-
-		for (int i = 0; i < 4; i++) {
-            n1 = 0; n2 = 1;
-			// drawDebugImage(image, "original");
-			// auto TestImg2 = image.copy();
-            // correctBottle(image, TestImg2, i & 0b10, i & 0b01);
-			// drawDebugImage(TestImg2, "correct_bottle_old");
-			correctBottleCv(resizedImg, img2Mat, i & 0b10, i & 0b01, remapSize != remapSizeBig);
-			// drawDebugImage(img2, "correct_bottle");
-
-            res = DetectNew(img2, true, true, warp, needToTraceWarp, correctCorners, gridRefine);
-            if (!res.isValid()) continue;
-            if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid()) return res;
-        } //i
-        return res;
+        // Every caller arrives with outDecodeResult invalid -- the previous
+        // phase's decode failed, or it would have returned -- so the runner's
+        // "dec valid after a step" is exactly the per-variant
+        // `if (outDecodeResult = DecodeResult(res); outDecodeResult.isValid())`
+        // this replaces. LastDetection: what came out of the final variant,
+        // valid or not, is what DetectCRPT has always handed back.
+        return ladder::RunSubLadder("crpt", kCrptPlan, c, ladder::Policy::DecodeToWin, ladder::Fallback::LastDetection);
     }
 
 
@@ -2372,251 +2575,57 @@ static DetectorResult DetectPure(const BitMatrix& image)
             {{left, top}, {right, top}, {right, bottom}, {left, bottom}} };
 }
 
-DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DMGridRefineOptions gridRefine)
+// ---- Detector phases -----------------------------------------------------------
+//
+// One function per phase, shared by the plans below. A phase runs its detector
+// and reports through `decodedInside` whether that detector already decoded
+// into ctx.dec; it applies no ResultedDefect. Where a plan wants a defect on a
+// phase's detection it wraps the phase (the SamplegridV1 steps do), because
+// which defect, and whether one is applied at all, belongs to the plan, not to
+// the detector.
+
+// The edge-tracing detector, no warp. The runner decodes.
+static DetectorResult PhaseNewPlain(ladder::Context& ctx, bool& /*decodedInside*/)
 {
-#ifdef __cpp_impl_coroutine
-    // First try the very fast DetectPure() path. Also because DetectNew() generally fails with pure module size 1 symbols
-// TODO: implement a tryRotate version of DetectPure, see #590.
-    if (auto r = DetectPure(image); r.isValid())
-        co_yield std::move(r);
-    else if (!isPure) { // If r.isValid() then there is no point in looking for more (no-pure) symbols
-        bool found = false;
-        for (auto&& r : DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine)) {
-            found = true;
-            co_yield std::move(r);
-        }
-        if (!found && tryHarder) {
-            if (auto r = DetectOld(image); r.isValid())
-                co_yield std::move(r);
-        }
-    }
-#else
-    if (isPure)
-        return DetectPure(image);
-
-    auto result = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine);
-    DecoderResult outDecoderResult;
-    //if (!result.isValid() && tryHarder)
-    //	result = DetectPure(image);
-    ResultedDefect _;
-    if (!result.isValid() && tryHarder)
-        result = DetectCRPT(image, outDecoderResult, _, nullptr, false, false, gridRefine);
-    return result;
-
-#endif
+    return DetectNew(ctx.image, ctx.tryHarder, ctx.tryRotate, nullptr, false, false, ctx.gridRefine);
 }
 
-//    const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
-DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
-								   DMGridRefineOptions gridRefine)
+// The edge-tracing detector, tracing a warp into ctx.warp for the phase that
+// follows. The runner decodes.
+static DetectorResult PhaseNewWarp(ladder::Context& ctx, bool& /*decodedInside*/)
 {
+    return DetectNew(ctx.image, ctx.tryHarder, ctx.tryRotate, &ctx.warp, true, false, ctx.gridRefine);
+}
 
-#ifdef __cpp_impl_coroutine
-    DetectorResult detRes;
-    //OLD DETECTORS
-    detRes = DetectNew(image, tryHarder, tryRotate);
-    if (!detRes.isValid())
-        detRes = DetectCRPT(image.copy());
+// DetectCRPT on the plain image. Decodes internally; its defect goes into
+// ctx.crptDefect for whichever plan wants it.
+static DetectorResult PhaseCrpt(ladder::Context& ctx, bool& decodedInside)
+{
+    decodedInside = true;
+    return DetectCRPT(ctx.image, ctx.dec, ctx.crptDefect, ctx.crptSetup, nullptr, false, false, ctx.gridRefine);
+}
 
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            co_return detRes;
-        }
-    }
-    //#OLD DETECTORS
-
-    //OLD DETECTORS WITH MY SAMPLE GRID
-    detRes = DetectNew(image, tryHarder, tryRotate, true, true);
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            co_return detRes;
-        }
-    }
-    detRes = DetectCRPT(image.copy(), true, true);
-
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            co_return detRes;
-        }
-    }
-    //OLD DETECTORS WITH MY SAMPLE GRID
-    co_return{};
-#else
-    QuadrilateralI resultCandidate;
-    DetectorResult detRes;
-
-    auto SetResultCandidate = [&]() {
-        if (detRes.isValid()) {
-            resultCandidate = detRes.position();
-        }
-    };
-
-	ResultPoint whiteRectPoints[4];
-	if (!DetectWhiteRect(image, whiteRectPoints[0], whiteRectPoints[1], whiteRectPoints[2], whiteRectPoints[3]));
-
-	// double TEST = FindMaxIslandArea(image, whiteRectPoints[0], whiteRectPoints[1], whiteRectPoints[2], whiteRectPoints[3]);
-
-    // OLD DETECTORS
-    bool correctedOffset = false;
-    detRes = DetectOldWithOffsets(image, outDecoderResult, correctedOffset, gridRefine);
-    SetResultCandidate();
-    detRes.setResultedDefect(correctedOffset ? ResultedDefect::MissingSync : ResultedDefect::Default);
-    if (outDecoderResult.isValid()) return detRes;
-
-    ResultedDefect possibleResultedDefect = ResultedDefect::Default;
-    bool _crpt1_bailed = false;
-    detRes = DetectCRPT(image, outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine, &_crpt1_bailed);
-    SetResultCandidate();
-    detRes.setResultedDefect(possibleResultedDefect);
-    if (outDecoderResult.isValid()) return detRes;
-
-    detRes = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine);
-    SetResultCandidate();
-    detRes.setResultedDefect(ResultedDefect::Default);
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            return detRes;
-        }
-    }
-    //#OLD DETECTORS
-
-    //OLD DETECTORS WITH MY SAMPLE GRID
-
-    Warp warp;
-
-    detRes = DetectNew(image, tryHarder, tryRotate, &warp, true, false, gridRefine);
-    SetResultCandidate();
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        detRes.setResultedDefect(ResultedDefect::PrintShift);
-        if (outDecoderResult.isValid()) {
-            return detRes;
-        }
-    }
-
-    // SKIP when call 1 already bailed. That call and this one differ only in
-    // `warp` / `needToTraceWarp`, and the bail path reads neither -- it depends
-    // only on the image, which is the same here. So this call would redo an
-    // identical copy -> DetectWhiteRect -> rotateCV45 -> DetectWhiteRect and
-    // return {} again.
-    //
-    // Ported from checking_speed_zxing b094b501, where it was verified over
-    // 2,352 paired samples with zero cases of call 2 succeeding where call 1
-    // bailed.
-    //
-    // `detRes = {}` reproduces exactly what the skipped call returned, so the
-    // code below (SetResultCandidate / isValid checks) sees what it always saw.
-    // Without it detRes would wrongly retain the DetectNew result from above.
-    if (_crpt1_bailed) {
-        detRes = {};
-    } else {
-        detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine);
-    }
-    SetResultCandidate();
-    if (outDecoderResult.isValid()) return detRes;
-    if (detRes.isValid()) {
-        detRes.setResultedDefect(ResultedDefect::PrintShift);
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            return detRes;
-        }
-    }
-    //#OLD DETECTORS WITH MY SAMPLE GRID
-    return DetectorResults({}, std::move(resultCandidate));
-#endif
+// DetectCRPT with the warp the preceding PhaseNewWarp traced. On ctx.image
+// itself, not a copy as it used to be: DetectCRPT only reads its image, and the
+// same image is what lets it reuse the locator PhaseCrpt already ran.
+static DetectorResult PhaseCrptWarp(ladder::Context& ctx, bool& decodedInside)
+{
+    decodedInside = true;
+    return DetectCRPT(ctx.image, ctx.dec, ctx.crptDefect, ctx.crptSetup, &ctx.warp, true, false, ctx.gridRefine);
 }
 
 const int CommonMatrixDimensions[] = { 20, 22, 24, 26, 32, 36, 40, 44 };
 
-DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
-							  DMGridRefineOptions gridRefine)
+// The caller-supplied quadrilateral tried as every common symbol size: corners
+// corrected and rotated for that size, a warp computed, the grid sampled
+// through it. Decodes internally, per size.
+static DetectorResult PhaseDefinedGrid(ladder::Context& ctx, bool& decodedInside)
 {
+    decodedInside = true;
+    const BitMatrix& image = ctx.image;
     DetectorResult detRes;
-
-    //OLD DETECTORS
-    detRes = DetectNew(image, tryHarder, tryRotate, nullptr, false, false, gridRefine);
-    ResultedDefect possibleResultedDefect;
-    if (!detRes.isValid())
-        detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, nullptr, false, false, gridRefine);
-
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            return detRes;
-        }
-    }
-    //#OLD DETECTORS
-
-    //OLD DETECTORS WITH MY SAMPLE GRID
-
-    Warp warp;
-
-    detRes = DetectNew(image, tryHarder, tryRotate, &warp, true, false, gridRefine);
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            return detRes;
-        }
-    }
-    detRes = DetectCRPT(image.copy(), outDecoderResult, possibleResultedDefect, &warp, true, false, gridRefine);
-
-    if (detRes.isValid()) {
-        outDecoderResult = DecodeResult(detRes);
-        if (outDecoderResult.isValid()) {
-            return detRes;
-        }
-    }
-    //#OLD DETECTORS WITH MY SAMPLE GRID
-
-
-        //MY DETECTOR
-        // std::vector<double> cornersAsVector;
-    //MY DETECTOR
-    std::vector<double> cornersAsVector;
-
-    // detRes = DetectNew(image, tryHarder, tryRotate, true, false);
-    // outDecoderResult = DecodeResult(detRes);
-    // if (outDecoderResult.isValid()) {
-    // 	return detRes;
-    // }
-// detRes = DetectNew(image, tryHarder, tryRotate, true, false);
-// outDecoderResult = DecodeResult(detRes);
-// if (outDecoderResult.isValid()) {
-// 	return detRes;
-// }
-
-//     // detRes = DetectNew(image, tryHarder, tryRotate, true, true);
-//     // outDecoderResult = DecodeResult(detRes);
-//     // if (outDecoderResult.isValid()) {
-//     // 	return detRes;
-//     // }
-// detRes = DetectNew(image, tryHarder, tryRotate, true, true);
-// outDecoderResult = DecodeResult(detRes);
-// if (outDecoderResult.isValid()) {
-// 	return detRes;
-// }
-
-    // // for (int dim = 8; dim <= 44; dim+=2) {
-    // for (int dim : CommonMatrixDimensions) {
-// for (int dim = 8; dim <= 44; dim+=2) {
     for (int dim : CommonMatrixDimensions) {
-
-        // 	PointF P[] = {P0, P1, P2, P3};
-        // 	CorrectCorners(image, P[0], P[1], P[2], P[3], dim);
-        // 	int rotateSteps = FindRotation(image, P[0], P[1], P[2], P[3], dim);
-        // 	if(rotateSteps > 0) {
-        // 		PointF PP[4];
-        // 		std::copy(P, &P[4], PP);
-        // 		for(int i = 4; i--;) {
-        // 			P[(i+rotateSteps) % 4] = PP[i];
-        // 		}
-        // 	}
-        // 	//DEBUG DRAW
-        PointF P[] = { P0, P1, P2, P3 };
+        PointF P[] = { ctx.corners[0], ctx.corners[1], ctx.corners[2], ctx.corners[3] };
         CorrectCorners(image, P[0], P[1], P[2], P[3], dim);
         int rotateSteps = FindRotation(image, P[0], P[1], P[2], P[3], dim);
         if (rotateSteps > 0) {
@@ -2626,53 +2635,366 @@ DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const Po
                 P[(i + rotateSteps) % 4] = PP[i];
             }
         }
-        //DEBUG DRAW
-
-        // 	auto postfix = std::to_string(dim);
-        auto postfix = std::to_string(dim);
-
-        // 	// cornersAsVector = {P[0].x, P[0].y, P[1].x, P[1].y, P[2].x, P[2].y, P[3].x, P[3].y};
-        // 	// drawDebugImageWithLines(image, filename, cornersAsVector);
-        // cornersAsVector = {P[0].x, P[0].y, P[1].x, P[1].y, P[2].x, P[2].y, P[3].x, P[3].y};
-        // drawDebugImageWithLines(image, filename, cornersAsVector);
-
-        // 	//END DEBUG DRAW
-        //END DEBUG DRAW
-
-        // 	auto&& [TL, BL, BR, TR] = P;
         auto&& [TL, BL, BR, TR] = P;
-
-        // 	detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim);
-        // 	if (detRes.isValid()) {
-        // 		outDecoderResult = DecodeResult(detRes);
-        // 		if (outDecoderResult.isValid()) {
-        // 			// cornersAsVector = {P[0].y, P[0].x, P[1].y, P[1].x, P[2].y, P[2].x, P[3].y, P[3].x};
-        // 			// drawDebugImageWithLines(image, postfix, cornersAsVector);
-        // 			// drawDebugImage(detRes.bits(), postfix);
-        // 			return detRes;
-        // 		}
-        // 	}
-        // }
-        //#MY DETECTOR
-
         auto warp = ComputeWarp(image, TL, BL, BR, TR, dim, dim, dim);
-
-        detRes = SampleGridWarped(image, TL, BL, BR, TR, dim, dim, warp);
+        detRes = ladder::Pick(kSamplingWarped)(image, CornerGeometry(TL, BL, BR, TR, dim, dim, &warp), ctx.gridRefine);
         if (detRes.isValid()) {
-            outDecoderResult = DecodeResult(detRes);
-            if (outDecoderResult.isValid()) {
-                // cornersAsVector = {P[0].y, P[0].x, P[1].y, P[1].x, P[2].y, P[2].x, P[3].y, P[3].x};
-                // drawDebugImageWithLines(image, postfix, cornersAsVector);
-                // drawDebugImage(detRes.bits(), postfix);
+            ctx.dec = ctx.decode(detRes.bits());
+            if (ctx.dec.isValid()) {
                 return detRes;
             }
         }
     }
-    //#MY DETECTOR
-
     return {};
 }
+
+// ---- Step rules ------------------------------------------------------------------
+
+static bool WhenTryHarder(const ladder::Context& ctx)
+{
+    return ctx.tryHarder;
+}
+
+static bool WhenNothingDetectedYet(const ladder::Context& ctx)
+{
+    return !ctx.last.isValid();
+}
+
+// ---- SamplegridV1 steps: the phases above, plus the defect each one applied ------
+
+// s1: the offset-tolerant legacy detector. Decodes internally. Plan-specific
+// (no other plan runs it), so it is a step rather than a phase.
+static DetectorResult StepOldWithOffsets(ladder::Context& ctx, bool& decodedInside)
+{
+    bool correctedOffset = false;
+    DetectorResult det = DetectOldWithOffsets(ctx.image, ctx.dec, correctedOffset, ctx.gridRefine);
+    det.setResultedDefect(correctedOffset ? ResultedDefect::MissingSync : ResultedDefect::Default);
+    decodedInside = true;
+    return det;
+}
+
+// s2: PhaseCrpt with its defect applied.
+static DetectorResult StepCrpt(ladder::Context& ctx, bool& decodedInside)
+{
+    DetectorResult det = PhaseCrpt(ctx, decodedInside);
+    det.setResultedDefect(ctx.crptDefect);
+    return det;
+}
+
+// s3: PhaseNewPlain, marked Default.
+static DetectorResult StepNewPlain(ladder::Context& ctx, bool& decodedInside)
+{
+    DetectorResult det = PhaseNewPlain(ctx, decodedInside);
+    det.setResultedDefect(ResultedDefect::Default);
+    return det;
+}
+
+// s4: PhaseNewWarp; PrintShift on a valid detection only, as before.
+static DetectorResult StepNewWarp(ladder::Context& ctx, bool& decodedInside)
+{
+    DetectorResult det = PhaseNewWarp(ctx, decodedInside);
+    if (det.isValid())
+        det.setResultedDefect(ResultedDefect::PrintShift);
+    return det;
+}
+
+// s5 is PhaseCrptWarp as is: unlike s2, the inline code never applied
+// ctx.crptDefect to this detection, so neither does the plan.
+
+// s6: s5's detection again, marked PrintShift, decoded by the runner. The bits
+// are the ones s5 already decoded, so this has never been seen to win; it is
+// kept so the plan IS the original sequence and removing it becomes a plan
+// edit rather than a code change.
+static DetectorResult StepCrptWarpRedecode(ladder::Context& ctx, bool& /*decodedInside*/)
+{
+    // Its bits are s5's, refined as s5 refined them: so are the settings it
+    // decodes with (a record run's win entry, CrptLadderStats.h).
+    CRPT_LADDER_INHERIT_REFINE();
+    DetectorResult det = std::move(ctx.last);
+    if (det.isValid())
+        det.setResultedDefect(ResultedDefect::PrintShift);
+    return det;
+}
+
+// ---- Plans -----------------------------------------------------------------------
+
+using OuterStep = ladder::Step<ladder::Context>;
+
+// The stock reader: DetectNew, then DetectCRPT only when tryHarder and only if
+// DetectNew found nothing. Wins on the first valid DETECTION -- the reader
+// decodes -- so the decoder result DetectCRPT produces on the way is thrown
+// away, exactly as it always was.
+static const OuterStep kStockPlan[] = {
+    {"newPlain", PhaseNewPlain},
+    {"crpt",     PhaseCrpt, WhenTryHarder},
+};
+
+// The CRPT ladder.
+static const OuterStep kSamplegridV1Plan[] = {
+    {"oldWithOffsets",   StepOldWithOffsets},
+    {"crpt",             StepCrpt},
+    {"newPlain",         StepNewPlain},
+    {"newWarp",          StepNewWarp},
+    {"crptWarp",         PhaseCrptWarp},
+    {"crptWarpRedecode", StepCrptWarpRedecode},
+};
+
+// A caller-located symbol: the ladder's middle four phases (DetectCRPT only if
+// DetectNew found nothing), then the supplied quadrilateral at every size.
+// No defects: this entry point's reader never reads them.
+static const OuterStep kDefinedPlan[] = {
+    {"newPlain",    PhaseNewPlain},
+    {"crpt",        PhaseCrpt, WhenNothingDetectedYet},
+    {"newWarp",     PhaseNewWarp},
+    {"crptWarp",    PhaseCrptWarp},
+    {"definedGrid", PhaseDefinedGrid},
+};
+
+// ---- Entry points ----------------------------------------------------------------
+
+// The entry point's job before running its plan: put the effective features
+// in force for this decode (the caller's flags, with the spec's overrides on
+// top), and derive the DMGridRefineOptions the detectors still take from them,
+// so a flag flipped in the string reaches every phase the same way the setter
+// would have.
+// ---- Named stages and named recipes ------------------------------------------------
+//
+// A recipe is a named preset for one plan: the step order and features (in the
+// ladder-string grammar), the Decoder, and per-step Sampling overrides. The
+// ladder string selects one with `=name`; its other tokens still apply on top
+// (explicit steps replace the recipe's order, +/-features override its). With
+// no recipe named, a decode runs the plan as built: standard decoder, every
+// step's own Sampling -- which is what the golden records.
+
+struct NamedDecoder
+{
+    const char* name;
+    ladder::DecodeFn fn;
+};
+
+static const NamedDecoder kDecoders[] = {
+    {"standard", &ladder::DecodeStandard},
+};
+
+static const ladder::Sampling* const kSamplings[] = {&kSamplingPlain, &kSamplingWarped, &kSamplingTestOffseted};
+
+struct Recipe
+{
+    const char* name;
+    const char* plan; ///< as ValidateDMLadderSpec names them: samplegridv1, stock, defined
+    const char* spec; ///< step order and +/-features, the ladder-string grammar; "" = the plan as built
+    const char* decoder;
+    struct { const char* step; const char* sampling; } sampling[ladder::SamplingOverrides::kMax];
+};
+
+static const Recipe kRecipes[] = {
+    // The three plans as built, by name.
+    {"sgv1", "samplegridv1", "", "standard", {}},
+    {"stock", "stock", "", "standard", {}},
+    {"defined", "defined", "", "standard", {}},
+    // An experiment, not a default: DetectOldWithOffsets' four offset grids
+    // sampled with the offset-testing sampler (and its refinement) that only
+    // its last step, testOffsetGrid, uses as built.
+    {"sgv1.offsetGrids", "samplegridv1", "", "standard",
+     {{"grid[0]", "testOffseted"}, {"grid[1]", "testOffseted"}, {"grid[2]", "testOffseted"}, {"grid[3]", "testOffseted"}}},
+};
+
+/// What a decode runs with: the spec after the recipe (if any) is merged in,
+/// the Decoder, and the Sampling overrides.
+struct Resolved
+{
+    ladder::Spec spec;
+    ladder::DecodeFn decoder = &ladder::DecodeStandard;
+    ladder::SamplingOverrides overrides;
+};
+
+/// Throws std::invalid_argument on an unknown recipe, a recipe of another
+/// plan, or a stage name no registry has -- as the ladder string does for an
+/// unknown step, and caught the same way by ValidateDMLadderSpec at graph open.
+static Resolved ResolveRecipe(const ladder::Spec& spec, std::string_view plan)
+{
+    Resolved r;
+    r.spec = spec;
+    if (spec.recipe.empty())
+        return r;
+    const Recipe* recipe = nullptr;
+    for (const Recipe& x : kRecipes)
+        if (spec.recipe == x.name)
+            recipe = &x;
+    if (!recipe)
+        throw std::invalid_argument("unknown ladder recipe: =" + spec.recipe);
+    if (plan != recipe->plan)
+        throw std::invalid_argument("ladder recipe =" + spec.recipe + " is for plan " + recipe->plan + ", not " + std::string(plan));
+
+    const ladder::Spec base = ladder::ParseSpec(recipe->spec);
+    if (spec.steps.empty())
+        r.spec.steps = base.steps;
+    r.spec.featureMask = base.featureMask | spec.featureMask;
+    r.spec.featureBits = (base.featureBits & ~spec.featureMask) | (spec.featureBits & spec.featureMask);
+
+    r.decoder = nullptr;
+    for (const NamedDecoder& d : kDecoders)
+        if (std::string_view(recipe->decoder) == d.name)
+            r.decoder = d.fn;
+    if (!r.decoder)
+        throw std::invalid_argument("ladder recipe =" + spec.recipe + ": unknown decoder " + recipe->decoder);
+
+    for (const auto& o : recipe->sampling) {
+        if (!o.step)
+            break;
+        const ladder::Sampling* found = nullptr;
+        for (const ladder::Sampling* x : kSamplings)
+            if (std::string_view(o.sampling) == x->name)
+                found = x;
+        if (!found)
+            throw std::invalid_argument("ladder recipe =" + spec.recipe + ": unknown sampling " + o.sampling);
+        r.overrides.items[r.overrides.n++] = {o.step, found};
+    }
+    return r;
+}
+
+/// Put what a decode runs with in place -- every time, so nothing a previous
+/// decode on this thread installed carries over.
+static void Install(const Resolved& r, DMGridRefineOptions gridRefine)
+{
+    ladder::CurrentFeatures() = r.spec.apply(ladder::FeaturesFrom(gridRefine));
+    ladder::CurrentSubPlans() = r.spec.subPlans;
+    ladder::CurrentDecoder() = r.decoder;
+    ladder::CurrentSamplingOverrides() = r.overrides;
+}
+
+static ladder::Context MakeContext(const BitMatrix& image, bool tryHarder, bool tryRotate, DMGridRefineOptions gridRefine,
+                                   const Resolved& r, DecoderResult& dec)
+{
+    Install(r, gridRefine);
+    ladder::Context ctx{{dec}, image, tryHarder, tryRotate, gridRefine};
+    ctx.gridRefine = {ctx.on(ladder::Feat::regionGrowing), ctx.on(ladder::Feat::rsFeedback)};
+    return ctx;
+}
+
+DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
+                       DMGridRefineOptions gridRefine, const ladder::Spec& spec)
+{
+    const Resolved r = ResolveRecipe(spec, "stock");
+    if (isPure) {
+        // One detector, nothing competing: not a plan. Decoded through the same
+        // Decoder stage the plans use, so every entry point returns its decode.
+        Install(r, gridRefine);
+        DetectorResult det = DetectPure(image);
+        if (det.isValid())
+            outDecoderResult = ladder::CurrentDecoder()(det.bits());
+        return det;
+    }
+
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, r, outDecoderResult);
+    ctx.sweepWarp = &ctx.warp;
+    return ladder::RunLadder("stock", kStockPlan, r.spec, ctx, ladder::Policy::FirstValidDetection);
+}
+
+DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
+								   DMGridRefineOptions gridRefine, const ladder::Spec& spec)
+{
+    const Resolved r = ResolveRecipe(spec, "samplegridv1");
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, r, outDecoderResult);
+    ctx.sweepWarp = &ctx.warp;
+    return ladder::RunLadder("sgv1", kSamplegridV1Plan, r.spec, ctx);
+}
+
+DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder, bool tryRotate, bool /*isPure*/, DecoderResult& outDecoderResult,
+							  DMGridRefineOptions gridRefine, const ladder::Spec& spec)
+{
+    const Resolved r = ResolveRecipe(spec, "defined");
+    ladder::Context ctx = MakeContext(image, tryHarder, tryRotate, gridRefine, r, outDecoderResult);
+    ctx.sweepWarp = &ctx.warp;
+    ctx.corners = { P0, P1, P2, P3 };
+    return ladder::RunLadder("defined", kDefinedPlan, r.spec, ctx);
+}
 } // namespace ZXing::DataMatrix
+
+namespace ZXing {
+
+// Declared in ReadBarcode.h. Lives here because only this file knows the
+// plans; ladder::RunLadder throws on the same names at run time as a backstop,
+// but a caller that swallows exceptions around decoding (the calculators do)
+// needs the answer before the first frame.
+namespace {
+
+// Sub-plan orders (ADR 0006 step 7): a sub-plan the plan actually runs, steps
+// it has, none twice, and each step's prerequisite earlier -- correctTopRight
+// computes the corner grid[2], grid[3] and testOffsetGrid use; bottlePrepare
+// the images bottle[k] reads.
+template <class Plan>
+std::string CheckSubPlan(const std::string& sub, const std::vector<std::string>& order, const Plan& steps,
+                         const char* prereq, std::initializer_list<const char*> needing)
+{
+    for (size_t i = 0; i < order.size(); ++i) {
+        bool known = false;
+        for (const auto& step : steps)
+            known = known || order[i] == step.name;
+        if (!known)
+            return "unknown step \"" + order[i] + "\" in sub-plan " + sub;
+        for (size_t j = 0; j < i; ++j)
+            if (order[j] == order[i])
+                return "step \"" + order[i] + "\" twice in sub-plan " + sub;
+        for (const char* n : needing)
+            if (order[i] == n && std::find(order.begin(), order.begin() + i, std::string(prereq)) == order.begin() + i)
+                return "sub-plan " + sub + ": \"" + order[i] + "\" needs \"" + prereq + "\" before it";
+    }
+    return {};
+}
+
+} // namespace
+
+std::string ValidateDMLadderSpec(std::string_view spec, std::string_view plan)
+{
+    using namespace DataMatrix;
+    ladder::Spec parsed;
+    try {
+        parsed = ladder::ParseSpec(spec);
+        if (plan == "samplegridv1" || plan == "stock" || plan == "defined")
+            parsed = ResolveRecipe(parsed, plan).spec; // unknown recipe, wrong plan, unknown stage
+    } catch (const std::invalid_argument& e) {
+        return e.what();
+    }
+    for (const auto& [sub, order] : parsed.subPlans) {
+        std::string err;
+        if (sub == "old" && plan == "samplegridv1")
+            err = CheckSubPlan(sub, order, kOldPlan, "correctTopRight", {"grid[2]", "grid[3]", "testOffsetGrid"});
+        else if (sub == "crpt" && (plan == "samplegridv1" || plan == "stock"))
+            err = CheckSubPlan(sub, order, kCrptPlan, "bottlePrepare", {"bottle[0]", "bottle[1]", "bottle[2]", "bottle[3]"});
+        else if (sub == "old" || sub == "crpt")
+            err = "sub-plan " + sub + " is not run by plan \"" + std::string(plan) + "\"";
+        else
+            err = "unknown sub-plan \"" + sub + "\" (old, crpt)";
+        if (!err.empty())
+            return err;
+    }
+    if (parsed.steps.empty())
+        return {};
+
+    auto check = [&](const auto& steps) -> std::string {
+        for (const std::string& name : parsed.steps) {
+            bool known = false;
+            for (const auto& step : steps)
+                if (name == step.name) {
+                    known = true;
+                    break;
+                }
+            if (!known)
+                return "unknown ladder step \"" + name + "\" for plan \"" + std::string(plan) + "\"";
+        }
+        return {};
+    };
+    if (plan == "samplegridv1")
+        return check(kSamplegridV1Plan);
+    if (plan == "stock")
+        return check(kStockPlan);
+    if (plan == "defined")
+        return check(kDefinedPlan);
+    return "unknown ladder plan \"" + std::string(plan) + "\"";
+}
+
+} // namespace ZXing
 
 //DEBUG DRAW
 

@@ -2,10 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+// Parse the OpenCV headers before Foundation defines the NO macro.
+#include "ZXing/BitMatrix.h"
 #import <CoreGraphics/CoreGraphics.h>
 #import "ZXIBarcodeWriter.h"
 #import "ZXing/MultiFormatWriter.h"
-#import "ZXing/BitMatrix.h"
 #import "ZXIFormatHelper.h"
 #import "ZXIErrors.h"
 #import <iostream>

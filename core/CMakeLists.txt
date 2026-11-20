@@ -1,39 +1,48 @@
 cmake_minimum_required(VERSION 3.15)
 
-if(NOT DEFINED PROJECT_VERSION OR "${PROJECT_VERSION}" STREQUAL "")
-    set(PROJECT_VERSION "2.0.0")
-endif()
-if (NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    if(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
-        # Linux build: prefer OpenCV 4 via pkg-config, fallback to opencv (3.x)
-        find_package(PkgConfig REQUIRED)
-        pkg_check_modules(OpenCV opencv4)
-        if(NOT OpenCV_FOUND)
-            pkg_check_modules(OpenCV REQUIRED opencv)
-        endif()
+project (ZXing VERSION "2.0.0")
 
-        add_library(opencv_interface INTERFACE)
-        target_include_directories(opencv_interface INTERFACE ${OpenCV_INCLUDE_DIRS})
-        target_link_libraries(opencv_interface INTERFACE ${OpenCV_LIBRARIES})
-        target_compile_options(opencv_interface INTERFACE ${OpenCV_CFLAGS_OTHER})
-
-        set(OpenCV_FOUND TRUE)
-        set(OpenCV_LIBS opencv_interface)
-    else()
-        # Android build: use OpenCV Android SDK (OpenCVConfig.cmake)
-        set(OpenCV_FIND_VERSION "4.0")
-        set(OpenCV_SHARED ON)
-        set(BUILD_SHARED_LIBS ON)
-
-        # Point OpenCV_DIR to ABI-specific config if present
-        if(OpenCV_DIR AND ANDROID_ABI AND EXISTS "${OpenCV_DIR}/abi-${ANDROID_ABI}/OpenCVConfig.cmake")
-            set(OpenCV_DIR "${OpenCV_DIR}/abi-${ANDROID_ABI}")
-        endif()
-
-        find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
+# Add these lines before find_package(OpenCV)
+# For Android builds, OpenCV_DIR will be set by the build script
+# For Linux builds, use pkg-config to avoid static/shared library issues
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND BUILD_APPLE_FRAMEWORK AND BUILD_WRITERS)
+    # The iOS writer framework links the OpenCV XCFramework below.
+elseif(NOT DEFINED BUILD_FOR_AARM OR NOT BUILD_FOR_AARM)
+    # Linux build: use pkg-config for OpenCV
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(OpenCV QUIET opencv4)
+    if(NOT OpenCV_FOUND)
+        pkg_check_modules(OpenCV REQUIRED opencv)
     endif()
-endif()
 
+    # Prefer the locally built static OpenCV archives when available.
+    # This avoids accidentally resolving against stray system/shared OpenCV
+    # runtimes with a different ABI version at load time.
+    set(OPENCV_LOCAL_CORE_A "/usr/local/lib/libopencv_core.a")
+    set(OPENCV_LOCAL_IMGPROC_A "/usr/local/lib/libopencv_imgproc.a")
+    if(EXISTS "${OPENCV_LOCAL_CORE_A}" AND EXISTS "${OPENCV_LOCAL_IMGPROC_A}")
+        message(STATUS "Using explicit local static OpenCV archives for ZXing")
+        set(OpenCV_LIBRARIES
+            "${OPENCV_LOCAL_IMGPROC_A}"
+            "${OPENCV_LOCAL_CORE_A}"
+        )
+    endif()
+
+    # Create OpenCV interface target for compatibility
+    add_library(opencv_interface INTERFACE)
+    target_include_directories(opencv_interface INTERFACE ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(opencv_interface INTERFACE ${OpenCV_LIBRARIES})
+    target_compile_options(opencv_interface INTERFACE ${OpenCV_CFLAGS_OTHER})
+
+    # Set variables for later use
+    set(OpenCV_FOUND TRUE)
+    set(OpenCV_LIBS opencv_interface)
+else()
+    # Android build: use CMake configuration
+    set(OpenCV_FIND_VERSION "4.0")
+    set(OpenCV_SHARED ON)  # Force using shared libraries (.so) instead of static (.a)
+    set(BUILD_SHARED_LIBS ON)  # Force shared libraries globally
+endif()
 
 set (ZXING_SONAME 3) # see https://github.com/zxing-cpp/zxing-cpp/issues/333
 
@@ -154,9 +163,12 @@ if (BUILD_READERS)
             src/MultiFormatReader.cpp
             src/PerspectiveTransform.h
             src/PerspectiveTransform.cpp
+            src/Preprocess.h
+            src/Preprocess.cpp
             src/Reader.h
             src/ReadBarcode.h
             src/ReadBarcode.cpp
+            src/CrptLadderStats.h
             src/ReedSolomonDecoder.h
             src/ReedSolomonDecoder.cpp
             src/Result.h
@@ -186,8 +198,6 @@ endif()
 # define subset of public headers that get distributed with the binaries
 set (PUBLIC_HEADERS
         src/BarcodeFormat.h
-        src/BitMatrix.h
-        src/DetectorResult.h
         src/BitHacks.h
         src/ByteArray.h
         src/CharacterSet.h
@@ -196,20 +206,6 @@ set (PUBLIC_HEADERS
         src/TextUtfEncoding.h # [[deprecated]]
         src/ZXAlgorithms.h
         src/ZXConfig.h
-        src/Content.h
-        src/DecodeHints.h
-        src/Error.h
-        src/ImageView.h
-        src/Point.h
-        src/Quadrilateral.h
-        src/ReadBarcode.h
-        src/Result.h
-        src/StructuredAppend.h
-        src/BitMatrix.h
-        src/BitMatrixIO.h
-        src/Matrix.h
-        src/MultiFormatWriter.h
-        src/Range.h
 )
 if (BUILD_READERS)
     set (PUBLIC_HEADERS ${PUBLIC_HEADERS}
@@ -218,6 +214,7 @@ if (BUILD_READERS)
             src/Error.h
             src/ImageView.h
             src/Point.h
+            src/Preprocess.h
             src/Quadrilateral.h
             src/ReadBarcode.h
             src/Result.h
@@ -232,25 +229,6 @@ if (BUILD_WRITERS)
             src/MultiFormatWriter.h
             src/Range.h
     )
-endif()
-
-set (IOS_WRAPPER_SOURCES)
-if (CMAKE_SYSTEM_NAME STREQUAL "iOS" AND BUILD_APPLE_FRAMEWORK AND BUILD_WRITERS)
-    enable_language(OBJCXX)
-
-    set (IOS_WRAPPER_ROOT "${CMAKE_SOURCE_DIR}/wrappers/ios/Sources/Wrapper")
-    set (IOS_WRAPPER_SOURCES
-            "${IOS_WRAPPER_ROOT}/Writer/ZXIBarcodeWriter.mm"
-            "${IOS_WRAPPER_ROOT}/ZXIFormatHelper.mm"
-            "${IOS_WRAPPER_ROOT}/ZXIFormatHelper.h"
-    )
-    set (IOS_WRAPPER_PUBLIC_HEADERS
-            "${IOS_WRAPPER_ROOT}/ZXing.h"
-            "${IOS_WRAPPER_ROOT}/Writer/ZXIBarcodeWriter.h"
-            "${IOS_WRAPPER_ROOT}/ZXIErrors.h"
-            "${IOS_WRAPPER_ROOT}/ZXIFormat.h"
-    )
-    set (PUBLIC_HEADERS ${PUBLIC_HEADERS} ${IOS_WRAPPER_PUBLIC_HEADERS})
 endif()
 # end of public header set
 
@@ -296,6 +274,10 @@ if (BUILD_READERS)
             src/datamatrix/DMDecoder.cpp
             src/datamatrix/DMDetector.h
             src/datamatrix/DMDetector.cpp
+            src/datamatrix/DMLadder.h
+            src/datamatrix/DMLadderSpec.h
+            src/datamatrix/DMLadderStats.h
+            src/datamatrix/DMLadderStats.cpp
             src/datamatrix/DMReader.h
             src/datamatrix/DMReader.cpp
     )
@@ -508,150 +490,69 @@ add_library (ZXing
         ${PDF417_FILES}
         ${QRCODE_FILES}
         ${LIBZUECI_FILES}
-        ${IOS_WRAPPER_SOURCES}
-        ${IOS_WRAPPER_PUBLIC_HEADERS}
 )
-# iOS block (from HEAD)
-if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
-    # Set up the include directory fix
-    set(IOS_INCLUDE_FIX_DIR "${CMAKE_CURRENT_BINARY_DIR}/ios_include_fix")
-    file(MAKE_DIRECTORY ${IOS_INCLUDE_FIX_DIR})
-    
-    # Create symlink to OpenCV headers
-    set(DEVICE_HEADERS_DIR "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/Headers")
-    set(SIMULATOR_HEADERS_DIR "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/Headers")
-    
-    if(EXISTS ${DEVICE_HEADERS_DIR})
-        set(REAL_HEADERS_DIR ${DEVICE_HEADERS_DIR})
-    elseif(EXISTS ${SIMULATOR_HEADERS_DIR})
-        set(REAL_HEADERS_DIR ${SIMULATOR_HEADERS_DIR})
-    else()
-        message(FATAL_ERROR "Could not find OpenCV headers in XCFramework")
-    endif()
-    
-    # Remove existing symlink if it exists, then create new one
-    execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${IOS_INCLUDE_FIX_DIR}/opencv2)
-    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${REAL_HEADERS_DIR} ${IOS_INCLUDE_FIX_DIR}/opencv2)
-    execute_process(COMMAND ${CMAKE_COMMAND} -E remove ${IOS_INCLUDE_FIX_DIR}/ZXing)
-    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/src ${IOS_INCLUDE_FIX_DIR}/ZXing)
-    
-    # Add the include fix directory
-    target_include_directories(ZXing PRIVATE ${IOS_INCLUDE_FIX_DIR})
 
-    if(BUILD_APPLE_FRAMEWORK AND BUILD_WRITERS)
-        target_include_directories(ZXing PRIVATE
-                "${IOS_WRAPPER_ROOT}"
-                "${IOS_WRAPPER_ROOT}/Writer"
-        )
-    endif()
-    
-    # Create imported targets for each architecture
-    if("x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)
-        # Simulator build
-        add_library(opencv2_framework SHARED IMPORTED)
-        set_target_properties(opencv2_framework PROPERTIES
-            IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/opencv2"
-        )
-    else()
-        # Device build  
-        add_library(opencv2_framework SHARED IMPORTED)
-        set_target_properties(opencv2_framework PROPERTIES
-            IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/opencv2"
-        )
-    endif()
-    
-    # Link to the imported framework
-    target_link_libraries(ZXing PRIVATE
-        opencv2_framework
-        "libz.tbd"      
-        Threads::Threads
+# Only call find_package(OpenCV) for Android builds
+# Linux builds use pkg-config (configured earlier)
+if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
+    find_package(OpenCV REQUIRED COMPONENTS core imgproc PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
+    # if (OpenCV_DIR)
+    #     find_package(OpenCV REQUIRED PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
+    # else()
+    #     find_package(OpenCV)
+    # endif()
+    set(OpenCV_LIBS "")
+endif()
+
+# Enforce 16K/64K page size on the final link of libZXing.so
+if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
+    # Preferred (CMake 3.13+): attaches to this target's link line
+    target_link_options(ZXing PRIVATE
+            "LINKER:-z,common-page-size=4096"
+            "LINKER:-z,max-page-size=65536"
     )
 
-    if(BUILD_APPLE_FRAMEWORK AND BUILD_WRITERS)
-        target_link_libraries(ZXing PRIVATE
-                "-framework Foundation"
-                "-framework CoreGraphics"
-        )
-    endif()
-
-# Android block (from incoming)
-elseif(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
-   # Only call find_package(OpenCV) for Android builds
-   # If OpenCV_DIR is not provided, try to infer from Bazel android_opencv or common Android SDK layout
-   if(NOT OpenCV_DIR)
-       # Allow passing OPENCV_ANDROID_SDK native root (ending with sdk/native)
-       if(DEFINED OPENCV_ANDROID_SDK)
-           set(OpenCV_DIR "${OPENCV_ANDROID_SDK}/jni")
-       endif()
-       # Try Bazel external android_opencv
-       if(NOT OpenCV_DIR AND DEFINED BAZEL_OPENJDK_PATH) # cheap signal of bazel env
-           set(_BAZEL_ANDROID_OPENCV "$ENV{HOME}/.cache/bazel/_bazel_$ENV{USER}/*/external/android_opencv/sdk/native/jni")
-           # This is a hint; actual path resolution happens in the build script
-       endif()
-   endif()
-
-   # Prefer config files in ABI-specific subdirs when OpenCV provides them
-   if(OpenCV_DIR AND ANDROID_ABI)
-       if(EXISTS "${OpenCV_DIR}/abi-${ANDROID_ABI}/OpenCVConfig.cmake")
-           set(OpenCV_DIR "${OpenCV_DIR}/abi-${ANDROID_ABI}")
-       endif()
-   endif()
-
-   find_package(OpenCV REQUIRED COMPONENTS core imgproc PATHS ${OpenCV_DIR} NO_DEFAULT_PATH)
-#   set(OpenCV_LIBS "")
-
-   # Enforce 16K/64K page size on the final link of libZXing.so
-   # Preferred (CMake 3.13+): attaches to this target's link line
-   target_link_options(ZXing PRIVATE
-           "LINKER:-z,common-page-size=4096"
-           "LINKER:-z,max-page-size=65536"
-   )
-
-   # Fallback for older generators: append raw linker flags to this target
-   set_property(TARGET ZXing APPEND_STRING PROPERTY LINK_FLAGS
-           " -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536")
-
-   find_library(log-lib log)
-   if(log-lib)
-       target_link_libraries(ZXing PRIVATE ${log-lib})
-   endif()
-
-   if(BUILD_FOR_AARM)
-       # Apply to all targets created below (in case of future changes)
-       add_link_options(
-               "-Wl,-z,common-page-size=4096"
-               "-Wl,-z,max-page-size=65536"
-       )
-       # Keep the legacy variables too for older generators
-       set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536")
-       set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536")
-       set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS}    -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536")
-   endif()
-
-   # Optional: post-build readelf check (kept commented as in incoming)
-   # if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
-   #     find_program(READELF NAMES llvm-readelf readelf)
-   #     if(READELF)
-   #         add_custom_command(TARGET ZXing POST_BUILD
-   #                 COMMAND ${READELF} -l $<TARGET_FILE:ZXing> > $<TARGET_FILE_DIR:ZXing>/zxing.readelf.txt
-   #                 COMMAND ${CMAKE_COMMAND} -DREAD_ELF_FILE=$<TARGET_FILE_DIR:ZXing>/zxing.readelf.txt
-   #                 -P ${CMAKE_CURRENT_LIST_DIR}/CheckZxingAlign.cmake
-   #                 COMMENT "Verifying libZXing.so page alignment")
-   #     else()
-   #         message(WARNING "readelf not found; skipping alignment check")
-   #     endif()
-   # endif()
-
-# Optional fallback for other platforms (kept from original HEAD Linux/Other behavior)
-else()
-    # --- Сборка для Linux/Other (из HEAD, без изменений) ---
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(OpenCV REQUIRED opencv)
-    add_library(opencv_interface INTERFACE)
-    target_include_directories(opencv_interface INTERFACE ${OpenCV_INCLUDE_DIRS})
-    target_link_libraries(opencv_interface INTERFACE ${OpenCV_LIBRARIES})
-    target_link_libraries(ZXing PRIVATE Threads::Threads opencv_interface)
+    # Fallback for older generators: append raw linker flags to this target
+    set_property(TARGET ZXing APPEND_STRING PROPERTY LINK_FLAGS
+            " -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536")
 endif()
+
+
+if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
+    find_library(log-lib log)
+    if(log-lib)
+        target_link_libraries(ZXing PRIVATE ${log-lib})
+    endif()
+endif()
+
+
+if(BUILD_FOR_AARM)
+    # Apply to all targets created below (in case of future changes)
+    add_link_options(
+            "-Wl,-z,common-page-size=4096"
+            "-Wl,-z,max-page-size=65536"
+    )
+    # Keep the legacy variables too for older generators
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536")
+    set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS}    -Wl,-z,common-page-size=4096 -Wl,-z,max-page-size=65536")
+endif()
+
+
+
+if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
+    find_program(READELF NAMES llvm-readelf readelf)
+    if(READELF)
+        add_custom_command(TARGET ZXing POST_BUILD
+                COMMAND ${READELF} -l $<TARGET_FILE:ZXing> > $<TARGET_FILE_DIR:ZXing>/zxing.readelf.txt
+                COMMAND ${CMAKE_COMMAND} -DREAD_ELF_FILE=$<TARGET_FILE_DIR:ZXing>/zxing.readelf.txt
+                -P ${CMAKE_CURRENT_LIST_DIR}/CheckZxingAlign.cmake
+                COMMENT "Verifying libZXing.so page alignment")
+    else()
+        message(WARNING "readelf not found; skipping alignment check")
+    endif()
+endif()
+
 
 target_include_directories (ZXing
         PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>" "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
@@ -661,7 +562,6 @@ target_include_directories (ZXing
 target_compile_options (ZXing
         PUBLIC ${ZXING_CORE_DEFINES}
         PRIVATE ${ZXING_CORE_LOCAL_DEFINES}
-        -D_LIBCPP_ENABLE_CXX17_REMOVED_RANDOM_SHUFFLE
 )
 
 include (CheckCXXCompilerFlag)
@@ -673,8 +573,23 @@ if (COMPILER_NEEDS_FLOAT_STORE)
     )
 endif()
 
+# Ladder attribution (src/CrptLadderStats.h). OFF by default: the shipping
+# libZXing.so records nothing and its C entry points are inert.
+option(CRPT_ZXING_PROFILING "Build ZXing with DataMatrix ladder attribution" OFF)
+if (CRPT_ZXING_PROFILING)
+    target_compile_definitions(ZXing PUBLIC CRPT_ZXING_PROFILING)
+endif()
+
 target_compile_features(ZXing PUBLIC cxx_std_17)
 
+# Link OpenCV libraries based on build type
+if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
+    # Android build: use OpenCV_LIBS from find_package
+    target_link_libraries(ZXing PRIVATE Threads::Threads ${OpenCV_LIBS})
+else()
+    # Linux build: use opencv_interface from pkg-config
+    target_link_libraries(ZXing PRIVATE Threads::Threads ${OpenCV_LIBS})
+endif()
 
 #target_link_options (ZXing PRIVATE "LINKER:-rpath-link=${ANDROID_LIB_DIR}")
 
@@ -684,18 +599,6 @@ add_library(ZXing::ZXing ALIAS ZXing)
 #       for clients using the exported target, see ZXingConfig.cmake.in
 add_library(ZXing::Core ALIAS ZXing)
 
-
-if(DEFINED BUILD_FOR_AARM AND BUILD_FOR_AARM)
-  # Ensure we link against the shared STL
-  find_library(cpp_shared c++_shared)
-  if(cpp_shared)
-    target_link_libraries(ZXing PRIVATE ${cpp_shared})
-    # Copy libc++_shared.so next to libZXing.so so your script/packager can pick it up
-    add_custom_command(TARGET ZXing POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${cpp_shared}" "$<TARGET_FILE_DIR:ZXing>/libc++_shared.so"
-      COMMENT "Copying libc++_shared.so")
-  endif()
-endif()
 set_target_properties(ZXing PROPERTIES EXPORT_NAME ZXing)
 # force position independent code to be able to link it as static lib into a DLL (e.g. the python module)
 set_target_properties(ZXing PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -706,14 +609,13 @@ endif()
 
 set_target_properties(ZXing PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
-
 if (APPLE AND BUILD_APPLE_FRAMEWORK)
     set_target_properties(ZXing PROPERTIES
             FRAMEWORK TRUE
             FRAMEWORK_VERSION "C"
             XCODE_ATTRIBUTE_DEFINES_MODULE YES
             XCODE_ATTRIBUTE_BUILD_LIBRARY_FOR_DISTRIBUTION YES
-            XCODE_ATTRIBUTE_MODULEMAP_FILE "${CMAKE_SOURCE_DIR}/wrappers/ios/Sources/Wrapper/framework.modulemap"
+            XCODE_ATTRIBUTE_MODULEMAP_FILE "wrappers/ios/Sources/Wrapper/module.modulemap"
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
             MACOSX_FRAMEWORK_IDENTIFIER "com.zxing-cpp.ios"
             CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH NO
@@ -722,6 +624,10 @@ if (APPLE AND BUILD_APPLE_FRAMEWORK)
             XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "iPhone Developer"
             XCODE_ATTRIBUTE_ENABLE_BITCODE "NO"
     )
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND BUILD_APPLE_FRAMEWORK AND BUILD_WRITERS)
+    include(../wrappers/ios/Framework.cmake)
 endif()
 
 include (GNUInstallDirs)

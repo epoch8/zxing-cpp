@@ -219,7 +219,7 @@ namespace ZXing {
     {
         if(sizeX == xOffsets.size() && sizeY == yOffsets.size()) return;
         std::vector<PointF> buf;
-        if(sizeX != yOffsets.size()) {
+        if(sizeX != xOffsets.size()) {
             buf = xOffsets;
             xOffsets.resize(sizeX);
 

@@ -10,6 +10,7 @@
 #include "BarcodeFormat.h"
 #include "CharacterSet.h"
 
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -84,6 +85,7 @@ class DecodeHints
 	uint16_t _downscaleThreshold = 500;
 	BarcodeFormats _formats      = BarcodeFormat::None;
 	DMGridRefineOptions _dmGridRefine{};
+	std::string _dmLadder;
 
 public:
 	// bitfields don't get default initialized to 0 before c++20
@@ -167,6 +169,12 @@ public:
 
 	/// DataMatrix: per-stage grid correction (snap / region growing / RS feedback). Default all off.
 	ZX_PROPERTY(DMGridRefineOptions, dmGridRefine, setDMGridRefine)
+
+	/// DataMatrix: the CRPT ladder as a string -- step names in run order, and
+	/// `+name` / `-name` feature overrides on top of the flags set above. Empty
+	/// (the default) runs the built-in plan with the flags as set. Parsed by
+	/// datamatrix/DMLadderSpec.h; an unknown name is an error, never a no-op.
+	ZX_PROPERTY(std::string, dmLadder, setDMLadder)
 
 	/// Specify whether to ignore, read or require EAN-2/5 add-on symbols while scanning EAN/UPC codes
 	ZX_PROPERTY(EanAddOnSymbol, eanAddOnSymbol, setEanAddOnSymbol)

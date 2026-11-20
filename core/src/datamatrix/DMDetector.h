@@ -9,11 +9,8 @@
 #include <DecoderResult.h>
 #include "DecodeHints.h"
 #include "GridSampler.h"
+#include "DMLadderSpec.h"
 
-#ifdef __cpp_impl_coroutine
-#include <Generator.h>
-#include <DetectorResult.h>
-#endif
 
 namespace ZXing {
 
@@ -22,20 +19,17 @@ class DetectorResult;
 
 namespace DataMatrix {
 
-#ifdef __cpp_impl_coroutine
-using DetectorResults = Generator<DetectorResult>;
-#else
 using DetectorResults = DetectorResult;
-#endif
 
-DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure,
-					   DMGridRefineOptions gridRefine = {});
+DetectorResults Detect(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
+					   DMGridRefineOptions gridRefine = {}, const ladder::Spec& spec = ladder::Spec{});
 
 DetectorResults DetectSamplegridV1(const BitMatrix& image, bool tryHarder, bool tryRotate, bool isPure, DecoderResult& outDecoderResult,
-								   DMGridRefineOptions gridRefine = {});
+								   DMGridRefineOptions gridRefine = {}, const ladder::Spec& spec = ladder::Spec{});
 
 DetectorResults DetectDefined(const BitMatrix& image, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, bool tryHarder,
-							  bool tryRotate, bool isPure, DecoderResult& outDecoderResult, DMGridRefineOptions gridRefine = {});
+							  bool tryRotate, bool isPure, DecoderResult& outDecoderResult, DMGridRefineOptions gridRefine = {},
+							  const ladder::Spec& spec = ladder::Spec{});
 
 } // DataMatrix
 } // ZXing

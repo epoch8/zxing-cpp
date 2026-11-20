@@ -4,18 +4,17 @@ To use the iOS (wrapper) framework in other apps, it is easiest
 to build the library project and include the resulting xcframework
 file in your app.
 
-## How to build and use
+## Rebuild the XCFramework
 
-To build the xcframework:
-	$ chmod +x download_libs.sh
-	$ ./download_libs.sh
-	$ ./build-release.sh
-    
+Use Xcode, CMake, and the complete OpenCV XCFramework with iOS arm64 and
+iOS Simulator arm64/x86_64 binaries. Place it at `vendor/opencv2.xcframework`
+next to this README or pass its absolute path as shown below.
 
-# IMPORTANT!
-Check that opencv binaries succesfully downloaded and placed into 
-wrappers/ios/vendor/opencv2.xcframework/ios-arm64/opencv2.framework/Versions/A/opencv2
-and
-wrappers/ios/vendor/opencv2.xcframework/ios-arm64_x86_64-simulator/opencv2.framework/Versions/A/opencv2
+```bash
+OPENCV_IOS_XCFRAMEWORK=/absolute/path/to/opencv2.xcframework \
+  bash wrappers/ios/build-release.sh
+```
 
-Links for download is in download_libs.sh
+The script builds the C++20 reader and Objective-C writer from this checkout.
+It writes `wrappers/ios/ZXing.xcframework` after both platforms build. Pass an
+output path as the first argument to write the framework elsewhere.

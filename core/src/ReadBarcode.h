@@ -9,6 +9,9 @@
 #include "ImageView.h"
 #include "Result.h"
 
+#include <string>
+#include <string_view>
+
 namespace ZXing {
 
 /**
@@ -30,6 +33,16 @@ Result ReadBarcode(const ImageView& buffer, const DecodeHints& hints = {});
 Results ReadBarcodes(const ImageView& buffer, const DecodeHints& hints = {});
 Results readbarcodescrpt_detector_v1_samplegridv1(const ImageView& buffer, const PointF& P0, const PointF& P1, const PointF& P2, const PointF& P3, const DecodeHints& hints = {});
 Results readbarcodescrpt_samplegridv1(const ImageView& buffer, const DecodeHints& hints = {}, bool returnEdges = false);
+
+/**
+ * Check a CRPT ladder spec (what DecodeHints::setDMLadder takes) against the
+ * plan a strategy runs: "samplegridv1" for readbarcodescrpt_samplegridv1,
+ * "stock" for ReadBarcodes. Returns an empty string when the spec is valid,
+ * otherwise the reason. For callers that build hints from configuration: a
+ * bad spec should fail when the configuration is read, not surface later as
+ * a decode that quietly returns nothing.
+ */
+std::string ValidateDMLadderSpec(std::string_view spec, std::string_view plan);
 
 } // ZXing
 
